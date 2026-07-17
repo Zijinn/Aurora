@@ -29,7 +29,7 @@ const tags: Tag[] = [
 ]
 
 it("shows and updates article tags", () => {
-  useReaderStore.setState({ locale: "en-US" })
+  useReaderStore.setState({ locale: "en-US", theme: "system" })
   const onTagsChange = vi.fn()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(

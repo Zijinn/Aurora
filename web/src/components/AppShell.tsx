@@ -81,6 +81,7 @@ export function AppShell() {
   const setSearch = useReaderStore((state) => state.setSearch)
   const closeMobileReader = useReaderStore((state) => state.closeMobileReader)
   const shortcuts = useReaderStore((state) => state.shortcuts)
+  const theme = useReaderStore((state) => state.theme)
   const paneLayout = useReaderStore((state) => state.paneLayout)
   const setPaneLayout = useReaderStore((state) => state.setPaneLayout)
   const { locale, t } = useTranslation()
@@ -101,6 +102,16 @@ export function AppShell() {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+
+  useEffect(() => {
+    if (theme === "system") {
+      delete document.documentElement.dataset.theme
+      document.documentElement.style.colorScheme = "light dark"
+    } else {
+      document.documentElement.dataset.theme = theme
+      document.documentElement.style.colorScheme = theme
+    }
+  }, [theme])
 
   useEffect(() => {
     const update = () => setViewportWidth(window.innerWidth)
@@ -550,6 +561,7 @@ export function AppShell() {
       />
       <PreferencesDialog
         open={preferencesOpen}
+        theme={theme}
         status={status.data}
         restorePending={restoreMutation.isPending}
         error={restoreMutation.error ?? toggleSyncMutation.error ?? runSyncMutation.error ?? deleteSyncMutation.error ?? toggleAIProfileMutation.error ?? defaultAIProfileMutation.error ?? deleteAIProfileMutation.error}

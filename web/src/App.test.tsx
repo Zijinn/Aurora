@@ -13,7 +13,8 @@ beforeEach(() => {
     viewMode: "standard",
     mobileReaderOpen: false,
     locale: "en-US",
-    paneLayout: { sidebarWidth: 256, timelineWidth: 416 },
+    paneLayout: { sidebarWidth: 246, timelineWidth: 424 },
+    theme: "system",
   })
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
@@ -146,14 +147,25 @@ describe("Cairn reading experience", () => {
     expect(localStorage.getItem("cairn-reader-preferences")).toContain("zh-CN")
   })
 
+  it("switches between Aurora light and dark skins", async () => {
+    renderApp()
+    fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
+    const theme = screen.getByRole("combobox", { name: "Theme" })
+    fireEvent.change(theme, { target: { value: "dark" } })
+    expect(useReaderStore.getState().theme).toBe("dark")
+    expect(document.documentElement.dataset.theme).toBe("dark")
+    fireEvent.change(theme, { target: { value: "light" } })
+    expect(document.documentElement.dataset.theme).toBe("light")
+  })
+
   it("exposes keyboard accessible pane resize separators", async () => {
     renderApp()
     const separators = await screen.findAllByRole("separator")
     expect(separators).toHaveLength(2)
     expect(separators[0]).toHaveAttribute("aria-orientation", "vertical")
-    expect(separators[0]).toHaveAttribute("aria-valuenow", "256")
+    expect(separators[0]).toHaveAttribute("aria-valuenow", "246")
     fireEvent.keyDown(separators[0]!, { key: "ArrowLeft" })
-    expect(useReaderStore.getState().paneLayout.sidebarWidth).toBe(240)
+    expect(useReaderStore.getState().paneLayout.sidebarWidth).toBe(230)
   })
 
   it("uses saved filters and tags as timeline scopes", async () => {

@@ -1,13 +1,12 @@
-import { StackSimple } from "@phosphor-icons/react"
+import { Sparkle } from "@phosphor-icons/react"
 
 export function Brand() {
   return (
-    <div className="brand" aria-label="Cairn">
+    <div className="brand" aria-label="Aurora">
       <span className="brand__mark" aria-hidden="true">
-        <StackSimple weight="bold" />
+        <Sparkle weight="fill" />
       </span>
-      <span className="brand__name">Cairn</span>
+      <span className="brand__name">Aurora</span>
     </div>
   )
 }
-

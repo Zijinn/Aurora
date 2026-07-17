@@ -5,6 +5,7 @@ import type { Locale } from "../lib/i18n"
 import type { LibraryScope, ViewMode } from "../api/types"
 
 export type ShortcutAction = "palette" | "search" | "next" | "previous" | "toggleStar" | "toggleRead"
+export type ThemeMode = "system" | "light" | "dark"
 
 export const defaultShortcuts: Record<ShortcutAction, string> = {
   palette: "mod+k",
@@ -20,7 +21,7 @@ export interface PaneLayout {
   timelineWidth: number
 }
 
-export const defaultPaneLayout: PaneLayout = { sidebarWidth: 256, timelineWidth: 416 }
+export const defaultPaneLayout: PaneLayout = { sidebarWidth: 246, timelineWidth: 424 }
 
 interface ReaderStore {
   scope: LibraryScope
@@ -29,6 +30,7 @@ interface ReaderStore {
   viewMode: ViewMode
   mobileReaderOpen: boolean
   locale: Locale
+  theme: ThemeMode
   paneLayout: PaneLayout
   shortcuts: Record<ShortcutAction, string>
   setScope: (scope: LibraryScope) => void
@@ -37,6 +39,7 @@ interface ReaderStore {
   setViewMode: (viewMode: ViewMode) => void
   closeMobileReader: () => void
   setLocale: (locale: Locale) => void
+  setTheme: (theme: ThemeMode) => void
   setPaneLayout: (paneLayout: PaneLayout) => void
   setShortcut: (action: ShortcutAction, shortcut: string) => void
   resetShortcuts: () => void
@@ -51,6 +54,7 @@ export const useReaderStore = create<ReaderStore>()(
       viewMode: "standard",
       mobileReaderOpen: false,
       locale: "zh-CN",
+      theme: "system",
       paneLayout: defaultPaneLayout,
       shortcuts: defaultShortcuts,
       setScope: (scope) => set({ scope, selectedEntryID: null, mobileReaderOpen: false }),
@@ -59,13 +63,14 @@ export const useReaderStore = create<ReaderStore>()(
       setViewMode: (viewMode) => set({ viewMode }),
       closeMobileReader: () => set({ mobileReaderOpen: false }),
       setLocale: (locale) => set({ locale }),
+      setTheme: (theme) => set({ theme }),
       setPaneLayout: (paneLayout) => set({ paneLayout }),
       setShortcut: (action, shortcut) => set((state) => ({ shortcuts: { ...state.shortcuts, [action]: shortcut } })),
       resetShortcuts: () => set({ shortcuts: defaultShortcuts }),
     }),
     {
       name: "cairn-reader-preferences",
-      partialize: (state) => ({ viewMode: state.viewMode, shortcuts: state.shortcuts, locale: state.locale, paneLayout: state.paneLayout }),
+      partialize: (state) => ({ viewMode: state.viewMode, shortcuts: state.shortcuts, locale: state.locale, theme: state.theme, paneLayout: state.paneLayout }),
     },
   ),
 )

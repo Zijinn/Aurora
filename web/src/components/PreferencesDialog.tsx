@@ -5,10 +5,11 @@ import { type KeyboardEvent, useRef, useState } from "react"
 import type { AIProfile, AIUsage, Device, ServerStatus, SyncAccount, ViewMode } from "../api/types"
 import { useTranslation } from "../lib/i18n"
 import { displayShortcut, keyboardChord } from "../lib/shortcuts"
-import { defaultShortcuts, type ShortcutAction, useReaderStore } from "../store/reader"
+import { defaultShortcuts, type ShortcutAction, type ThemeMode, useReaderStore } from "../store/reader"
 
 interface PreferencesDialogProps {
   open: boolean
+  theme: ThemeMode
   status?: ServerStatus
   restorePending: boolean
   error: Error | null
@@ -56,6 +57,7 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
   const viewMode = useReaderStore((state) => state.viewMode)
   const setViewMode = useReaderStore((state) => state.setViewMode)
   const setLocale = useReaderStore((state) => state.setLocale)
+  const setTheme = useReaderStore((state) => state.setTheme)
   const shortcuts = useReaderStore((state) => state.shortcuts)
   const setShortcut = useReaderStore((state) => state.setShortcut)
   const resetShortcuts = useReaderStore((state) => state.resetShortcuts)
@@ -92,6 +94,14 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
             <select className="select-input preference-language" aria-label={t("language")} value={locale} onChange={(event) => setLocale(event.target.value as "zh-CN" | "en-US")}>
               <option value="zh-CN">{t("chinese")}</option>
               <option value="en-US">{t("english")}</option>
+            </select>
+          </section>
+          <section className="preference-section preference-section--row">
+            <div><h2>{t("theme")}</h2><p>{t("themeDescription")}</p></div>
+            <select className="select-input preference-language" aria-label={t("theme")} value={props.theme} onChange={(event) => setTheme(event.target.value as ThemeMode)}>
+              <option value="system">{t("themeSystem")}</option>
+              <option value="light">{t("themeLight")}</option>
+              <option value="dark">{t("themeDark")}</option>
             </select>
           </section>
           <section className="preference-section">
@@ -175,7 +185,7 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
             </div>
           </section>
           {props.error && <p className="form-error preferences-error" role="alert">{props.error.message}</p>}
-          <footer className="dialog-meta">Cairn {props.status?.version ?? ""} · API {props.status?.api_version ?? "v1"}</footer>
+          <footer className="dialog-meta">Aurora {props.status?.version ?? ""} · API {props.status?.api_version ?? "v1"}</footer>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

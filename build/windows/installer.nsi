@@ -25,7 +25,7 @@ Unicode true
   !define OUT_FILE "Cairn-${VERSION}-windows-x64-setup.exe"
 !endif
 
-Name "Cairn"
+Name "Aurora"
 OutFile "${OUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\Cairn"
 InstallDirRegKey HKCU "Software\Cairn" "InstallDir"
@@ -34,12 +34,12 @@ ManifestDPIAware true
 
 VIProductVersion "${VERSION}.0"
 VIFileVersion "${VERSION}.0"
-VIAddVersionKey "CompanyName" "Cairn contributors"
-VIAddVersionKey "FileDescription" "Cairn installer"
+VIAddVersionKey "CompanyName" "Aurora contributors"
+VIAddVersionKey "FileDescription" "Aurora installer"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "FileVersion" "${VERSION}"
-VIAddVersionKey "LegalCopyright" "Copyright 2026 Cairn contributors. GPL-3.0-only."
-VIAddVersionKey "ProductName" "Cairn"
+VIAddVersionKey "LegalCopyright" "Copyright 2026 Aurora contributors. GPL-3.0-only."
+VIAddVersionKey "ProductName" "Aurora"
 
 !define MUI_ABORTWARNING
 !define MUI_ICON "${APP_ICON}"

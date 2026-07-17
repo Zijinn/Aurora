@@ -48,7 +48,7 @@ func main() {
 		os.Exit(1)
 	}
 	app := application.New(application.Options{
-		Name:        "Cairn",
+		Name:        "Aurora",
 		Description: "A private reading home for the open web",
 		LogLevel:    slog.LevelError,
 		Assets: application.AssetOptions{
@@ -67,7 +67,7 @@ func main() {
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "cairn-main-window",
-		Title:            "Cairn",
+		Title:            "Aurora",
 		Width:            1280,
 		Height:           820,
 		MinWidth:         920,

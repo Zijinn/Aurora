@@ -5,10 +5,10 @@
   "info": {
     "0000": {
       "ProductVersion": "0.1.0",
-      "CompanyName": "Cairn contributors",
-      "FileDescription": "Cairn personal RSS reader",
-      "LegalCopyright": "Copyright 2026 Cairn contributors. GPL-3.0-only.",
-      "ProductName": "Cairn",
+      "CompanyName": "Aurora contributors",
+      "FileDescription": "Aurora personal RSS reader",
+      "LegalCopyright": "Copyright 2026 Aurora contributors. GPL-3.0-only.",
+      "ProductName": "Aurora",
       "Comments": "A private reading home for the open web."
     }
   }

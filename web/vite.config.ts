@@ -26,8 +26,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icons/cairn-192.png", "icons/cairn-512.png"],
       manifest: {
-        name: "Cairn",
-        short_name: "Cairn",
+        name: "Aurora",
+        short_name: "Aurora",
         description: "A private reading home for the open web.",
         theme_color: "#f5f5f6",
         background_color: "#ffffff",
