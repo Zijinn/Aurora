@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
+	"github.com/Zijinn/Aurora/internal/domain"
 	"github.com/google/uuid"
 )
 

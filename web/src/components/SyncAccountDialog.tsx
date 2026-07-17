@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog"
-import { CircleNotch, CloudArrowDown, X } from "@phosphor-icons/react"
+import { AppleLogo, CircleNotch, CloudArrowDown, CloudArrowUp, X } from "@phosphor-icons/react"
 import { type FormEvent, useMemo, useState } from "react"
 
 import type { CreateSyncAccountInput } from "../api/client"
@@ -31,9 +31,15 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
   const [apiKey, setAPIKey] = useState("")
   const [interval, setInterval] = useState(30)
   const [allowPrivate, setAllowPrivate] = useState(false)
-  const providerName = useMemo(() => props.providers.find((item) => item.id === provider)?.name ?? provider, [props.providers, provider])
+  const providerName = useMemo(
+    () => props.providers.find((item) => item.id === provider)?.name ?? provider,
+    [props.providers, provider],
+  )
   const usesAPIKey = provider === "fever"
-  const usesBasicAuth = provider === "feedbin" || provider === "nextcloud_news"
+  const isWebDAV = provider === "webdav"
+  const isICloud = provider === "icloud"
+  const isLibraryCloud = isWebDAV || isICloud
+  const usesBasicAuth = provider === "feedbin" || provider === "nextcloud_news" || isWebDAV
 
   const changeProvider = (value: SyncProviderID) => {
     setProvider(value)
@@ -44,10 +50,17 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
     setToken("")
     setAPIKey("")
   }
-  const credentialsReady = usesAPIKey ? apiKey.trim() !== "" : usesBasicAuth ? username.trim() !== "" : token.trim() !== "" || username.trim() !== ""
+  const credentialsReady = isLibraryCloud
+    ? true
+    : usesAPIKey
+      ? apiKey.trim() !== ""
+      : usesBasicAuth
+        ? username.trim() !== ""
+        : token.trim() !== "" || username.trim() !== ""
+  const endpointReady = isICloud || endpoint.trim() !== ""
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!endpoint.trim() || !credentialsReady) return
+    if (!endpointReady || !credentialsReady) return
     props.onCreate({
       provider,
       name: name.trim() || providerName,
@@ -70,41 +83,172 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
         <Dialog.Content className="dialog-content" aria-describedby={undefined}>
           <div className="dialog-header">
             <Dialog.Title>{t("addSyncAccount")}</Dialog.Title>
-            <Dialog.Close asChild><button className="icon-button" type="button" aria-label={t("close")} title={t("close")}><X /></button></Dialog.Close>
+            <Dialog.Close asChild>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label={t("close")}
+                title={t("close")}
+              >
+                <X />
+              </button>
+            </Dialog.Close>
           </div>
-          <form className="dialog-form" onSubmit={submit}>
-            <label className="field-label" htmlFor="sync-provider">{t("provider")}</label>
-            <select id="sync-provider" className="select-input" value={provider} onChange={(event) => changeProvider(event.target.value as SyncProviderID)}>
-              {props.providers.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+          <form className="dialog-form sync-dialog-form" onSubmit={submit}>
+            <label className="field-label" htmlFor="sync-provider">
+              {t("provider")}
+            </label>
+            <select
+              id="sync-provider"
+              className="select-input"
+              value={provider}
+              onChange={(event) => changeProvider(event.target.value as SyncProviderID)}
+            >
+              <optgroup label={t("libraryCloudSync")}>
+                {props.providers
+                  .filter((item) => item.id === "webdav" || item.id === "icloud")
+                  .map((item) => (
+                    <option value={item.id} key={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+              </optgroup>
+              <optgroup label={t("readingServiceSync")}>
+                {props.providers
+                  .filter((item) => item.id !== "webdav" && item.id !== "icloud")
+                  .map((item) => (
+                    <option value={item.id} key={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+              </optgroup>
             </select>
-            <label className="field-label" htmlFor="sync-name">{t("accountName")}</label>
-            <input id="sync-name" className="text-input" value={name} placeholder={providerName} maxLength={120} onChange={(event) => setName(event.target.value)} />
-            <label className="field-label" htmlFor="sync-endpoint">{t("serverURL")}</label>
-            <input id="sync-endpoint" className="text-input" type="url" inputMode="url" autoComplete="url" placeholder="https://reader.example.com" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
+            {isLibraryCloud && (
+              <div className="sync-provider-note">
+                {isICloud ? <AppleLogo /> : <CloudArrowUp />}
+                <span>
+                  <strong>{isICloud ? t("icloudDrive") : "WebDAV"}</strong>
+                  <small>
+                    {isICloud ? t("icloudSyncDescription") : t("webdavSyncDescription")}
+                  </small>
+                </span>
+              </div>
+            )}
+            <label className="field-label" htmlFor="sync-name">
+              {t("accountName")}
+            </label>
+            <input
+              id="sync-name"
+              className="text-input"
+              value={name}
+              placeholder={providerName}
+              maxLength={120}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <label className="field-label" htmlFor="sync-endpoint">
+              {isICloud ? t("icloudPath") : isWebDAV ? t("snapshotFileURL") : t("serverURL")}
+            </label>
+            <input
+              id="sync-endpoint"
+              className="text-input"
+              type={isICloud ? "text" : "url"}
+              inputMode={isICloud ? undefined : "url"}
+              autoComplete={isICloud ? "off" : "url"}
+              placeholder={
+                isICloud
+                  ? t("icloudPathPlaceholder")
+                  : isWebDAV
+                    ? "https://dav.example.com/Aurora/aurora-library.json"
+                    : "https://reader.example.com"
+              }
+              value={endpoint}
+              onChange={(event) => setEndpoint(event.target.value)}
+            />
+            {isICloud && <p className="field-hint">{t("icloudDefaultPathHint")}</p>}
             {usesAPIKey ? (
               <>
-                <label className="field-label" htmlFor="sync-api-key">{t("apiKey")}</label>
-                <input id="sync-api-key" className="text-input" type="password" autoComplete="off" value={apiKey} onChange={(event) => setAPIKey(event.target.value)} />
+                <label className="field-label" htmlFor="sync-api-key">
+                  {t("apiKey")}
+                </label>
+                <input
+                  id="sync-api-key"
+                  className="text-input"
+                  type="password"
+                  autoComplete="off"
+                  value={apiKey}
+                  onChange={(event) => setAPIKey(event.target.value)}
+                />
               </>
             ) : usesBasicAuth ? (
               <>
-                <label className="field-label" htmlFor="sync-username">{t("username")}</label>
-                <input id="sync-username" className="text-input" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} />
-                <label className="field-label" htmlFor="sync-password">{t("password")}</label>
-                <input id="sync-password" className="text-input" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
+                <label className="field-label" htmlFor="sync-username">
+                  {t("username")}
+                </label>
+                <input
+                  id="sync-username"
+                  className="text-input"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+                <label className="field-label" htmlFor="sync-password">
+                  {t("password")}
+                  {isWebDAV ? ` (${t("optional")})` : ""}
+                </label>
+                <input
+                  id="sync-password"
+                  className="text-input"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
               </>
-            ) : (
+            ) : isICloud ? null : (
               <>
-                <label className="field-label" htmlFor="sync-token">{t("accessToken")}</label>
-                <input id="sync-token" className="text-input" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} />
-                <label className="field-label" htmlFor="sync-username">{t("username")}</label>
-                <input id="sync-username" className="text-input" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} />
-                <label className="field-label" htmlFor="sync-password">{t("password")}</label>
-                <input id="sync-password" className="text-input" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
+                <label className="field-label" htmlFor="sync-token">
+                  {t("accessToken")}
+                </label>
+                <input
+                  id="sync-token"
+                  className="text-input"
+                  type="password"
+                  autoComplete="off"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                />
+                <label className="field-label" htmlFor="sync-username">
+                  {t("username")}
+                </label>
+                <input
+                  id="sync-username"
+                  className="text-input"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+                <label className="field-label" htmlFor="sync-password">
+                  {t("password")}
+                </label>
+                <input
+                  id="sync-password"
+                  className="text-input"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
               </>
             )}
-            <label className="field-label" htmlFor="sync-interval">{t("syncInterval")}</label>
-            <select id="sync-interval" className="select-input" value={interval} onChange={(event) => setInterval(Number(event.target.value))}>
+            <label className="field-label" htmlFor="sync-interval">
+              {t("syncInterval")}
+            </label>
+            <select
+              id="sync-interval"
+              className="select-input"
+              value={interval}
+              onChange={(event) => setInterval(Number(event.target.value))}
+            >
               <option value={15}>{t("minutes15")}</option>
               <option value={30}>{t("minutes30")}</option>
               <option value={60}>{t("hour1")}</option>
@@ -112,14 +256,30 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
               <option value={720}>{t("hours12")}</option>
               <option value={1440}>{t("day1")}</option>
             </select>
-            <label className="checkbox-row" htmlFor="sync-private-network">
-              <input id="sync-private-network" type="checkbox" checked={allowPrivate} onChange={(event) => setAllowPrivate(event.target.checked)} />
-              <span>{t("allowPrivateEndpoint")}</span>
-            </label>
-            {props.error && <p className="form-error" role="alert">{props.error.message}</p>}
+            {!isICloud && (
+              <label className="checkbox-row" htmlFor="sync-private-network">
+                <input
+                  id="sync-private-network"
+                  type="checkbox"
+                  checked={allowPrivate}
+                  onChange={(event) => setAllowPrivate(event.target.checked)}
+                />
+                <span>{t("allowPrivateEndpoint")}</span>
+              </label>
+            )}
+            {props.error && (
+              <p className="form-error" role="alert">
+                {props.error.message}
+              </p>
+            )}
             <div className="dialog-actions dialog-actions--end">
-              <button className="button button--primary" type="submit" disabled={props.pending || !endpoint.trim() || !credentialsReady}>
-                {props.pending ? <CircleNotch className="spin" /> : <CloudArrowDown />}{t("addAccount")}
+              <button
+                className="button button--primary"
+                type="submit"
+                disabled={props.pending || !endpointReady || !credentialsReady}
+              >
+                {props.pending ? <CircleNotch className="spin" /> : <CloudArrowDown />}
+                {t("addAccount")}
               </button>
             </div>
           </form>

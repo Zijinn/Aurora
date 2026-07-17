@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	feedcore "github.com/cairn-reader/cairn/internal/feed"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/domain"
+	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 func TestFetchReadabilityStoresSanitizedFullText(t *testing.T) {

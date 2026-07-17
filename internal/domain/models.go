@@ -55,25 +55,27 @@ type SubscriptionPatch struct {
 }
 
 type Entry struct {
-	ID              string     `json:"id"`
-	FeedID          string     `json:"feed_id"`
-	FeedTitle       string     `json:"feed_title"`
-	GUID            *string    `json:"guid,omitempty"`
-	CanonicalURL    *string    `json:"canonical_url"`
-	Title           string     `json:"title"`
-	Author          *string    `json:"author"`
-	Summary         *string    `json:"summary"`
-	PublishedAt     time.Time  `json:"published_at"`
-	DiscoveredAt    time.Time  `json:"discovered_at"`
-	ContentHash     string     `json:"-"`
-	LeadImageURL    *string    `json:"lead_image_url"`
-	AudioURL        *string    `json:"audio_url,omitempty"`
-	VideoURL        *string    `json:"video_url,omitempty"`
-	Language        *string    `json:"language,omitempty"`
-	TagIDs          []string   `json:"tag_ids"`
-	State           EntryState `json:"state"`
-	SanitizedHTML   string     `json:"sanitized_html,omitempty"`
-	ReadabilityHTML *string    `json:"readability_html,omitempty"`
+	ID                string     `json:"id"`
+	FeedID            string     `json:"feed_id"`
+	FeedTitle         string     `json:"feed_title"`
+	GUID              *string    `json:"guid,omitempty"`
+	CanonicalURL      *string    `json:"canonical_url"`
+	Title             string     `json:"title"`
+	Author            *string    `json:"author"`
+	Summary           *string    `json:"summary"`
+	PublishedAt       time.Time  `json:"published_at"`
+	DiscoveredAt      time.Time  `json:"discovered_at"`
+	ContentHash       string     `json:"-"`
+	LeadImageURL      *string    `json:"lead_image_url"`
+	AudioURL          *string    `json:"audio_url,omitempty"`
+	VideoURL          *string    `json:"video_url,omitempty"`
+	Language          *string    `json:"language,omitempty"`
+	AITranslatedTitle *string    `json:"ai_translated_title,omitempty"`
+	AISummary         *string    `json:"ai_summary,omitempty"`
+	TagIDs            []string   `json:"tag_ids"`
+	State             EntryState `json:"state"`
+	SanitizedHTML     string     `json:"sanitized_html,omitempty"`
+	ReadabilityHTML   *string    `json:"readability_html,omitempty"`
 }
 
 type EntryState struct {
@@ -89,15 +91,16 @@ type EntryPage struct {
 }
 
 type EntryFilter struct {
-	ProfileID string
-	FeedID    string
-	FolderID  string
-	TagID     string
-	State     string
-	Query     string
-	Cursor    string
-	Limit     int
-	Since     *time.Time
+	ProfileID  string
+	FeedID     string
+	FolderID   string
+	TagID      string
+	State      string
+	Query      string
+	Cursor     string
+	Limit      int
+	Since      *time.Time
+	AILanguage string
 }
 
 type EntryStatePatch struct {

@@ -2,7 +2,7 @@
 
 build:
 	pnpm --dir web build
-	go build -o bin/cairn-server ./cmd/cairn-server
+	go build -o bin/aurora-server ./cmd/cairn-server
 
 check:
 	go test ./...
@@ -28,4 +28,3 @@ format:
 test:
 	go test ./...
 	pnpm --dir web test
-

@@ -1,11 +1,11 @@
 {
-  "name": "cairn",
-  "version": "0.1.1",
+  "name": "aurora",
+  "version": "0.1.8",
   "private": true,
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "build": "pnpm --dir web build",
-    "dev": "pnpm --parallel dev:server dev:web",
+    "dev": "node scripts/dev.mjs",
     "dev:server": "go run ./cmd/cairn-server",
     "dev:web": "pnpm --dir web dev",
     "desktop:dev": "go run -tags desktop ./cmd/cairn-desktop",

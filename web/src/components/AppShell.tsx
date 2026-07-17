@@ -1,5 +1,13 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react"
 
 import {
   addFeed,
@@ -121,9 +129,15 @@ export function AppShell() {
     return () => window.removeEventListener("resize", update)
   }, [])
 
-  const constrainedPaneLayout = useMemo(() => constrainPaneLayout(paneLayout, viewportWidth), [paneLayout, viewportWidth])
+  const constrainedPaneLayout = useMemo(
+    () => constrainPaneLayout(paneLayout, viewportWidth),
+    [paneLayout, viewportWidth],
+  )
   useEffect(() => {
-    if (constrainedPaneLayout.sidebarWidth !== paneLayout.sidebarWidth || constrainedPaneLayout.timelineWidth !== paneLayout.timelineWidth) {
+    if (
+      constrainedPaneLayout.sidebarWidth !== paneLayout.sidebarWidth ||
+      constrainedPaneLayout.timelineWidth !== paneLayout.timelineWidth
+    ) {
       setPaneLayout(constrainedPaneLayout)
     }
   }, [constrainedPaneLayout, paneLayout, setPaneLayout])
@@ -136,24 +150,45 @@ export function AppShell() {
     dragStartLayout.current = constrainedPaneLayout
     dragLayout.current = constrainedPaneLayout
   }, [constrainedPaneLayout])
-  const resizePane = useCallback((edge: "sidebar" | "timeline", delta: number) => {
-    const base = dragStartLayout.current
-    const readerMinimum = minimumReaderWidth(viewportWidth)
-    if (edge === "sidebar") {
-      const max = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, viewportWidth - base.timelineWidth - readerMinimum))
-      dragLayout.current = { ...base, sidebarWidth: Math.round(clamp(base.sidebarWidth + delta, SIDEBAR_MIN, max)) }
-    } else {
-      const max = Math.max(TIMELINE_MIN, Math.min(TIMELINE_MAX, viewportWidth - base.sidebarWidth - readerMinimum))
-      dragLayout.current = { ...base, timelineWidth: Math.round(clamp(base.timelineWidth + delta, TIMELINE_MIN, max)) }
-    }
-    applyPaneLayout(dragLayout.current)
-  }, [applyPaneLayout, viewportWidth])
+  const resizePane = useCallback(
+    (edge: "sidebar" | "timeline", delta: number) => {
+      const base = dragStartLayout.current
+      const readerMinimum = minimumReaderWidth(viewportWidth)
+      if (edge === "sidebar") {
+        const max = Math.max(
+          SIDEBAR_MIN,
+          Math.min(SIDEBAR_MAX, viewportWidth - base.timelineWidth - readerMinimum),
+        )
+        dragLayout.current = {
+          ...base,
+          sidebarWidth: Math.round(clamp(base.sidebarWidth + delta, SIDEBAR_MIN, max)),
+        }
+      } else {
+        const max = Math.max(
+          TIMELINE_MIN,
+          Math.min(TIMELINE_MAX, viewportWidth - base.sidebarWidth - readerMinimum),
+        )
+        dragLayout.current = {
+          ...base,
+          timelineWidth: Math.round(clamp(base.timelineWidth + delta, TIMELINE_MIN, max)),
+        }
+      }
+      applyPaneLayout(dragLayout.current)
+    },
+    [applyPaneLayout, viewportWidth],
+  )
   const finishPaneResize = useCallback(() => {
     setPaneLayout(dragLayout.current)
   }, [setPaneLayout])
   const readerMinimum = minimumReaderWidth(viewportWidth)
-  const sidebarMax = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, viewportWidth - constrainedPaneLayout.timelineWidth - readerMinimum))
-  const timelineMax = Math.max(TIMELINE_MIN, Math.min(TIMELINE_MAX, viewportWidth - constrainedPaneLayout.sidebarWidth - readerMinimum))
+  const sidebarMax = Math.max(
+    SIDEBAR_MIN,
+    Math.min(SIDEBAR_MAX, viewportWidth - constrainedPaneLayout.timelineWidth - readerMinimum),
+  )
+  const timelineMax = Math.max(
+    TIMELINE_MIN,
+    Math.min(TIMELINE_MAX, viewportWidth - constrainedPaneLayout.sidebarWidth - readerMinimum),
+  )
   const shellStyle = {
     "--sidebar-width": `${constrainedPaneLayout.sidebarWidth}px`,
     "--timeline-width": `${constrainedPaneLayout.timelineWidth}px`,
@@ -165,7 +200,8 @@ export function AppShell() {
     retry: 2,
     refetchInterval: 30_000,
   })
-  const libraryEnabled = status.isSuccess && (!status.data.device_auth_required || status.data.device_authenticated)
+  const libraryEnabled =
+    status.isSuccess && (!status.data.device_auth_required || status.data.device_authenticated)
   const subscriptions = useQuery({
     queryKey: ["subscriptions"],
     queryFn: ({ signal }) => listSubscriptions(signal),
@@ -222,10 +258,14 @@ export function AppShell() {
     queryFn: ({ signal }) => getAIUsage(signal),
     enabled: libraryEnabled,
   })
+  const aiLanguage = locale === "zh-CN" ? "Chinese" : "English"
   const entriesQuery = useInfiniteQuery({
-    queryKey: ["entries", scope, deferredSearch],
+    queryKey: ["entries", scope, deferredSearch, aiLanguage],
     queryFn: ({ pageParam, signal }) =>
-      listEntries({ scope, query: deferredSearch, cursor: pageParam ?? undefined }, signal),
+      listEntries(
+        { scope, query: deferredSearch, cursor: pageParam ?? undefined, aiLanguage },
+        signal,
+      ),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled: libraryEnabled,
@@ -236,8 +276,8 @@ export function AppShell() {
   )
   const selectedEntry = entries.find((entry) => entry.id === selectedEntryID) ?? null
   const entryDetail = useQuery({
-    queryKey: ["entry", selectedEntryID],
-    queryFn: ({ signal }) => getEntry(selectedEntryID!, signal),
+    queryKey: ["entry", selectedEntryID, aiLanguage],
+    queryFn: ({ signal }) => getEntry(selectedEntryID!, aiLanguage, signal),
     enabled: selectedEntryID !== null,
   })
 
@@ -256,18 +296,28 @@ export function AppShell() {
         return await updateEntryState(entry.id, patch, mutationID)
       } catch (error) {
         if (error instanceof APIError) throw error
-        await enqueueStateMutation({ mutationID, entryID: entry.id, patch, deviceTime, createdAt: Date.now() })
+        await enqueueStateMutation({
+          mutationID,
+          entryID: entry.id,
+          patch,
+          deviceTime,
+          createdAt: Date.now(),
+        })
         return { ...entry.state, ...patch, updated_at: deviceTime }
       }
     },
     onSuccess: invalidateLibrary,
   })
   const tagMutation = useMutation({
-    mutationFn: ({ entryID, tagIDs }: { entryID: string; tagIDs: string[] }) => setEntryTags(entryID, tagIDs),
+    mutationFn: ({ entryID, tagIDs }: { entryID: string; tagIDs: string[] }) =>
+      setEntryTags(entryID, tagIDs),
     onSuccess: invalidateLibrary,
   })
   const mutateEntryState = stateMutation.mutate
-  const markReadMutation = useMutation({ mutationFn: () => markEntriesRead(scope), onSuccess: invalidateLibrary })
+  const markReadMutation = useMutation({
+    mutationFn: () => markEntriesRead(scope),
+    onSuccess: invalidateLibrary,
+  })
   const refreshMutation = useMutation({
     mutationFn: (feedID: string) => refreshFeed(feedID),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
@@ -306,7 +356,8 @@ export function AppShell() {
     },
   })
   const pairMutation = useMutation({
-    mutationFn: ({ code, name, platform }: Parameters<typeof pairDevice>[0]) => pairDevice({ code, name, platform }),
+    mutationFn: ({ code, name, platform }: Parameters<typeof pairDevice>[0]) =>
+      pairDevice({ code, name, platform }),
     onSuccess: async () => {
       await status.refetch()
       await queryClient.invalidateQueries()
@@ -325,11 +376,13 @@ export function AppShell() {
     },
   })
   const toggleSyncMutation = useMutation({
-    mutationFn: ({ accountID, enabled }: { accountID: string; enabled: boolean }) => updateSyncAccount(accountID, { enabled }),
+    mutationFn: ({ accountID, enabled }: { accountID: string; enabled: boolean }) =>
+      updateSyncAccount(accountID, { enabled }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sync-accounts"] }),
   })
   const runSyncMutation = useMutation({
-    mutationFn: runSyncAccount,
+    mutationFn: ({ accountID, mode }: { accountID: string; mode: "auto" | "push" | "pull" }) =>
+      runSyncAccount(accountID, mode),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sync-accounts"] }),
   })
   const deleteSyncMutation = useMutation({
@@ -384,7 +437,8 @@ export function AppShell() {
     },
   })
   const toggleAIProfileMutation = useMutation({
-    mutationFn: ({ profileID, enabled }: { profileID: string; enabled: boolean }) => updateAIProfile(profileID, { enabled }),
+    mutationFn: ({ profileID, enabled }: { profileID: string; enabled: boolean }) =>
+      updateAIProfile(profileID, { enabled }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ai-profiles"] }),
   })
   const defaultAIProfileMutation = useMutation({
@@ -396,9 +450,12 @@ export function AppShell() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ai-profiles"] }),
   })
 
-  const mutateState = useCallback((entry: Entry, patch: Partial<EntryState>) => {
-    mutateEntryState({ entry, patch })
-  }, [mutateEntryState])
+  const mutateState = useCallback(
+    (entry: Entry, patch: Partial<EntryState>) => {
+      mutateEntryState({ entry, patch })
+    },
+    [mutateEntryState],
+  )
 
   useEffect(() => {
     if (!libraryEnabled || !("EventSource" in window)) return
@@ -409,13 +466,25 @@ export function AppShell() {
       void queryClient.invalidateQueries({ queryKey: ["folders"] })
       void queryClient.invalidateQueries({ queryKey: ["entries"] })
     }
-    for (const eventName of ["feed.updated", "entry.updated", "entry.state", "entry.bulk_state", "job.succeeded", "library.restored"]) {
+    for (const eventName of [
+      "feed.updated",
+      "entry.updated",
+      "entry.state",
+      "entry.bulk_state",
+      "job.succeeded",
+      "library.restored",
+    ]) {
       source.addEventListener(eventName, refresh)
     }
     source.addEventListener("subscriptions.updated", subscriptionRefresh)
-    source.addEventListener("sync.completed", () => void queryClient.invalidateQueries({ queryKey: ["sync-accounts"] }))
+    source.addEventListener(
+      "sync.completed",
+      () => void queryClient.invalidateQueries({ queryKey: ["sync-accounts"] }),
+    )
     const aiRefresh = () => {
       void queryClient.invalidateQueries({ queryKey: ["ai-results"] })
+      void queryClient.invalidateQueries({ queryKey: ["entries"] })
+      void queryClient.invalidateQueries({ queryKey: ["entry"] })
       void queryClient.invalidateQueries({ queryKey: ["ai-chat"] })
       void queryClient.invalidateQueries({ queryKey: ["ai-profiles"] })
       void queryClient.invalidateQueries({ queryKey: ["ai-usage"] })
@@ -434,12 +503,12 @@ export function AppShell() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-	  const chord = keyboardChord(event)
-	  if (chord === shortcuts.palette) {
-		event.preventDefault()
-		setCommandOpen((open) => !open)
-		return
-	  }
+      const chord = keyboardChord(event)
+      if (chord === shortcuts.palette) {
+        event.preventDefault()
+        setCommandOpen((open) => !open)
+        return
+      }
       const target = event.target as HTMLElement | null
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return
       const currentIndex = entries.findIndex((entry) => entry.id === selectedEntryID)
@@ -464,215 +533,268 @@ export function AppShell() {
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [closeMobileReader, entries, mutateState, selectEntry, selectedEntry, selectedEntryID, shortcuts])
+  }, [
+    closeMobileReader,
+    entries,
+    mutateState,
+    selectEntry,
+    selectedEntry,
+    selectedEntryID,
+    shortcuts,
+  ])
 
   return (
     <>
-    <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
-    <main ref={shellRef} id="main-content" tabIndex={-1} style={shellStyle} className={mobileReaderOpen ? "app-shell app-shell--reader-open" : "app-shell"}>
-      <Sidebar
-        scope={scope}
-        status={status}
-        subscriptions={subscriptions.data?.items ?? []}
-        folders={folders.data?.items ?? []}
-        tags={tags.data?.items ?? []}
-        savedFilters={savedFilters.data?.items ?? []}
-        onScopeChange={setScope}
-        onAdd={() => setAddOpen(true)}
-      />
-      <section className="workspace">
-        <WorkspaceHeader
+      <a className="skip-link" href="#main-content">
+        {t("skipToContent")}
+      </a>
+      <main
+        ref={shellRef}
+        id="main-content"
+        tabIndex={-1}
+        style={shellStyle}
+        className={mobileReaderOpen ? "app-shell app-shell--reader-open" : "app-shell"}
+      >
+        <Sidebar
           scope={scope}
-          search={search}
-          searchShortcut={shortcuts.search}
-          theme={theme}
-          onSearchChange={setSearch}
-          onThemeChange={setTheme}
-          onPreferences={() => setPreferencesOpen(true)}
+          status={status}
+          subscriptions={subscriptions.data?.items ?? []}
+          folders={folders.data?.items ?? []}
+          tags={tags.data?.items ?? []}
+          savedFilters={savedFilters.data?.items ?? []}
+          onScopeChange={setScope}
           onAdd={() => setAddOpen(true)}
         />
-        <div className="workspace-body">
-          <TimelinePane
+        <section className="workspace">
+          <WorkspaceHeader
             scope={scope}
-            entries={entries}
-            subscriptions={subscriptions.data?.items ?? []}
-            selectedEntryID={selectedEntryID}
-            viewMode={viewMode}
-            isLoading={entriesQuery.isPending}
-            isFetchingNext={entriesQuery.isFetchingNextPage}
-            hasNextPage={entriesQuery.hasNextPage}
-            error={entriesQuery.error}
-            markReadPending={markReadMutation.isPending}
-            refreshPending={refreshMutation.isPending}
-            onScopeChange={setScope}
-            onSelect={selectEntry}
+            search={search}
+            searchShortcut={shortcuts.search}
+            theme={theme}
+            onSearchChange={setSearch}
+            onThemeChange={setTheme}
+            onPreferences={() => setPreferencesOpen(true)}
             onAdd={() => setAddOpen(true)}
-            onRetry={() => void entriesQuery.refetch()}
-            onLoadMore={() => void entriesQuery.fetchNextPage()}
-            onMarkAllRead={() => markReadMutation.mutate()}
-            onRefresh={(feedID) => refreshMutation.mutate(feedID)}
-            onToggleStar={(entry) => mutateState(entry, { is_starred: !entry.state.is_starred })}
           />
-          <ReaderPane
-            key={selectedEntryID ?? "empty-reader"}
-            summary={selectedEntry}
-            detail={entryDetail.data}
-            isLoading={entryDetail.isPending && selectedEntryID !== null}
-            error={entryDetail.error}
-            mutationPending={stateMutation.isPending || tagMutation.isPending}
-            readabilityPending={readabilityMutation.isPending}
-            aiProfiles={aiProfiles.data?.items ?? []}
-            tags={tags.data?.items ?? []}
-            onBack={closeMobileReader}
-            onRetry={() => void entryDetail.refetch()}
-            onStateChange={mutateState}
-            onTagsChange={(entryID, tagIDs) => tagMutation.mutate({ entryID, tagIDs })}
-            onFetchReadability={(entryID) => readabilityMutation.mutate(entryID)}
-            onConfigureAI={() => setAIProfileOpen(true)}
-          />
-        </div>
-      </section>
-      <PaneDivider
-        edge="sidebar"
-        value={constrainedPaneLayout.sidebarWidth}
-        min={SIDEBAR_MIN}
-        max={sidebarMax}
-        label={t("resizeSidebar")}
-        onStart={startPaneResize}
-        onDelta={(delta) => resizePane("sidebar", delta)}
-        onEnd={finishPaneResize}
-      />
-      <PaneDivider
-        edge="timeline"
-        value={constrainedPaneLayout.timelineWidth}
-        min={TIMELINE_MIN}
-        max={timelineMax}
-        label={t("resizeTimeline")}
-        onStart={startPaneResize}
-        onDelta={(delta) => resizePane("timeline", delta)}
-        onEnd={finishPaneResize}
-      />
-      <MobileNav scope={scope} onScopeChange={setScope} onLibrary={() => setMobileLibraryOpen(true)} />
-      <MobileLibraryDialog
-        open={mobileLibraryOpen}
-        scope={scope}
-        folders={folders.data?.items ?? []}
-        subscriptions={subscriptions.data?.items ?? []}
-        tags={tags.data?.items ?? []}
-        savedFilters={savedFilters.data?.items ?? []}
-        onOpenChange={setMobileLibraryOpen}
-        onScopeChange={setScope}
-      />
-      {!online && <div className="offline-banner">{t("offlineMode")}</div>}
-      <AddFeedDialog
-        open={addOpen}
-        folders={folders.data?.items ?? []}
-        addPending={addMutation.isPending}
-        importPending={importMutation.isPending}
-        error={addMutation.error ?? importMutation.error}
-        onOpenChange={setAddOpen}
-        onAdd={(url, folderID) => addMutation.mutate({ url, folderID })}
-        onImport={(file) => importMutation.mutate(file)}
-      />
-      <PreferencesDialog
-        open={preferencesOpen}
-        theme={theme}
-        status={status.data}
-        restorePending={restoreMutation.isPending}
-        error={restoreMutation.error ?? toggleSyncMutation.error ?? runSyncMutation.error ?? deleteSyncMutation.error ?? toggleAIProfileMutation.error ?? defaultAIProfileMutation.error ?? deleteAIProfileMutation.error}
-        devices={devices.data?.items ?? []}
-        syncAccounts={syncAccounts.data?.items ?? []}
-        syncPendingID={runSyncMutation.isPending ? runSyncMutation.variables : undefined}
-        aiProfiles={aiProfiles.data?.items ?? []}
-        aiUsage={aiUsage.data}
-        pairingCode={pairingCodeMutation.data}
-        pairingCodePending={pairingCodeMutation.isPending}
-        onOpenChange={setPreferencesOpen}
-        onRestore={(file) => restoreMutation.mutate(file)}
-        onCreatePairingCode={() => pairingCodeMutation.mutate()}
-        onRevokeDevice={(deviceID) => revokeDeviceMutation.mutate(deviceID)}
-        onAddSyncAccount={() => {
-          setPreferencesOpen(false)
-          setSyncAccountOpen(true)
-        }}
-        onOrganizeLibrary={() => {
-          setPreferencesOpen(false)
-          setOrganizationOpen(true)
-        }}
-        onToggleSyncAccount={(accountID, enabled) => toggleSyncMutation.mutate({ accountID, enabled })}
-        onRunSyncAccount={(accountID) => runSyncMutation.mutate(accountID)}
-        onDeleteSyncAccount={(accountID) => {
-          if (window.confirm(t("deleteSyncConfirmation"))) deleteSyncMutation.mutate(accountID)
-        }}
-        onAddAIProfile={() => {
-          setPreferencesOpen(false)
-          setAIProfileOpen(true)
-        }}
-        onToggleAIProfile={(profileID, enabled) => toggleAIProfileMutation.mutate({ profileID, enabled })}
-        onDefaultAIProfile={(profileID) => defaultAIProfileMutation.mutate(profileID)}
-        onDeleteAIProfile={(profileID) => {
-          if (window.confirm(t("deleteAIConfirmation"))) deleteAIProfileMutation.mutate(profileID)
-        }}
-      />
-      <CommandPalette
-        open={commandOpen}
-        shortcuts={shortcuts}
-        onOpenChange={setCommandOpen}
-        onScopeChange={setScope}
-        onAdd={() => setAddOpen(true)}
-        onPreferences={() => setPreferencesOpen(true)}
-        onMarkAllRead={() => markReadMutation.mutate()}
-        onFocusSearch={() => document.querySelector<HTMLInputElement>("#library-search")?.focus()}
-      />
-      <PairDeviceDialog
-        open={status.data?.device_auth_required === true && !status.data.device_authenticated}
-        pending={pairMutation.isPending}
-        error={pairMutation.error}
-        onPair={(code, name, platform) => pairMutation.mutate({ code, name, platform })}
-      />
-      <SyncAccountDialog
-        open={syncAccountOpen}
-        providers={syncProviders.data?.items ?? []}
-        pending={createSyncMutation.isPending}
-        error={createSyncMutation.error}
-        onOpenChange={setSyncAccountOpen}
-        onCreate={(input) => createSyncMutation.mutate(input)}
-      />
-      <AIProfileDialog
-        open={aiProfileOpen}
-        providers={aiProviders.data?.items ?? []}
-        pending={createAIProfileMutation.isPending}
-        error={createAIProfileMutation.error}
-        onOpenChange={setAIProfileOpen}
-        onCreate={(input) => createAIProfileMutation.mutate(input)}
-      />
-      <LibraryOrganizationDialog
-        open={organizationOpen}
-        folders={folders.data?.items ?? []}
-        tags={tags.data?.items ?? []}
-        rules={rules.data?.items ?? []}
-        savedFilters={savedFilters.data?.items ?? []}
-        pending={createFolderMutation.isPending || deleteFolderMutation.isPending || createTagMutation.isPending || deleteTagMutation.isPending || createRuleMutation.isPending || deleteRuleMutation.isPending || createSavedFilterMutation.isPending || deleteSavedFilterMutation.isPending}
-        error={createFolderMutation.error ?? deleteFolderMutation.error ?? createTagMutation.error ?? deleteTagMutation.error ?? createRuleMutation.error ?? deleteRuleMutation.error ?? createSavedFilterMutation.error ?? deleteSavedFilterMutation.error}
-        onOpenChange={setOrganizationOpen}
-        onCreateFolder={(input) => createFolderMutation.mutate(input)}
-        onDeleteFolder={(folderID) => {
-          if (window.confirm(t("deleteFolderConfirmation"))) deleteFolderMutation.mutate(folderID)
-        }}
-        onCreateTag={(input) => createTagMutation.mutate(input)}
-        onDeleteTag={(tagID) => {
-          if (window.confirm(t("deleteTagConfirmation"))) deleteTagMutation.mutate(tagID)
-        }}
-        onCreateRule={(input) => createRuleMutation.mutate(input)}
-        onDeleteRule={(ruleID) => {
-          if (window.confirm(t("deleteRuleConfirmation"))) deleteRuleMutation.mutate(ruleID)
-        }}
-        onCreateSavedFilter={(input) => createSavedFilterMutation.mutate(input)}
-        onDeleteSavedFilter={(filterID) => {
-          if (window.confirm(t("deleteFilterConfirmation"))) deleteSavedFilterMutation.mutate(filterID)
-        }}
-      />
-    </main>
+          <div className="workspace-body">
+            <TimelinePane
+              scope={scope}
+              entries={entries}
+              subscriptions={subscriptions.data?.items ?? []}
+              selectedEntryID={selectedEntryID}
+              viewMode={viewMode}
+              isLoading={entriesQuery.isPending}
+              isFetchingNext={entriesQuery.isFetchingNextPage}
+              hasNextPage={entriesQuery.hasNextPage}
+              error={entriesQuery.error}
+              markReadPending={markReadMutation.isPending}
+              refreshPending={refreshMutation.isPending}
+              onScopeChange={setScope}
+              onSelect={selectEntry}
+              onAdd={() => setAddOpen(true)}
+              onRetry={() => void entriesQuery.refetch()}
+              onLoadMore={() => void entriesQuery.fetchNextPage()}
+              onMarkAllRead={() => markReadMutation.mutate()}
+              onRefresh={(feedID) => refreshMutation.mutate(feedID)}
+              onToggleStar={(entry) => mutateState(entry, { is_starred: !entry.state.is_starred })}
+            />
+            <ReaderPane
+              key={selectedEntryID ?? "empty-reader"}
+              summary={selectedEntry}
+              detail={entryDetail.data}
+              isLoading={entryDetail.isPending && selectedEntryID !== null}
+              error={entryDetail.error}
+              mutationPending={stateMutation.isPending || tagMutation.isPending}
+              readabilityPending={readabilityMutation.isPending}
+              aiProfiles={aiProfiles.data?.items ?? []}
+              tags={tags.data?.items ?? []}
+              onBack={closeMobileReader}
+              onRetry={() => void entryDetail.refetch()}
+              onStateChange={mutateState}
+              onTagsChange={(entryID, tagIDs) => tagMutation.mutate({ entryID, tagIDs })}
+              onFetchReadability={(entryID) => readabilityMutation.mutate(entryID)}
+              onConfigureAI={() => setAIProfileOpen(true)}
+            />
+          </div>
+        </section>
+        <PaneDivider
+          edge="sidebar"
+          value={constrainedPaneLayout.sidebarWidth}
+          min={SIDEBAR_MIN}
+          max={sidebarMax}
+          label={t("resizeSidebar")}
+          onStart={startPaneResize}
+          onDelta={(delta) => resizePane("sidebar", delta)}
+          onEnd={finishPaneResize}
+        />
+        <PaneDivider
+          edge="timeline"
+          value={constrainedPaneLayout.timelineWidth}
+          min={TIMELINE_MIN}
+          max={timelineMax}
+          label={t("resizeTimeline")}
+          onStart={startPaneResize}
+          onDelta={(delta) => resizePane("timeline", delta)}
+          onEnd={finishPaneResize}
+        />
+        <MobileNav
+          scope={scope}
+          onScopeChange={setScope}
+          onLibrary={() => setMobileLibraryOpen(true)}
+        />
+        <MobileLibraryDialog
+          open={mobileLibraryOpen}
+          scope={scope}
+          folders={folders.data?.items ?? []}
+          subscriptions={subscriptions.data?.items ?? []}
+          tags={tags.data?.items ?? []}
+          savedFilters={savedFilters.data?.items ?? []}
+          onOpenChange={setMobileLibraryOpen}
+          onScopeChange={setScope}
+        />
+        {!online && <div className="offline-banner">{t("offlineMode")}</div>}
+        <AddFeedDialog
+          open={addOpen}
+          folders={folders.data?.items ?? []}
+          addPending={addMutation.isPending}
+          importPending={importMutation.isPending}
+          error={addMutation.error ?? importMutation.error}
+          onOpenChange={setAddOpen}
+          onAdd={(url, folderID) => addMutation.mutate({ url, folderID })}
+          onImport={(file) => importMutation.mutate(file)}
+        />
+        <PreferencesDialog
+          open={preferencesOpen}
+          theme={theme}
+          status={status.data}
+          restorePending={restoreMutation.isPending}
+          error={
+            restoreMutation.error ??
+            toggleSyncMutation.error ??
+            runSyncMutation.error ??
+            deleteSyncMutation.error ??
+            toggleAIProfileMutation.error ??
+            defaultAIProfileMutation.error ??
+            deleteAIProfileMutation.error
+          }
+          devices={devices.data?.items ?? []}
+          syncAccounts={syncAccounts.data?.items ?? []}
+          syncPendingID={
+            runSyncMutation.isPending ? runSyncMutation.variables?.accountID : undefined
+          }
+          aiProfiles={aiProfiles.data?.items ?? []}
+          aiUsage={aiUsage.data}
+          pairingCode={pairingCodeMutation.data}
+          pairingCodePending={pairingCodeMutation.isPending}
+          onOpenChange={setPreferencesOpen}
+          onRestore={(file) => restoreMutation.mutate(file)}
+          onCreatePairingCode={() => pairingCodeMutation.mutate()}
+          onRevokeDevice={(deviceID) => revokeDeviceMutation.mutate(deviceID)}
+          onAddSyncAccount={() => {
+            setPreferencesOpen(false)
+            setSyncAccountOpen(true)
+          }}
+          onOrganizeLibrary={() => {
+            setPreferencesOpen(false)
+            setOrganizationOpen(true)
+          }}
+          onToggleSyncAccount={(accountID, enabled) =>
+            toggleSyncMutation.mutate({ accountID, enabled })
+          }
+          onRunSyncAccount={(accountID, mode) => runSyncMutation.mutate({ accountID, mode })}
+          onDeleteSyncAccount={(accountID) => {
+            if (window.confirm(t("deleteSyncConfirmation"))) deleteSyncMutation.mutate(accountID)
+          }}
+          onAddAIProfile={() => {
+            setPreferencesOpen(false)
+            setAIProfileOpen(true)
+          }}
+          onToggleAIProfile={(profileID, enabled) =>
+            toggleAIProfileMutation.mutate({ profileID, enabled })
+          }
+          onDefaultAIProfile={(profileID) => defaultAIProfileMutation.mutate(profileID)}
+          onDeleteAIProfile={(profileID) => {
+            if (window.confirm(t("deleteAIConfirmation"))) deleteAIProfileMutation.mutate(profileID)
+          }}
+        />
+        <CommandPalette
+          open={commandOpen}
+          shortcuts={shortcuts}
+          onOpenChange={setCommandOpen}
+          onScopeChange={setScope}
+          onAdd={() => setAddOpen(true)}
+          onPreferences={() => setPreferencesOpen(true)}
+          onMarkAllRead={() => markReadMutation.mutate()}
+          onFocusSearch={() => document.querySelector<HTMLInputElement>("#library-search")?.focus()}
+        />
+        <PairDeviceDialog
+          open={status.data?.device_auth_required === true && !status.data.device_authenticated}
+          pending={pairMutation.isPending}
+          error={pairMutation.error}
+          onPair={(code, name, platform) => pairMutation.mutate({ code, name, platform })}
+        />
+        <SyncAccountDialog
+          open={syncAccountOpen}
+          providers={syncProviders.data?.items ?? []}
+          pending={createSyncMutation.isPending}
+          error={createSyncMutation.error}
+          onOpenChange={setSyncAccountOpen}
+          onCreate={(input) => createSyncMutation.mutate(input)}
+        />
+        <AIProfileDialog
+          open={aiProfileOpen}
+          providers={aiProviders.data?.items ?? []}
+          pending={createAIProfileMutation.isPending}
+          error={createAIProfileMutation.error}
+          onOpenChange={setAIProfileOpen}
+          onCreate={(input) => createAIProfileMutation.mutate(input)}
+        />
+        <LibraryOrganizationDialog
+          open={organizationOpen}
+          folders={folders.data?.items ?? []}
+          tags={tags.data?.items ?? []}
+          rules={rules.data?.items ?? []}
+          savedFilters={savedFilters.data?.items ?? []}
+          pending={
+            createFolderMutation.isPending ||
+            deleteFolderMutation.isPending ||
+            createTagMutation.isPending ||
+            deleteTagMutation.isPending ||
+            createRuleMutation.isPending ||
+            deleteRuleMutation.isPending ||
+            createSavedFilterMutation.isPending ||
+            deleteSavedFilterMutation.isPending
+          }
+          error={
+            createFolderMutation.error ??
+            deleteFolderMutation.error ??
+            createTagMutation.error ??
+            deleteTagMutation.error ??
+            createRuleMutation.error ??
+            deleteRuleMutation.error ??
+            createSavedFilterMutation.error ??
+            deleteSavedFilterMutation.error
+          }
+          onOpenChange={setOrganizationOpen}
+          onCreateFolder={(input) => createFolderMutation.mutate(input)}
+          onDeleteFolder={(folderID) => {
+            if (window.confirm(t("deleteFolderConfirmation"))) deleteFolderMutation.mutate(folderID)
+          }}
+          onCreateTag={(input) => createTagMutation.mutate(input)}
+          onDeleteTag={(tagID) => {
+            if (window.confirm(t("deleteTagConfirmation"))) deleteTagMutation.mutate(tagID)
+          }}
+          onCreateRule={(input) => createRuleMutation.mutate(input)}
+          onDeleteRule={(ruleID) => {
+            if (window.confirm(t("deleteRuleConfirmation"))) deleteRuleMutation.mutate(ruleID)
+          }}
+          onCreateSavedFilter={(input) => createSavedFilterMutation.mutate(input)}
+          onDeleteSavedFilter={(filterID) => {
+            if (window.confirm(t("deleteFilterConfirmation")))
+              deleteSavedFilterMutation.mutate(filterID)
+          }}
+        />
+      </main>
     </>
   )
 }

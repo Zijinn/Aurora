@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	"github.com/cairn-reader/cairn/internal/service"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/service"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 type aiProfileRequest struct {
@@ -231,7 +231,7 @@ func (s *Server) requireAI(w http.ResponseWriter, r *http.Request) bool {
 	if s.ai != nil {
 		return true
 	}
-	writeProblem(w, r, http.StatusServiceUnavailable, "ai_unavailable", "AI unavailable", "Credential encryption is not configured on this Cairn server.")
+	writeProblem(w, r, http.StatusServiceUnavailable, "ai_unavailable", "AI unavailable", "Credential encryption is not configured on this Aurora server.")
 	return false
 }
 

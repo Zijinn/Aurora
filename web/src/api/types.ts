@@ -17,7 +17,15 @@ export interface Device {
   revoked_at: string | null
 }
 
-export type SyncProviderID = "freshrss" | "google_reader" | "miniflux" | "fever" | "feedbin" | "nextcloud_news"
+export type SyncProviderID =
+  | "freshrss"
+  | "google_reader"
+  | "miniflux"
+  | "fever"
+  | "feedbin"
+  | "nextcloud_news"
+  | "webdav"
+  | "icloud"
 
 export interface SyncProvider {
   id: SyncProviderID
@@ -78,7 +86,7 @@ export interface AIUsage {
   total_tokens: number
 }
 
-export type AIOperation = "summary" | "translation" | "key_points"
+export type AIOperation = "summary" | "title_translation" | "translation" | "key_points"
 
 export interface AIResult {
   id: string
@@ -205,6 +213,8 @@ export interface Entry {
   audio_url?: string | null
   video_url?: string | null
   language?: string | null
+  ai_translated_title?: string | null
+  ai_summary?: string | null
   tag_ids: string[]
   state: EntryState
 }

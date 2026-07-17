@@ -1,6 +1,6 @@
 {
-  "name": "@cairn/web",
-  "version": "0.1.1",
+  "name": "@aurora/web",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 func (s *Server) createFolder(w http.ResponseWriter, r *http.Request) {

@@ -4,11 +4,11 @@ Status: accepted
 
 ## Decision
 
-Cairn listens on loopback by default. LAN mode is explicit and requires device pairing. Device tokens are random bearer credentials stored hashed on the server. CORS is restricted to configured origins. Feed fetching enforces SSRF and response policies.
+Aurora listens on loopback by default. LAN mode is explicit and requires device pairing. Device tokens are random bearer credentials stored hashed on the server. CORS is restricted to configured origins. Feed fetching enforces SSRF and response policies.
 
 ## Rationale
 
-The iPad client makes the local API a network service. MrRSS server mode exposes sensitive operations without a completed authentication implementation, which is not acceptable for Cairn.
+The iPad client makes the local API a network service. MrRSS server mode exposes sensitive operations without a completed authentication implementation, which is not acceptable for Aurora.
 
 ## Consequences
 

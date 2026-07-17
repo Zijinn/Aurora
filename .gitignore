@@ -19,6 +19,6 @@ web/dist/
 web/node_modules/
 *.log
 *.syso
-build/darwin/Cairn.icns
-build/windows/Cairn.ico
+build/darwin/Aurora.icns
+build/windows/Aurora.ico
 build/windows/MicrosoftEdgeWebview2Setup.exe

@@ -1,4 +1,4 @@
-# Cairn logical data model
+# Aurora logical data model
 
 ## Identity and devices
 
@@ -213,6 +213,8 @@ Credentials are encrypted with AES-256-GCM. The account ID is authenticated as a
 - `updated_at`
 
 Feed and entry mappings are unique in both local and remote directions per account. They make retries idempotent and allow local state changes to be pushed without re-matching every article.
+
+For WebDAV and iCloud Drive accounts, `cursor_json` stores the last local and remote portable-snapshot fingerprints instead of a service cursor. These accounts can be enabled concurrently and never include provider credentials or device tokens in the synchronized snapshot.
 
 ## AI
 

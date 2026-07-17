@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
-  title: Cairn API
+  title: Aurora API
   version: 0.1.0
-  description: Versioned API shared by Cairn desktop, PWA, and future mobile clients.
+  description: Versioned API shared by Aurora desktop, PWA, and future mobile clients.
   license:
     name: GPL-3.0-only
 servers:
@@ -292,6 +292,12 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: ai_language
+          in: query
+          description: Language used to select cached AI title translations and summaries.
+          schema:
+            type: string
+            maxLength: 40
       responses:
         "200":
           description: Cursor-paginated timeline.
@@ -343,6 +349,12 @@ paths:
   /api/v1/entries/{entryId}:
     parameters:
       - $ref: "#/components/parameters/EntryId"
+      - name: ai_language
+        in: query
+        description: Language used to select cached AI title translations and summaries.
+        schema:
+          type: string
+          maxLength: 40
     get:
       operationId: getEntry
       tags: [entries]
@@ -622,7 +634,7 @@ paths:
       tags: [backup]
       responses:
         "200":
-          description: Complete logical Cairn backup.
+          description: Complete logical Aurora backup.
           content:
             application/json:
               schema:
@@ -811,6 +823,13 @@ paths:
   /api/v1/sync/accounts/{accountId}/sync:
     parameters:
       - $ref: "#/components/parameters/SyncAccountId"
+      - name: mode
+        in: query
+        description: Automatic conflict-aware synchronization, forced upload, or forced cloud restore.
+        schema:
+          type: string
+          enum: [auto, push, pull]
+          default: auto
     post:
       operationId: runSyncAccount
       tags: [sync, jobs]
@@ -944,7 +963,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [summary, translation, key-points]
+          enum: [summary, title-translation, translation, key-points]
     post:
       operationId: runAIOperation
       tags: [entries, ai, jobs]
@@ -1041,7 +1060,7 @@ components:
     deviceToken:
       type: http
       scheme: bearer
-      bearerFormat: CairnDeviceToken
+      bearerFormat: AuroraDeviceToken
   parameters:
     FeedId:
       name: feedId
@@ -1294,6 +1313,10 @@ components:
           type: [string, "null"]
         summary:
           type: [string, "null"]
+        ai_translated_title:
+          type: [string, "null"]
+        ai_summary:
+          type: [string, "null"]
         canonical_url:
           type: [string, "null"]
           format: uri
@@ -1419,7 +1442,7 @@ components:
       properties:
         id:
           type: string
-          enum: [freshrss, google_reader, miniflux, fever, feedbin, nextcloud_news]
+          enum: [freshrss, google_reader, miniflux, fever, feedbin, nextcloud_news, webdav, icloud]
         name:
           type: string
     SyncCredentials:
@@ -1443,14 +1466,14 @@ components:
       properties:
         provider:
           type: string
-          enum: [freshrss, google_reader, miniflux, fever, feedbin, nextcloud_news]
+          enum: [freshrss, google_reader, miniflux, fever, feedbin, nextcloud_news, webdav, icloud]
         name:
           type: string
           minLength: 1
           maxLength: 120
         endpoint:
           type: string
-          format: uri
+          description: HTTP(S) endpoint, exact WebDAV snapshot URL, or local iCloud Drive path.
         credentials:
           $ref: "#/components/schemas/SyncCredentials"
         enabled:
@@ -1474,7 +1497,7 @@ components:
           maxLength: 120
         endpoint:
           type: string
-          format: uri
+          description: HTTP(S) endpoint, exact WebDAV snapshot URL, or local iCloud Drive path.
         credentials:
           $ref: "#/components/schemas/SyncCredentials"
         enabled:
@@ -1494,12 +1517,12 @@ components:
           format: uuid
         provider:
           type: string
-          enum: [freshrss, google_reader, miniflux, fever, feedbin, nextcloud_news]
+          enum: [freshrss, google_reader, miniflux, fever, feedbin, nextcloud_news, webdav, icloud]
         name:
           type: string
         endpoint:
           type: string
-          format: uri
+          description: HTTP(S) endpoint, exact WebDAV snapshot URL, or local iCloud Drive path.
         enabled:
           type: boolean
         allow_private_network:
@@ -1670,7 +1693,7 @@ components:
           format: uuid
         operation:
           type: string
-          enum: [summary, translation, key_points]
+          enum: [summary, title_translation, translation, key_points]
         language:
           type: string
         input_hash:

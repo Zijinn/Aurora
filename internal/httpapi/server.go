@@ -16,14 +16,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	"github.com/cairn-reader/cairn/internal/event"
-	feedcore "github.com/cairn-reader/cairn/internal/feed"
-	"github.com/cairn-reader/cairn/internal/job"
-	"github.com/cairn-reader/cairn/internal/secretbox"
-	"github.com/cairn-reader/cairn/internal/service"
-	"github.com/cairn-reader/cairn/internal/storage"
-	"github.com/cairn-reader/cairn/internal/version"
+	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/event"
+	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/job"
+	"github.com/Zijinn/Aurora/internal/secretbox"
+	"github.com/Zijinn/Aurora/internal/service"
+	"github.com/Zijinn/Aurora/internal/storage"
+	"github.com/Zijinn/Aurora/internal/version"
 )
 
 type Server struct {
@@ -132,6 +132,7 @@ func (s *Server) ConfigureSync(box *secretbox.Box) {
 	s.jobs.Register("sync.account", func(ctx context.Context, current domain.Job, progress job.ProgressFunc) error {
 		var payload struct {
 			AccountID string `json:"account_id"`
+			Mode      string `json:"mode"`
 		}
 		if err := job.DecodePayload(current, &payload); err != nil {
 			return err
@@ -139,9 +140,12 @@ func (s *Server) ConfigureSync(box *secretbox.Box) {
 		if payload.AccountID == "" {
 			return errors.New("sync account ID is required")
 		}
-		result, err := syncService.Run(ctx, payload.AccountID, service.SyncProgressFunc(progress))
+		result, err := syncService.Run(ctx, payload.AccountID, service.SyncProgressFunc(progress), payload.Mode)
 		if err == nil {
 			s.events.Publish("sync.completed", map[string]any{"account_id": payload.AccountID, "result": result})
+			if result.Action == "pull" {
+				s.events.Publish("library.restored", map[string]any{"account_id": payload.AccountID, "source": "cloud_sync"})
+			}
 		}
 		return err
 	})
@@ -211,7 +215,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	}
 	capabilities := []string{"sqlite", "migrations", "pwa", "rss", "atom", "json_feed", "opml", "sse", "fts5"}
 	if s.syncs != nil {
-		capabilities = append(capabilities, "external_sync")
+		capabilities = append(capabilities, "external_sync", "webdav_sync", "icloud_sync")
 	}
 	if s.ai != nil {
 		capabilities = append(capabilities, "ai")
@@ -229,7 +233,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiRoot(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
-		"name":        "Cairn API",
+		"name":        "Aurora API",
 		"api_version": version.APIVersion,
 	})
 }
@@ -347,7 +351,7 @@ func writeProblem(w http.ResponseWriter, r *http.Request, status int, code, titl
 	w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"type":       "https://cairn.local/problems/" + code,
+		"type":       "https://aurora.local/problems/" + code,
 		"title":      title,
 		"status":     status,
 		"detail":     detail,

@@ -10,13 +10,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	"github.com/cairn-reader/cairn/internal/secretbox"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/secretbox"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 func TestAIServicePrivacyEncryptionCachingChatAndUsage(t *testing.T) {
@@ -125,6 +126,25 @@ func TestAIServicePrivacyEncryptionCachingChatAndUsage(t *testing.T) {
 	}
 	if usage.InputTokens != 80 || usage.OutputTokens != 12 || usage.TotalTokens != 92 {
 		t.Fatalf("unexpected usage totals: %+v", usage)
+	}
+}
+
+func TestTitleTranslationSendsOnlyTheTitleAndUsesTitleCacheKey(t *testing.T) {
+	record := storage.AIProfileRecord{Profile: domain.AIProfile{
+		ID: "translation-profile", Provider: "ollama", Endpoint: "http://127.0.0.1:11434", Model: "qwen3:8b",
+	}}
+	first := storage.AIEntryContent{Title: "A precise title", CanonicalURL: "https://example.com/one", Content: "private article body one"}
+	second := storage.AIEntryContent{Title: "A precise title", CanonicalURL: "https://example.com/two", Content: "private article body two"}
+	messages := operationMessages("title_translation", "Chinese", first)
+	if len(messages) != 2 || !strings.Contains(messages[1].Content, first.Title) || strings.Contains(messages[1].Content, first.Content) || strings.Contains(messages[1].Content, first.CanonicalURL) {
+		t.Fatalf("title translation envelope included more than the title: %+v", messages)
+	}
+	if firstHash, secondHash := aiInputHash(record, "title_translation", "Chinese", first), aiInputHash(record, "title_translation", "Chinese", second); firstHash != secondHash {
+		t.Fatalf("title-only cache key changed with article content: %s %s", firstHash, secondHash)
+	}
+	operation, language, err := validateAIOperation("title_translation", "Chinese")
+	if err != nil || operation != "title_translation" || language != "Chinese" {
+		t.Fatalf("unexpected title translation validation: %q %q %v", operation, language, err)
 	}
 }
 

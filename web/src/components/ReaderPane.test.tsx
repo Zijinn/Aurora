@@ -18,14 +18,31 @@ const detail: EntryDetail = {
   discovered_at: "2026-07-17T00:00:00Z",
   lead_image_url: null,
   tag_ids: ["tag-important"],
-  state: { is_read: true, is_starred: false, is_read_later: false, updated_at: "2026-07-17T00:00:00Z" },
+  state: {
+    is_read: true,
+    is_starred: false,
+    is_read_later: false,
+    updated_at: "2026-07-17T00:00:00Z",
+  },
   sanitized_html: "<p>Article body</p>",
   readability_html: null,
 }
 
 const tags: Tag[] = [
-  { id: "tag-important", name: "Important", color: "#b3413a", position: 0, created_at: "2026-07-17T00:00:00Z" },
-  { id: "tag-research", name: "Research", color: "#167a72", position: 1, created_at: "2026-07-17T00:00:00Z" },
+  {
+    id: "tag-important",
+    name: "Important",
+    color: "#b3413a",
+    position: 0,
+    created_at: "2026-07-17T00:00:00Z",
+  },
+  {
+    id: "tag-research",
+    name: "Research",
+    color: "#167a72",
+    position: 1,
+    created_at: "2026-07-17T00:00:00Z",
+  },
 ]
 
 it("shows and updates article tags", () => {
@@ -57,4 +74,40 @@ it("shows and updates article tags", () => {
   expect(screen.getByRole("checkbox", { name: "Important" })).toBeChecked()
   fireEvent.click(screen.getByRole("checkbox", { name: "Research" }))
   expect(onTagsChange).toHaveBeenCalledWith("entry-1", ["tag-important", "tag-research"])
+})
+
+it("shows cached AI title translation and summary in the reading header", () => {
+  useReaderStore.setState({ locale: "en-US", theme: "system" })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <ReaderPane
+        summary={{
+          ...detail,
+          ai_translated_title: "一篇带标签的文章",
+          ai_summary: "这是缓存的 AI 摘要。",
+        }}
+        detail={{
+          ...detail,
+          ai_translated_title: "一篇带标签的文章",
+          ai_summary: "这是缓存的 AI 摘要。",
+        }}
+        isLoading={false}
+        error={null}
+        mutationPending={false}
+        readabilityPending={false}
+        aiProfiles={[]}
+        tags={[]}
+        onBack={vi.fn()}
+        onRetry={vi.fn()}
+        onStateChange={vi.fn()}
+        onTagsChange={vi.fn()}
+        onFetchReadability={vi.fn()}
+        onConfigureAI={vi.fn()}
+      />
+    </QueryClientProvider>,
+  )
+  expect(screen.getByText("一篇带标签的文章")).toBeInTheDocument()
+  expect(screen.getByText("AI summary")).toBeInTheDocument()
+  expect(screen.getByText("这是缓存的 AI 摘要。")).toBeInTheDocument()
 })

@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	feedcore "github.com/cairn-reader/cairn/internal/feed"
-	"github.com/cairn-reader/cairn/internal/service"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/domain"
+	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/service"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 const maxRequestBody = 5 << 20
@@ -260,15 +260,16 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, err := storage.ListEntries(r.Context(), s.db, domain.EntryFilter{
-		ProfileID: domain.DefaultProfileID,
-		FeedID:    r.URL.Query().Get("feed_id"),
-		FolderID:  r.URL.Query().Get("folder_id"),
-		TagID:     r.URL.Query().Get("tag_id"),
-		State:     state,
-		Query:     r.URL.Query().Get("query"),
-		Cursor:    r.URL.Query().Get("cursor"),
-		Limit:     limit,
-		Since:     since,
+		ProfileID:  domain.DefaultProfileID,
+		FeedID:     r.URL.Query().Get("feed_id"),
+		FolderID:   r.URL.Query().Get("folder_id"),
+		TagID:      r.URL.Query().Get("tag_id"),
+		State:      state,
+		Query:      r.URL.Query().Get("query"),
+		Cursor:     r.URL.Query().Get("cursor"),
+		Limit:      limit,
+		Since:      since,
+		AILanguage: r.URL.Query().Get("ai_language"),
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "cursor") {
@@ -311,7 +312,7 @@ func (s *Server) markEntriesRead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getEntry(w http.ResponseWriter, r *http.Request) {
-	item, err := storage.GetEntry(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("entryID"))
+	item, err := storage.GetEntry(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("entryID"), r.URL.Query().Get("ai_language"))
 	if err != nil {
 		s.storageError(w, r, err)
 		return
@@ -382,7 +383,7 @@ func (s *Server) exportOPML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="cairn-subscriptions.opml"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="aurora-subscriptions.opml"`)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
 }
@@ -450,7 +451,7 @@ func (s *Server) exportBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="cairn-backup.json"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="aurora-backup.json"`)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(document)
 }

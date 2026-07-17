@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	feedcore "github.com/cairn-reader/cairn/internal/feed"
+	feedcore "github.com/Zijinn/Aurora/internal/feed"
 )
 
 type Message struct {

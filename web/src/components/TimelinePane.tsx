@@ -77,9 +77,33 @@ export function TimelinePane(props: TimelinePaneProps) {
       </header>
       <div className="timeline-filterbar">
         <div className="timeline-filterbar__scopes" aria-label={t("articleFilters")}>
-          <button className={props.scope.kind === "all" ? "filter-chip filter-chip--active" : "filter-chip"} type="button" onClick={() => props.onScopeChange({ kind: "all", title: "All feeds" })}>{t("all")}</button>
-          <button className={props.scope.kind === "unread" ? "filter-chip filter-chip--active" : "filter-chip"} type="button" onClick={() => props.onScopeChange({ kind: "unread", title: "Unread" })}>{t("unread")}</button>
-          <button className={props.scope.kind === "saved" ? "filter-chip filter-chip--active" : "filter-chip"} type="button" onClick={() => props.onScopeChange({ kind: "saved", title: "Saved" })}>{t("saved")}</button>
+          <button
+            className={
+              props.scope.kind === "all" ? "filter-chip filter-chip--active" : "filter-chip"
+            }
+            type="button"
+            onClick={() => props.onScopeChange({ kind: "all", title: "All feeds" })}
+          >
+            {t("all")}
+          </button>
+          <button
+            className={
+              props.scope.kind === "unread" ? "filter-chip filter-chip--active" : "filter-chip"
+            }
+            type="button"
+            onClick={() => props.onScopeChange({ kind: "unread", title: "Unread" })}
+          >
+            {t("unread")}
+          </button>
+          <button
+            className={
+              props.scope.kind === "saved" ? "filter-chip filter-chip--active" : "filter-chip"
+            }
+            type="button"
+            onClick={() => props.onScopeChange({ kind: "saved", title: "Saved" })}
+          >
+            {t("saved")}
+          </button>
         </div>
         <button
           className="button button--quiet timeline-mark-read"
@@ -91,7 +115,9 @@ export function TimelinePane(props: TimelinePaneProps) {
           <span>{t("markAllRead")}</span>
         </button>
       </div>
-      {props.scope.kind === "today" && <TodayOverview entries={props.entries} subscriptions={props.subscriptions} />}
+      {props.scope.kind === "today" && (
+        <TodayOverview entries={props.entries} subscriptions={props.subscriptions} />
+      )}
       {props.isLoading ? (
         <TimelineSkeleton />
       ) : props.error ? (
@@ -99,46 +125,63 @@ export function TimelinePane(props: TimelinePaneProps) {
           <WarningCircle aria-hidden="true" />
           <h2>{t("timelineUnavailable")}</h2>
           <p>{props.error.message}</p>
-          <button className="button button--secondary" type="button" onClick={props.onRetry}>{t("retry")}</button>
+          <button className="button button--secondary" type="button" onClick={props.onRetry}>
+            {t("retry")}
+          </button>
         </div>
       ) : props.entries.length === 0 ? (
         <div className="timeline__empty">
-          <div className="empty-mark" aria-hidden="true"><span /><span /><span /></div>
+          <div className="empty-mark" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
           <h2>{props.scope.kind === "unread" ? t("caughtUp") : t("readingTrailStarts")}</h2>
           <p>{props.scope.kind === "unread" ? t("unreadWillAppear") : t("addFeedOrImport")}</p>
-          <button className="button button--primary" type="button" onClick={props.onAdd}><Plus />{t("addFeed")}</button>
+          <button className="button button--primary" type="button" onClick={props.onAdd}>
+            <Plus />
+            {t("addFeed")}
+          </button>
         </div>
       ) : (
         <div className="timeline-results">
-          <div className="timeline-group-label"><span>{t("latestStories")}</span><i /></div>
-          <div className="timeline-scroll" ref={scrollRef} onScroll={onScroll}>
-          <div className="timeline-list" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-            {virtualItems.map((virtualItem) => {
-              const entry = props.entries[virtualItem.index]
-              if (!entry) return null
-              return (
-                <div
-                  className="timeline-list__row"
-                  data-index={virtualItem.index}
-                  key={entry.id}
-                  ref={virtualizer.measureElement}
-                  style={{ transform: `translateY(${virtualItem.start}px)` }}
-                >
-                  <TimelineEntry
-                    entry={entry}
-                    index={virtualItem.index}
-                    selected={entry.id === props.selectedEntryID}
-                    viewMode={props.viewMode}
-                    locale={locale}
-                    t={t}
-                    onSelect={() => props.onSelect(entry.id)}
-                    onToggleStar={() => props.onToggleStar(entry)}
-                  />
-                </div>
-              )
-            })}
+          <div className="timeline-group-label">
+            <span>{t("latestStories")}</span>
+            <i />
           </div>
-          {props.isFetchingNext && <div className="timeline-loading-more"><CircleNotch className="spin" />{t("loading")}</div>}
+          <div className="timeline-scroll" ref={scrollRef} onScroll={onScroll}>
+            <div className="timeline-list" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+              {virtualItems.map((virtualItem) => {
+                const entry = props.entries[virtualItem.index]
+                if (!entry) return null
+                return (
+                  <div
+                    className="timeline-list__row"
+                    data-index={virtualItem.index}
+                    key={entry.id}
+                    ref={virtualizer.measureElement}
+                    style={{ transform: `translateY(${virtualItem.start}px)` }}
+                  >
+                    <TimelineEntry
+                      entry={entry}
+                      index={virtualItem.index}
+                      selected={entry.id === props.selectedEntryID}
+                      viewMode={props.viewMode}
+                      locale={locale}
+                      t={t}
+                      onSelect={() => props.onSelect(entry.id)}
+                      onToggleStar={() => props.onToggleStar(entry)}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+            {props.isFetchingNext && (
+              <div className="timeline-loading-more">
+                <CircleNotch className="spin" />
+                {t("loading")}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -166,19 +209,48 @@ function TimelineEntry({
   onToggleStar: () => void
 }) {
   return (
-    <article className={`timeline-entry timeline-entry--${viewMode}${selected ? " timeline-entry--selected" : ""}${entry.state.is_read ? " timeline-entry--read" : ""}`}>
-      <span className="timeline-entry__index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+    <article
+      className={`timeline-entry timeline-entry--${viewMode}${selected ? " timeline-entry--selected" : ""}${entry.state.is_read ? " timeline-entry--read" : ""}`}
+    >
+      <span className="timeline-entry__index" aria-hidden="true">
+        {String(index + 1).padStart(2, "0")}
+      </span>
       <span className="timeline-entry__image" aria-hidden="true">
         <span>{entry.feed_title.slice(0, 1).toUpperCase()}</span>
-        {entry.lead_image_url && <img src={entry.lead_image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+        {entry.lead_image_url && (
+          <img src={entry.lead_image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+        )}
       </span>
-      <button className="timeline-entry__main" type="button" aria-current={selected ? "true" : undefined} onClick={onSelect}>
+      <button
+        className="timeline-entry__main"
+        type="button"
+        aria-current={selected ? "true" : undefined}
+        onClick={onSelect}
+      >
         <div className="timeline-entry__meta">
-          <span className="timeline-entry__feed"><span className="unread-dot" />{entry.feed_title}</span>
-          <time dateTime={entry.published_at}>{formatRelativeTime(entry.published_at, locale)}</time>
+          <span className="timeline-entry__feed">
+            <span className="unread-dot" />
+            {entry.feed_title}
+          </span>
+          <time dateTime={entry.published_at}>
+            {formatRelativeTime(entry.published_at, locale)}
+          </time>
         </div>
         <h2>{entry.title || t("untitled")}</h2>
-        {entry.summary && <p className="timeline-entry__summary">{entry.summary}</p>}
+        {entry.ai_translated_title && (
+          <p className="timeline-entry__translation">{entry.ai_translated_title}</p>
+        )}
+        {(entry.ai_summary || entry.summary) && (
+          <p
+            className={
+              entry.ai_summary
+                ? "timeline-entry__summary timeline-entry__summary--ai"
+                : "timeline-entry__summary"
+            }
+          >
+            {entry.ai_summary ?? entry.summary}
+          </p>
+        )}
         {entry.author && <span className="timeline-entry__author">{entry.author}</span>}
       </button>
       <button
@@ -194,36 +266,76 @@ function TimelineEntry({
   )
 }
 
-function TodayOverview({ entries, subscriptions }: { entries: Entry[]; subscriptions: Subscription[] }) {
+function TodayOverview({
+  entries,
+  subscriptions,
+}: {
+  entries: Entry[]
+  subscriptions: Subscription[]
+}) {
   const { t } = useTranslation()
   const unread = entries.filter((entry) => !entry.state.is_read).length
   const activeSources = subscriptions.filter((subscription) => subscription.unread_count > 0)
-  const topSources = [...activeSources].sort((left, right) => right.unread_count - left.unread_count).slice(0, 5)
+  const topSources = [...activeSources]
+    .sort((left, right) => right.unread_count - left.unread_count)
+    .slice(0, 5)
   const peakUnread = Math.max(1, ...topSources.map((source) => source.unread_count))
   return (
     <section className="today-overview" aria-label={t("dailySignal")}>
       <div className="daily-signal">
         <div className="daily-signal__heading">
-          <span className="daily-signal__icon" aria-hidden="true"><Sparkle weight="fill" /></span>
-          <div><p>{t("dailySignal")}</p><h2>{t("todayBriefing")}</h2></div>
+          <span className="daily-signal__icon" aria-hidden="true">
+            <Sparkle weight="fill" />
+          </span>
+          <div>
+            <p>{t("dailySignal")}</p>
+            <h2>{t("todayBriefing")}</h2>
+          </div>
         </div>
         <p className="daily-signal__description">{t("todayBriefingDescription")}</p>
         <dl>
-          <div><dt>{t("stories")}</dt><dd>{entries.length}</dd></div>
-          <div><dt>{t("sources")}</dt><dd>{activeSources.length}</dd></div>
-          <div><dt>{t("unread")}</dt><dd>{unread}</dd></div>
+          <div>
+            <dt>{t("stories")}</dt>
+            <dd>{entries.length}</dd>
+          </div>
+          <div>
+            <dt>{t("sources")}</dt>
+            <dd>{activeSources.length}</dd>
+          </div>
+          <div>
+            <dt>{t("unread")}</dt>
+            <dd>{unread}</dd>
+          </div>
         </dl>
       </div>
       <div className="source-overview">
-        <div className="source-overview__heading"><span><i />{t("sourceOverview")}</span><small>{t("orderedByActivity")}</small></div>
-        {topSources.length > 0 ? <div className="source-overview__list">{topSources.map((source) => (
-          <div className="source-overview__row" key={source.id}>
-            <span className="source-overview__mark">{source.title.slice(0, 1).toUpperCase()}</span>
-            <strong>{source.title}</strong>
-            <span className="source-overview__bar"><i style={{ width: `${Math.max(8, (source.unread_count / peakUnread) * 100)}%` }} /></span>
-            <small>{source.unread_count}</small>
+        <div className="source-overview__heading">
+          <span>
+            <i />
+            {t("sourceOverview")}
+          </span>
+          <small>{t("orderedByActivity")}</small>
+        </div>
+        {topSources.length > 0 ? (
+          <div className="source-overview__list">
+            {topSources.map((source) => (
+              <div className="source-overview__row" key={source.id}>
+                <span className="source-overview__mark">
+                  {source.title.slice(0, 1).toUpperCase()}
+                </span>
+                <strong>{source.title}</strong>
+                <span className="source-overview__bar">
+                  <i
+                    style={{ width: `${Math.max(8, (source.unread_count / peakUnread) * 100)}%` }}
+                  />
+                </span>
+                <small>{source.unread_count}</small>
+              </div>
+            ))}
           </div>
-        ))}</div> : <p className="source-overview__empty">{t("sourceOverviewEmpty")}</p>}
+        ) : (
+          <p className="source-overview__empty">{t("sourceOverviewEmpty")}</p>
+        )}
       </div>
     </section>
   )
@@ -231,24 +343,42 @@ function TodayOverview({ entries, subscriptions }: { entries: Entry[]; subscript
 
 function TimelineSkeleton() {
   const { t } = useTranslation()
-  return <div className="timeline-skeleton" aria-label={t("loadingArticles")}>{Array.from({ length: 7 }, (_, index) => <div className="skeleton-row" key={index}><span /><span /><span /></div>)}</div>
+  return (
+    <div className="timeline-skeleton" aria-label={t("loadingArticles")}>
+      {Array.from({ length: 7 }, (_, index) => (
+        <div className="skeleton-row" key={index}>
+          <span />
+          <span />
+          <span />
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function scopeContext(scope: LibraryScope, t: Translator) {
   switch (scope.kind) {
-    case "feed": return t("feed")
-    case "folder": return t("folder")
-    case "today": return t("library")
-    default: return t("smartView")
+    case "feed":
+      return t("feed")
+    case "folder":
+      return t("folder")
+    case "today":
+      return t("library")
+    default:
+      return t("smartView")
   }
 }
 
 function scopeDescription(scope: LibraryScope, t: Translator) {
   switch (scope.kind) {
-    case "today": return t("todayDescription")
-    case "unread": return t("unreadDescription")
-    case "saved": return t("savedDescription")
-    default: return t("allFeedsDescription")
+    case "today":
+      return t("todayDescription")
+    case "unread":
+      return t("unreadDescription")
+    case "saved":
+      return t("savedDescription")
+    default:
+      return t("allFeedsDescription")
   }
 }
 

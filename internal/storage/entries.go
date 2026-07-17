@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
+	"github.com/Zijinn/Aurora/internal/domain"
 )
 
 type entryCursor struct {
@@ -26,7 +26,11 @@ func ListEntries(ctx context.Context, db *sql.DB, filter domain.EntryFilter) (do
 		filter.Limit = 30
 	}
 
-	args := []any{filter.ProfileID}
+	aiLanguage := strings.TrimSpace(filter.AILanguage)
+	if aiLanguage == "" {
+		aiLanguage = "English"
+	}
+	args := []any{aiLanguage, aiLanguage, filter.ProfileID}
 	joins := ""
 	conditions := []string{"s.profile_id = ?", "s.hide_from_timeline = 0"}
 	if filter.FeedID != "" {
@@ -73,6 +77,14 @@ func ListEntries(ctx context.Context, db *sql.DB, filter domain.EntryFilter) (do
 			e.canonical_url, e.title, e.author, e.summary, e.published_at,
 			e.discovered_at, e.content_hash, e.lead_image_url, e.audio_url,
 			e.video_url, e.language,
+			(SELECT ar.result_text FROM ai_results ar
+				WHERE ar.profile_id = s.profile_id AND ar.entry_id = e.id
+					AND ar.operation = 'title_translation' AND ar.language = ?
+				ORDER BY ar.created_at DESC LIMIT 1),
+			(SELECT ar.result_text FROM ai_results ar
+				WHERE ar.profile_id = s.profile_id AND ar.entry_id = e.id
+					AND ar.operation = 'summary' AND ar.language = ?
+				ORDER BY ar.created_at DESC LIMIT 1),
 			COALESCE(es.is_read, 0), COALESCE(es.is_starred, 0),
 			COALESCE(es.is_read_later, 0), COALESCE(es.updated_at, e.discovered_at),
 			(SELECT GROUP_CONCAT(et.tag_id) FROM entry_tags et WHERE et.entry_id = e.id)
@@ -231,12 +243,24 @@ func SaveReadabilityContent(ctx context.Context, db *sql.DB, entryID, sanitizedH
 	return tx.Commit()
 }
 
-func GetEntry(ctx context.Context, db *sql.DB, profileID, entryID string) (domain.Entry, error) {
+func GetEntry(ctx context.Context, db *sql.DB, profileID, entryID string, requestedLanguage ...string) (domain.Entry, error) {
+	aiLanguage := "English"
+	if len(requestedLanguage) > 0 && strings.TrimSpace(requestedLanguage[0]) != "" {
+		aiLanguage = strings.TrimSpace(requestedLanguage[0])
+	}
 	row := db.QueryRowContext(ctx, `
 		SELECT e.id, e.feed_id, COALESCE(s.title_override, f.title), e.guid,
 			e.canonical_url, e.title, e.author, e.summary, e.published_at,
 			e.discovered_at, e.content_hash, e.lead_image_url, e.audio_url,
 			e.video_url, e.language,
+			(SELECT ar.result_text FROM ai_results ar
+				WHERE ar.profile_id = s.profile_id AND ar.entry_id = e.id
+					AND ar.operation = 'title_translation' AND ar.language = ?
+				ORDER BY ar.created_at DESC LIMIT 1),
+			(SELECT ar.result_text FROM ai_results ar
+				WHERE ar.profile_id = s.profile_id AND ar.entry_id = e.id
+					AND ar.operation = 'summary' AND ar.language = ?
+				ORDER BY ar.created_at DESC LIMIT 1),
 			COALESCE(es.is_read, 0), COALESCE(es.is_starred, 0),
 			COALESCE(es.is_read_later, 0), COALESCE(es.updated_at, e.discovered_at),
 			COALESCE(ec.sanitized_html, ''), ec.readability_html,
@@ -246,7 +270,7 @@ func GetEntry(ctx context.Context, db *sql.DB, profileID, entryID string) (domai
 		JOIN subscriptions s ON s.feed_id = e.feed_id AND s.profile_id = ?
 		LEFT JOIN entry_states es ON es.entry_id = e.id AND es.profile_id = s.profile_id
 		LEFT JOIN entry_contents ec ON ec.entry_id = e.id
-		WHERE e.id = ?`, profileID, entryID)
+		WHERE e.id = ?`, aiLanguage, aiLanguage, profileID, entryID)
 	entry, err := scanEntryDetail(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Entry{}, ErrNotFound
@@ -342,38 +366,42 @@ func getEntryState(ctx context.Context, tx *sql.Tx, profileID, entryID string) (
 
 func scanEntry(row scanner) (domain.Entry, error) {
 	var entry domain.Entry
-	var guid, canonicalURL, author, summary, leadImage, audio, video, language, tagIDs sql.NullString
+	var guid, canonicalURL, author, summary, leadImage, audio, video, language, translatedTitle, aiSummary, tagIDs sql.NullString
 	var publishedAt, discoveredAt, stateUpdatedAt string
 	var isRead, isStarred, isReadLater int
 	if err := row.Scan(
 		&entry.ID, &entry.FeedID, &entry.FeedTitle, &guid,
 		&canonicalURL, &entry.Title, &author, &summary, &publishedAt,
-		&discoveredAt, &entry.ContentHash, &leadImage, &audio, &video, &language,
+		&discoveredAt, &entry.ContentHash, &leadImage, &audio, &video, &language, &translatedTitle, &aiSummary,
 		&isRead, &isStarred, &isReadLater, &stateUpdatedAt, &tagIDs,
 	); err != nil {
 		return domain.Entry{}, fmt.Errorf("scan entry: %w", err)
 	}
 	populateEntry(&entry, guid, canonicalURL, author, summary, leadImage, audio, video, language, publishedAt, discoveredAt, isRead, isStarred, isReadLater, stateUpdatedAt)
+	entry.AITranslatedTitle = stringPointer(translatedTitle)
+	entry.AISummary = stringPointer(aiSummary)
 	entry.TagIDs = splitTagIDs(tagIDs)
 	return entry, nil
 }
 
 func scanEntryDetail(row scanner) (domain.Entry, error) {
 	var entry domain.Entry
-	var guid, canonicalURL, author, summary, leadImage, audio, video, language, tagIDs sql.NullString
+	var guid, canonicalURL, author, summary, leadImage, audio, video, language, translatedTitle, aiSummary, tagIDs sql.NullString
 	var publishedAt, discoveredAt, stateUpdatedAt string
 	var isRead, isStarred, isReadLater int
 	var readability sql.NullString
 	if err := row.Scan(
 		&entry.ID, &entry.FeedID, &entry.FeedTitle, &guid,
 		&canonicalURL, &entry.Title, &author, &summary, &publishedAt,
-		&discoveredAt, &entry.ContentHash, &leadImage, &audio, &video, &language,
+		&discoveredAt, &entry.ContentHash, &leadImage, &audio, &video, &language, &translatedTitle, &aiSummary,
 		&isRead, &isStarred, &isReadLater, &stateUpdatedAt,
 		&entry.SanitizedHTML, &readability, &tagIDs,
 	); err != nil {
 		return domain.Entry{}, err
 	}
 	populateEntry(&entry, guid, canonicalURL, author, summary, leadImage, audio, video, language, publishedAt, discoveredAt, isRead, isStarred, isReadLater, stateUpdatedAt)
+	entry.AITranslatedTitle = stringPointer(translatedTitle)
+	entry.AISummary = stringPointer(aiSummary)
 	entry.ReadabilityHTML = stringPointer(readability)
 	entry.TagIDs = splitTagIDs(tagIDs)
 	return entry, nil

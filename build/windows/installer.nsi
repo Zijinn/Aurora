@@ -7,10 +7,10 @@ Unicode true
   !define VERSION "0.1.0"
 !endif
 !ifndef APP_EXE
-  !error "APP_EXE must point to Cairn.exe"
+  !error "APP_EXE must point to Aurora.exe"
 !endif
 !ifndef APP_ICON
-  !error "APP_ICON must point to Cairn.ico"
+  !error "APP_ICON must point to Aurora.ico"
 !endif
 !ifndef LICENSE_FILE
   !error "LICENSE_FILE must point to LICENSE"
@@ -22,13 +22,13 @@ Unicode true
   !error "WEB_ASSETS must point to the built web/dist directory"
 !endif
 !ifndef OUT_FILE
-  !define OUT_FILE "Cairn-${VERSION}-windows-x64-setup.exe"
+  !define OUT_FILE "Aurora-${VERSION}-windows-x64-setup.exe"
 !endif
 
 Name "Aurora"
 OutFile "${OUT_FILE}"
-InstallDir "$LOCALAPPDATA\Programs\Cairn"
-InstallDirRegKey HKCU "Software\Cairn" "InstallDir"
+InstallDir "$LOCALAPPDATA\Programs\Aurora"
+InstallDirRegKey HKCU "Software\Aurora" "InstallDir"
 RequestExecutionLevel user
 ManifestDPIAware true
 
@@ -54,10 +54,10 @@ VIAddVersionKey "ProductName" "Aurora"
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
-Section "Cairn" SEC_CAIRN
+Section "Aurora" SEC_AURORA
   SetShellVarContext current
   SetOutPath "$INSTDIR"
-  File /oname=Cairn.exe "${APP_EXE}"
+  File /oname=Aurora.exe "${APP_EXE}"
   File /oname=LICENSE.txt "${LICENSE_FILE}"
   SetOutPath "$INSTDIR\web\dist"
   File /r "${WEB_ASSETS}\*"
@@ -68,28 +68,28 @@ Section "Cairn" SEC_CAIRN
 
   SetOutPath "$INSTDIR"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "Software\Cairn" "InstallDir" "$INSTDIR"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cairn" "DisplayName" "Cairn"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cairn" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cairn" "Publisher" "Cairn contributors"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cairn" "DisplayIcon" "$INSTDIR\Cairn.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cairn" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+  WriteRegStr HKCU "Software\Aurora" "InstallDir" "$INSTDIR"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Aurora" "DisplayName" "Aurora"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Aurora" "DisplayVersion" "${VERSION}"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Aurora" "Publisher" "Aurora contributors"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Aurora" "DisplayIcon" "$INSTDIR\Aurora.exe"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Aurora" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cairn" "EstimatedSize" $0
-  CreateDirectory "$SMPROGRAMS\Cairn"
-  CreateShortcut "$SMPROGRAMS\Cairn\Cairn.lnk" "$INSTDIR\Cairn.exe"
-  CreateShortcut "$DESKTOP\Cairn.lnk" "$INSTDIR\Cairn.exe"
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Aurora" "EstimatedSize" $0
+  CreateDirectory "$SMPROGRAMS\Aurora"
+  CreateShortcut "$SMPROGRAMS\Aurora\Aurora.lnk" "$INSTDIR\Aurora.exe"
+  CreateShortcut "$DESKTOP\Aurora.lnk" "$INSTDIR\Aurora.exe"
 SectionEnd
 
 Section "Uninstall"
   SetShellVarContext current
-  Delete "$DESKTOP\Cairn.lnk"
-  Delete "$SMPROGRAMS\Cairn\Cairn.lnk"
-  RMDir "$SMPROGRAMS\Cairn"
-  Delete "$INSTDIR\Cairn.exe"
+  Delete "$DESKTOP\Aurora.lnk"
+  Delete "$SMPROGRAMS\Aurora\Aurora.lnk"
+  RMDir "$SMPROGRAMS\Aurora"
+  Delete "$INSTDIR\Aurora.exe"
   Delete "$INSTDIR\LICENSE.txt"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
-  DeleteRegKey HKCU "Software\Cairn"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Cairn"
+  DeleteRegKey HKCU "Software\Aurora"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Aurora"
 SectionEnd

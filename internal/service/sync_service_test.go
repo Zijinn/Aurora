@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	"github.com/cairn-reader/cairn/internal/secretbox"
-	"github.com/cairn-reader/cairn/internal/storage"
-	"github.com/cairn-reader/cairn/internal/syncadapter"
+	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/secretbox"
+	"github.com/Zijinn/Aurora/internal/storage"
+	"github.com/Zijinn/Aurora/internal/syncadapter"
 )
 
 func TestSyncServiceEncryptsCredentialsAndPreservesLocalConflictWinner(t *testing.T) {

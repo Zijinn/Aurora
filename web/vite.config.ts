@@ -4,6 +4,9 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { VitePWA } from "vite-plugin-pwa"
 
+const devAPITarget = process.env.AURORA_DEV_API ?? "http://127.0.0.1:7381"
+const devPort = Number(process.env.AURORA_DEV_PORT ?? 4173)
+
 export default defineConfig({
   plugins: [
     react(),
@@ -80,10 +83,10 @@ export default defineConfig({
   ],
   server: {
     host: "127.0.0.1",
-    port: 4173,
+    port: Number.isFinite(devPort) ? devPort : 4173,
     proxy: {
-      "/api": "http://127.0.0.1:7381",
-      "/healthz": "http://127.0.0.1:7381",
+      "/api": devAPITarget,
+      "/healthz": devAPITarget,
     },
   },
   test: {

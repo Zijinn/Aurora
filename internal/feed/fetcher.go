@@ -17,7 +17,7 @@ import (
 
 const (
 	DefaultMaxResponseBytes int64 = 10 << 20
-	defaultUserAgent              = "Cairn/0.1 (+https://github.com/cairn-reader/cairn)"
+	defaultUserAgent              = "Aurora/0.1 (+https://github.com/Zijinn/Aurora)"
 )
 
 type Validators struct {

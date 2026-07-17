@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	"github.com/cairn-reader/cairn/internal/event"
-	feedcore "github.com/cairn-reader/cairn/internal/feed"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/event"
+	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 type ProgressFunc func(current, total int)
@@ -96,7 +96,7 @@ func (m *Manager) EnqueueFeedRefresh(ctx context.Context, feedID string) (domain
 	return m.Enqueue(ctx, "feed.refresh", map[string]string{"feed_id": feedID})
 }
 
-func (m *Manager) EnqueueAccountSync(ctx context.Context, accountID string) (domain.Job, error) {
+func (m *Manager) EnqueueAccountSync(ctx context.Context, accountID string, requestedMode ...string) (domain.Job, error) {
 	pending, err := storage.HasPendingAccountSync(ctx, m.db, accountID)
 	if err != nil {
 		return domain.Job{}, err
@@ -104,7 +104,11 @@ func (m *Manager) EnqueueAccountSync(ctx context.Context, accountID string) (dom
 	if pending {
 		return domain.Job{}, errors.New("account sync is already queued")
 	}
-	return m.Enqueue(ctx, "sync.account", map[string]string{"account_id": accountID})
+	mode := "auto"
+	if len(requestedMode) > 0 && requestedMode[0] != "" {
+		mode = requestedMode[0]
+	}
+	return m.Enqueue(ctx, "sync.account", map[string]string{"account_id": accountID, "mode": mode})
 }
 
 func (m *Manager) StartFeedScheduler(ctx context.Context, interval time.Duration) {

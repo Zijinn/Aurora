@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	"github.com/cairn-reader/cairn/internal/event"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/event"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 func TestManagerCancelsRunningJob(t *testing.T) {

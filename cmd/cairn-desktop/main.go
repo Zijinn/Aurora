@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/cairn-reader/cairn/internal/config"
-	"github.com/cairn-reader/cairn/internal/httpapi"
-	"github.com/cairn-reader/cairn/internal/secretbox"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/config"
+	"github.com/Zijinn/Aurora/internal/httpapi"
+	"github.com/Zijinn/Aurora/internal/secretbox"
+	"github.com/Zijinn/Aurora/internal/storage"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -61,12 +61,12 @@ func main() {
 			if runtime.GOOS == "linux" {
 				return nil
 			}
-			return &application.SingleInstanceOptions{UniqueID: "app.cairn.reader"}
+			return &application.SingleInstanceOptions{UniqueID: "app.aurora.reader"}
 		}(),
 	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:             "cairn-main-window",
+		Name:             "aurora-main-window",
 		Title:            "Aurora",
 		Width:            1280,
 		Height:           820,

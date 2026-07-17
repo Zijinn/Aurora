@@ -71,7 +71,7 @@ func ExportBackup(ctx context.Context, db *sql.DB) (BackupDocument, error) {
 
 func RestoreBackup(ctx context.Context, db *sql.DB, document BackupDocument) error {
 	if document.Format != BackupFormat || document.Version != 1 {
-		return errors.New("unsupported Cairn backup format")
+		return errors.New("unsupported Aurora backup format")
 	}
 	if document.SchemaVersion < 1 {
 		return errors.New("backup schema version is invalid")

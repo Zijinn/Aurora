@@ -1,4 +1,4 @@
-module github.com/cairn-reader/cairn
+module github.com/Zijinn/Aurora
 
 go 1.25.0
 

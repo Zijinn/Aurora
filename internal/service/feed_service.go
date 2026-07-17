@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	readability "codeberg.org/readeck/go-readability/v2"
-	"github.com/cairn-reader/cairn/internal/domain"
-	feedcore "github.com/cairn-reader/cairn/internal/feed"
-	"github.com/cairn-reader/cairn/internal/opml"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/domain"
+	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/opml"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 type AddFeedInput struct {
@@ -226,7 +226,7 @@ func (s *FeedService) ExportOPML(ctx context.Context) ([]byte, error) {
 			FolderPath: buildFolderPath(subscription.FolderID, folderByID),
 		})
 	}
-	return opml.Export("Cairn subscriptions", sources)
+	return opml.Export("Aurora subscriptions", sources)
 }
 
 func buildFolderPath(folderID *string, folders map[string]domain.Folder) []string {

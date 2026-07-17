@@ -73,7 +73,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T
 }
 
-export async function pairDevice(input: { code: string; name: string; platform: Device["platform"] }): Promise<Device> {
+export async function pairDevice(input: {
+  code: string
+  name: string
+  platform: Device["platform"]
+}): Promise<Device> {
   const response = await request<{ device: Device; token: string }>("/api/v1/devices/pair", {
     method: "POST",
     body: JSON.stringify(input),
@@ -87,7 +91,9 @@ export function listDevices(signal?: AbortSignal): Promise<ListResponse<Device>>
 }
 
 export function createPairingCode(): Promise<{ code: string; expires_at: string }> {
-  return request<{ code: string; expires_at: string }>("/api/v1/devices/pairing-code", { method: "POST" })
+  return request<{ code: string; expires_at: string }>("/api/v1/devices/pairing-code", {
+    method: "POST",
+  })
 }
 
 export function revokeDevice(deviceID: string): Promise<void> {
@@ -113,12 +119,20 @@ export function listSyncAccounts(signal?: AbortSignal): Promise<ListResponse<Syn
 }
 
 export function createSyncAccount(input: CreateSyncAccountInput): Promise<SyncAccount> {
-  return request<SyncAccount>("/api/v1/sync/accounts", { method: "POST", body: JSON.stringify(input) })
+  return request<SyncAccount>("/api/v1/sync/accounts", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
 }
 
 export function updateSyncAccount(
   accountID: string,
-  patch: Partial<Pick<SyncAccount, "name" | "endpoint" | "enabled" | "allow_private_network" | "sync_interval_minutes">> & { credentials?: SyncCredentials },
+  patch: Partial<
+    Pick<
+      SyncAccount,
+      "name" | "endpoint" | "enabled" | "allow_private_network" | "sync_interval_minutes"
+    >
+  > & { credentials?: SyncCredentials },
 ): Promise<SyncAccount> {
   return request<SyncAccount>(`/api/v1/sync/accounts/${encodeURIComponent(accountID)}`, {
     method: "PATCH",
@@ -127,11 +141,18 @@ export function updateSyncAccount(
 }
 
 export function deleteSyncAccount(accountID: string): Promise<void> {
-  return request<void>(`/api/v1/sync/accounts/${encodeURIComponent(accountID)}`, { method: "DELETE" })
+  return request<void>(`/api/v1/sync/accounts/${encodeURIComponent(accountID)}`, {
+    method: "DELETE",
+  })
 }
 
-export function runSyncAccount(accountID: string): Promise<Job> {
-  return request<Job>(`/api/v1/sync/accounts/${encodeURIComponent(accountID)}/sync`, { method: "POST" })
+export function runSyncAccount(
+  accountID: string,
+  mode: "auto" | "push" | "pull" = "auto",
+): Promise<Job> {
+  return request<Job>(`/api/v1/sync/accounts/${encodeURIComponent(accountID)}/sync?mode=${mode}`, {
+    method: "POST",
+  })
 }
 
 export interface CreateAIProfileInput {
@@ -166,7 +187,18 @@ export function createAIProfile(input: CreateAIProfileInput): Promise<AIProfile>
 
 export function updateAIProfile(
   profileID: string,
-  patch: Partial<Pick<AIProfile, "name" | "endpoint" | "model" | "enabled" | "allow_private_network" | "remote_content_approved" | "is_default">> & { api_key?: string; settings?: { temperature?: number } },
+  patch: Partial<
+    Pick<
+      AIProfile,
+      | "name"
+      | "endpoint"
+      | "model"
+      | "enabled"
+      | "allow_private_network"
+      | "remote_content_approved"
+      | "is_default"
+    >
+  > & { api_key?: string; settings?: { temperature?: number } },
 ): Promise<AIProfile> {
   return request<AIProfile>(`/api/v1/ai/profiles/${encodeURIComponent(profileID)}`, {
     method: "PATCH",
@@ -182,23 +214,45 @@ export function getAIUsage(signal?: AbortSignal): Promise<AIUsage> {
   return request<AIUsage>("/api/v1/ai/usage", { signal })
 }
 
-export function listAIResults(entryID: string, signal?: AbortSignal): Promise<ListResponse<AIResult>> {
-  return request<ListResponse<AIResult>>(`/api/v1/entries/${encodeURIComponent(entryID)}/ai-results`, { signal })
+export function listAIResults(
+  entryID: string,
+  signal?: AbortSignal,
+): Promise<ListResponse<AIResult>> {
+  return request<ListResponse<AIResult>>(
+    `/api/v1/entries/${encodeURIComponent(entryID)}/ai-results`,
+    { signal },
+  )
 }
 
-export function runAIOperation(entryID: string, operation: AIOperation, profileID: string, language: string): Promise<AIStartResponse> {
+export function runAIOperation(
+  entryID: string,
+  operation: AIOperation,
+  profileID: string,
+  language: string,
+): Promise<AIStartResponse> {
   const pathOperation = operation === "key_points" ? "key-points" : operation
-  return request<AIStartResponse>(`/api/v1/entries/${encodeURIComponent(entryID)}/ai/${pathOperation}`, {
-    method: "POST",
-    body: JSON.stringify({ profile_id: profileID, language }),
-  })
+  return request<AIStartResponse>(
+    `/api/v1/entries/${encodeURIComponent(entryID)}/ai/${pathOperation}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ profile_id: profileID, language }),
+    },
+  )
 }
 
-export function startAIChat(entryID: string, profileID: string, sessionID: string | undefined, message: string): Promise<{ job: Job; session: AIChatSession }> {
-  return request<{ job: Job; session: AIChatSession }>(`/api/v1/entries/${encodeURIComponent(entryID)}/ai-chat`, {
-    method: "POST",
-    body: JSON.stringify({ profile_id: profileID, session_id: sessionID, message }),
-  })
+export function startAIChat(
+  entryID: string,
+  profileID: string,
+  sessionID: string | undefined,
+  message: string,
+): Promise<{ job: Job; session: AIChatSession }> {
+  return request<{ job: Job; session: AIChatSession }>(
+    `/api/v1/entries/${encodeURIComponent(entryID)}/ai-chat`,
+    {
+      method: "POST",
+      body: JSON.stringify({ profile_id: profileID, session_id: sessionID, message }),
+    },
+  )
 }
 
 export function getAIChat(sessionID: string, signal?: AbortSignal): Promise<AIChatSession> {
@@ -229,8 +283,14 @@ export function createFolder(input: { name: string; parent_id?: string | null })
   return request<Folder>("/api/v1/folders", { method: "POST", body: JSON.stringify(input) })
 }
 
-export function updateFolder(folderID: string, patch: { name?: string; parent_id?: string | null; position?: number }): Promise<Folder> {
-  return request<Folder>(`/api/v1/folders/${encodeURIComponent(folderID)}`, { method: "PATCH", body: JSON.stringify(patch) })
+export function updateFolder(
+  folderID: string,
+  patch: { name?: string; parent_id?: string | null; position?: number },
+): Promise<Folder> {
+  return request<Folder>(`/api/v1/folders/${encodeURIComponent(folderID)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
 }
 
 export function deleteFolder(folderID: string): Promise<void> {
@@ -253,7 +313,13 @@ export function listRules(signal?: AbortSignal): Promise<ListResponse<Rule>> {
   return request<ListResponse<Rule>>("/api/v1/rules", { signal })
 }
 
-export function createRule(input: { name: string; enabled?: boolean; priority?: number; conditions: Record<string, unknown>; actions: Record<string, unknown> }): Promise<Rule> {
+export function createRule(input: {
+  name: string
+  enabled?: boolean
+  priority?: number
+  conditions: Record<string, unknown>
+  actions: Record<string, unknown>
+}): Promise<Rule> {
   return request<Rule>("/api/v1/rules", { method: "POST", body: JSON.stringify(input) })
 }
 
@@ -265,12 +331,20 @@ export function listSavedFilters(signal?: AbortSignal): Promise<ListResponse<Sav
   return request<ListResponse<SavedFilter>>("/api/v1/saved-filters", { signal })
 }
 
-export function createSavedFilter(input: { name: string; query: Record<string, unknown> }): Promise<SavedFilter> {
-  return request<SavedFilter>("/api/v1/saved-filters", { method: "POST", body: JSON.stringify(input) })
+export function createSavedFilter(input: {
+  name: string
+  query: Record<string, unknown>
+}): Promise<SavedFilter> {
+  return request<SavedFilter>("/api/v1/saved-filters", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
 }
 
 export function deleteSavedFilter(filterID: string): Promise<void> {
-  return request<void>(`/api/v1/saved-filters/${encodeURIComponent(filterID)}`, { method: "DELETE" })
+  return request<void>(`/api/v1/saved-filters/${encodeURIComponent(filterID)}`, {
+    method: "DELETE",
+  })
 }
 
 export interface EntryQuery {
@@ -278,6 +352,7 @@ export interface EntryQuery {
   query: string
   cursor?: string
   limit?: number
+  aiLanguage?: string
 }
 
 export function listEntries(input: EntryQuery, signal?: AbortSignal): Promise<EntryPage> {
@@ -286,7 +361,13 @@ export function listEntries(input: EntryQuery, signal?: AbortSignal): Promise<En
   const scopeFilters = libraryScopeFilters(input.scope)
   for (const [key, value] of Object.entries(scopeFilters)) params.set(key, value)
   if (input.query.trim()) params.set("query", input.query.trim())
-  const cacheKey = entryPageCacheKey(JSON.stringify(input.scope), input.query, input.cursor)
+  if (input.aiLanguage) params.set("ai_language", input.aiLanguage)
+  const cacheKey = entryPageCacheKey(
+    JSON.stringify(input.scope),
+    input.query,
+    input.cursor,
+    input.aiLanguage,
+  )
   return request<EntryPage>(`/api/v1/entries?${params.toString()}`, { signal })
     .then((page) => {
       void writeCache(cacheKey, page)
@@ -300,10 +381,18 @@ export function listEntries(input: EntryQuery, signal?: AbortSignal): Promise<En
     })
 }
 
-export async function getEntry(entryID: string, signal?: AbortSignal): Promise<EntryDetail> {
-  const cacheKey = entryDetailCacheKey(entryID)
+export async function getEntry(
+  entryID: string,
+  aiLanguage: string,
+  signal?: AbortSignal,
+): Promise<EntryDetail> {
+  const cacheKey = entryDetailCacheKey(entryID, aiLanguage)
   try {
-    const entry = await request<EntryDetail>(`/api/v1/entries/${encodeURIComponent(entryID)}`, { signal })
+    const params = new URLSearchParams({ ai_language: aiLanguage })
+    const entry = await request<EntryDetail>(
+      `/api/v1/entries/${encodeURIComponent(entryID)}?${params.toString()}`,
+      { signal },
+    )
     void writeCache(cacheKey, entry)
     return entry
   } catch (error) {
@@ -321,7 +410,11 @@ export function updateEntryState(
 ): Promise<EntryState> {
   return request<EntryState>(`/api/v1/entries/${encodeURIComponent(entryID)}/state`, {
     method: "PATCH",
-    body: JSON.stringify({ mutation_id: mutationID, device_time: new Date().toISOString(), ...patch }),
+    body: JSON.stringify({
+      mutation_id: mutationID,
+      device_time: new Date().toISOString(),
+      ...patch,
+    }),
   })
 }
 
@@ -345,7 +438,9 @@ export function refreshFeed(feedID: string): Promise<Job> {
 }
 
 export function fetchReadability(entryID: string): Promise<Job> {
-  return request<Job>(`/api/v1/entries/${encodeURIComponent(entryID)}/readability`, { method: "POST" })
+  return request<Job>(`/api/v1/entries/${encodeURIComponent(entryID)}/readability`, {
+    method: "POST",
+  })
 }
 
 export function updateFeed(
@@ -386,7 +481,8 @@ function libraryScopeFilters(scope: LibraryScope): Record<string, string> {
         if (typeof value === "string" && value.trim()) filters[key] = value.trim()
       }
       const state = scope.query.state
-      if (state === "all" || state === "unread" || state === "starred" || state === "read_later") filters.state = state
+      if (state === "all" || state === "unread" || state === "starred" || state === "read_later")
+        filters.state = state
       return filters
     }
     case "all":

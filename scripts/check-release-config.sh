@@ -8,6 +8,10 @@ test -f build/windows/installer.nsi
 test -f build/windows/wails.exe.manifest
 test -f build/windows/info.json
 
+version="$(node -p "require('./package.json').version")"
+test "$version" = "$(node -p "require('./web/package.json').version")"
+grep -q "default: $version" .github/workflows/release.yml
+
 ruby -ryaml -rjson -rrexml/document -e '
   workflow = YAML.load_file(".github/workflows/release.yml")
   expected_jobs = ["license-inventory", "macos-universal", "publish-release", "windows-x64"]
@@ -22,3 +26,7 @@ ruby -ryaml -rjson -rrexml/document -e '
 grep -q 'lipo -create' .github/workflows/release.yml
 grep -q 'makensis' .github/workflows/release.yml
 grep -q 'notarytool submit' .github/workflows/release.yml
+grep -q 'dist/Aurora-${{ env.VERSION }}-macos-universal.dmg' .github/workflows/release.yml
+grep -q 'dist/Aurora-${{ env.VERSION }}-windows-x64-setup.exe' .github/workflows/release.yml
+! grep -q '\.sha256' .github/workflows/release.yml
+! grep -q 'pattern: Cairn-' .github/workflows/release.yml

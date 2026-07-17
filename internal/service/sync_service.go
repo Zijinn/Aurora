@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	feedcore "github.com/cairn-reader/cairn/internal/feed"
-	"github.com/cairn-reader/cairn/internal/secretbox"
-	"github.com/cairn-reader/cairn/internal/storage"
-	"github.com/cairn-reader/cairn/internal/syncadapter"
+	"github.com/Zijinn/Aurora/internal/domain"
+	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/secretbox"
+	"github.com/Zijinn/Aurora/internal/storage"
+	"github.com/Zijinn/Aurora/internal/syncadapter"
 	"github.com/google/uuid"
 )
 
@@ -28,6 +28,8 @@ var supportedSyncProviders = map[string]string{
 	"fever":          "Fever",
 	"feedbin":        "Feedbin",
 	"nextcloud_news": "Nextcloud News",
+	"webdav":         "WebDAV",
+	"icloud":         "iCloud Drive",
 }
 
 type SyncAccountInput struct {
@@ -50,10 +52,13 @@ type SyncAccountUpdate struct {
 }
 
 type SyncResult struct {
-	PushedStates        int `json:"pushed_states"`
-	PulledStates        int `json:"pulled_states"`
-	MappedSubscriptions int `json:"mapped_subscriptions"`
-	SkippedRemoteStates int `json:"skipped_remote_states"`
+	PushedStates        int    `json:"pushed_states"`
+	PulledStates        int    `json:"pulled_states"`
+	MappedSubscriptions int    `json:"mapped_subscriptions"`
+	SkippedRemoteStates int    `json:"skipped_remote_states"`
+	Action              string `json:"action,omitempty"`
+	LocalFingerprint    string `json:"local_fingerprint,omitempty"`
+	RemoteFingerprint   string `json:"remote_fingerprint,omitempty"`
 }
 
 type SyncProgressFunc func(current, total int)
@@ -166,7 +171,7 @@ func (s *SyncService) DeleteAccount(ctx context.Context, accountID string) error
 	return storage.DeleteSyncAccount(ctx, s.db, domain.DefaultProfileID, accountID)
 }
 
-func (s *SyncService) Run(ctx context.Context, accountID string, progress SyncProgressFunc) (result SyncResult, returnedErr error) {
+func (s *SyncService) Run(ctx context.Context, accountID string, progress SyncProgressFunc, requestedMode ...string) (result SyncResult, returnedErr error) {
 	record, err := storage.GetSyncAccountRecord(ctx, s.db, domain.DefaultProfileID, accountID)
 	if err != nil {
 		return result, err
@@ -193,6 +198,13 @@ func (s *SyncService) Run(ctx context.Context, accountID string, progress SyncPr
 	credentials, err := s.decryptCredentials(record)
 	if err != nil {
 		return result, err
+	}
+	if isLibrarySyncProvider(record.Account.Provider) {
+		mode := "auto"
+		if len(requestedMode) > 0 && strings.TrimSpace(requestedMode[0]) != "" {
+			mode = strings.ToLower(strings.TrimSpace(requestedMode[0]))
+		}
+		return s.runLibrarySync(ctx, record, credentials, mode, progress, startedAt)
 	}
 	adapter, err := syncadapter.New(record.Account.Provider, record.Account.Endpoint, credentials, s.clientFactory(record.Account.AllowPrivateNetwork))
 	if err != nil {
@@ -367,6 +379,19 @@ func validateSyncAccount(provider, name, endpoint string, interval int, credenti
 	}
 	if len(name) > 120 {
 		return "", "", "", 0, errors.New("sync account name is too long")
+	}
+	if isLibrarySyncProvider(provider) {
+		endpoint, err := normalizeLibrarySyncEndpoint(provider, endpoint)
+		if err != nil {
+			return "", "", "", 0, err
+		}
+		if interval == 0 {
+			interval = 30
+		}
+		if interval < 5 || interval > 10080 {
+			return "", "", "", 0, errors.New("sync interval must be between 5 and 10080 minutes")
+		}
+		return provider, name, endpoint, interval, nil
 	}
 	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
 	parsed, err := url.Parse(endpoint)

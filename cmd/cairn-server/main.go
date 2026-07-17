@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/config"
-	"github.com/cairn-reader/cairn/internal/httpapi"
-	"github.com/cairn-reader/cairn/internal/secretbox"
-	"github.com/cairn-reader/cairn/internal/storage"
-	"github.com/cairn-reader/cairn/internal/version"
+	"github.com/Zijinn/Aurora/internal/config"
+	"github.com/Zijinn/Aurora/internal/httpapi"
+	"github.com/Zijinn/Aurora/internal/secretbox"
+	"github.com/Zijinn/Aurora/internal/storage"
+	"github.com/Zijinn/Aurora/internal/version"
 )
 
 func main() {
@@ -59,7 +59,7 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("Cairn server started", "address", cfg.Address, "version", version.Version, "lan_mode", cfg.LANMode)
+		logger.Info("Aurora server started", "address", cfg.Address, "version", version.Version, "lan_mode", cfg.LANMode)
 		var serveErr error
 		if cfg.TLSCertPath != "" {
 			serveErr = server.ListenAndServeTLS(cfg.TLSCertPath, cfg.TLSKeyPath)

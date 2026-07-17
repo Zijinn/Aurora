@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	feedcore "github.com/cairn-reader/cairn/internal/feed"
-	"github.com/cairn-reader/cairn/internal/secretbox"
-	"github.com/cairn-reader/cairn/internal/storage"
+	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/secretbox"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 func TestSyncAccountAPIKeepsCredentialsPrivateAndRunsJob(t *testing.T) {

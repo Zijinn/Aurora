@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	"github.com/cairn-reader/cairn/internal/storage"
+	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 type SecurityConfig struct {
@@ -59,7 +59,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 			return
 		}
 		if !s.originAllowed(origin, r.Host) {
-			writeProblem(w, r, http.StatusForbidden, "origin_not_allowed", "Origin not allowed", "This origin is not trusted by Cairn Server.")
+			writeProblem(w, r, http.StatusForbidden, "origin_not_allowed", "Origin not allowed", "This origin is not trusted by Aurora Server.")
 			return
 		}
 		w.Header().Set("Access-Control-Allow-Origin", origin)

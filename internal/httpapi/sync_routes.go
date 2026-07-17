@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cairn-reader/cairn/internal/service"
-	"github.com/cairn-reader/cairn/internal/storage"
-	"github.com/cairn-reader/cairn/internal/syncadapter"
+	"github.com/Zijinn/Aurora/internal/service"
+	"github.com/Zijinn/Aurora/internal/storage"
+	"github.com/Zijinn/Aurora/internal/syncadapter"
 )
 
 type syncAccountRequest struct {
@@ -142,7 +142,15 @@ func (s *Server) runSyncAccount(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusConflict, "sync_disabled", "Sync account disabled", "Enable the account before starting synchronization.")
 		return
 	}
-	queued, err := s.jobs.EnqueueAccountSync(r.Context(), r.PathValue("accountID"))
+	mode := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("mode")))
+	if mode == "" {
+		mode = "auto"
+	}
+	if mode != "auto" && mode != "push" && mode != "pull" {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_sync_mode", "Invalid sync mode", "Mode must be auto, push, or pull.")
+		return
+	}
+	queued, err := s.jobs.EnqueueAccountSync(r.Context(), r.PathValue("accountID"), mode)
 	if err != nil {
 		if strings.Contains(err.Error(), "already queued") {
 			writeProblem(w, r, http.StatusConflict, "sync_pending", "Sync already pending", err.Error())
@@ -158,6 +166,6 @@ func (s *Server) requireSync(w http.ResponseWriter, r *http.Request) bool {
 	if s.syncs != nil {
 		return true
 	}
-	writeProblem(w, r, http.StatusServiceUnavailable, "sync_unavailable", "Synchronization unavailable", "Credential encryption is not configured on this Cairn server.")
+	writeProblem(w, r, http.StatusServiceUnavailable, "sync_unavailable", "Synchronization unavailable", "Credential encryption is not configured on this Aurora server.")
 	return false
 }

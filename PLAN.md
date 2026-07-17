@@ -1,12 +1,12 @@
-# Cairn execution plan
+# Aurora execution plan
 
 Status: complete (cloud installer execution deferred)
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Product objective
 
-Cairn is a personal, local-first RSS reader that runs as a native desktop application on Windows and macOS and as an installable PWA on iPad. A single Go service owns feed fetching, persistence, scheduling, synchronization, AI tasks, and the versioned REST API. Every client uses the same API.
+Aurora is a personal, local-first RSS reader that runs as a native desktop application on Windows and macOS and as an installable PWA on iPad. A single Go service owns feed fetching, persistence, scheduling, synchronization, AI tasks, and the versioned REST API. Every client uses the same API.
 
 The project selectively refactors MrRSS core behavior, reimplements Folo-inspired information architecture without copying Folo source code, and ports compatible interaction and sync concepts from Fluent Reader with attribution.
 
@@ -22,11 +22,11 @@ The project selectively refactors MrRSS core behavior, reimplements Folo-inspire
 
 ## Approved decisions
 
-- iPad delivery starts with a PWA connected to Cairn Server.
+- iPad delivery starts with a PWA connected to Aurora Server.
 - The new client uses React 19 and TypeScript.
-- Cairn is single-user and local-first in the initial release.
+- Aurora is single-user and local-first in the initial release.
 - AI and external sync follow the secure cross-device reading MVP.
-- Cairn is GPL-3.0-only because the core is derived from MrRSS.
+- Aurora is GPL-3.0-only because the core is derived from MrRSS.
 - The desktop shell is replaceable. Domain and API packages cannot import Wails.
 
 ## Target architecture
@@ -75,7 +75,7 @@ Scope:
 - Add server entry point and health/status endpoints.
 - Add structured logging and graceful shutdown.
 - Create React 19, TypeScript, Vite, and PWA application.
-- Add Cairn semantic tokens, light/dark themes, and responsive application shell.
+- Add Aurora semantic tokens, light/dark themes, and responsive application shell.
 - Add desktop shell adapter without coupling domain code to Wails.
 - Add lint, typecheck, unit-test, build, and CI commands.
 
@@ -300,7 +300,7 @@ Acceptance evidence:
 ## Execution policy
 
 - Work proceeds in phase order unless a dependency requires a documented change.
-- All project writes and deletions are confined to the `Cairn/` directory. The three source repositories beside it are read-only references.
+- All project writes and deletions are confined to the local `Cairn/` project directory. The three source repositories beside it are read-only references; the public product and repository name are Aurora.
 - `PLAN.md` is updated whenever phase status or scope changes.
 - Every phase ends with tests and recorded evidence.
 - A phase is not complete merely because code exists.

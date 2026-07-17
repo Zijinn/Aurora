@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
-	"github.com/cairn-reader/cairn/internal/secretbox"
+	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/secretbox"
 )
 
 func TestBackupRestoreRoundTrip(t *testing.T) {

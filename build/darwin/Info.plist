@@ -7,11 +7,11 @@
   <key>CFBundleDisplayName</key>
   <string>Aurora</string>
   <key>CFBundleExecutable</key>
-  <string>Cairn</string>
+  <string>Aurora</string>
   <key>CFBundleIconFile</key>
-  <string>Cairn</string>
+  <string>Aurora</string>
   <key>CFBundleIdentifier</key>
-  <string>app.cairn.reader</string>
+  <string>app.aurora.reader</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>

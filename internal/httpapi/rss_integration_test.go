@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	feedcore "github.com/cairn-reader/cairn/internal/feed"
-	"github.com/cairn-reader/cairn/internal/storage"
+	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/storage"
 )
 
 const integrationRSS = `<?xml version="1.0"?><rss version="2.0"><channel>

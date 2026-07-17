@@ -1,12 +1,12 @@
-# Cairn architecture
+# Aurora architecture
 
 ## Context
 
-Cairn must provide one coherent reading system across Windows, macOS, iPad Safari, and future mobile clients. The desktop application can run a local Go process. iPad cannot, so the backend is designed as an independently runnable service from the first commit.
+Aurora must provide one coherent reading system across Windows, macOS, iPad Safari, and future mobile clients. The desktop application can run a local Go process. iPad cannot, so the backend is designed as an independently runnable service from the first commit.
 
 ## Containers
 
-### Cairn Server
+### Aurora Server
 
 The server owns all durable state and business rules:
 
@@ -20,11 +20,11 @@ The server owns all durable state and business rules:
 
 The server can run inside the desktop application or as a standalone process. It serves the same embedded web assets in both modes.
 
-### Cairn Web
+### Aurora Web
 
 The React PWA is an API client. It does not parse feeds and does not contain authoritative business state. TanStack Query owns remote cache state. Zustand owns ephemeral layout, selection, view, and shortcut state. IndexedDB contains an explicitly bounded offline cache and a mutation outbox. Desktop navigation exposes library scopes directly; iPad and mobile use the same scopes through a touch-sized Library panel.
 
-### Cairn Desktop
+### Aurora Desktop
 
 The desktop adapter controls lifecycle, native menus, tray behavior, file dialogs, notifications, and local server startup. No domain or storage package imports desktop framework APIs.
 
@@ -96,7 +96,9 @@ All durable entry state is server-side. Every state mutation includes a client m
 
 ## External synchronization
 
-FreshRSS, Google Reader compatible services, Miniflux, Fever, Feedbin, and Nextcloud News implement one adapter contract. Each account owns an opaque incremental cursor plus feed and entry mappings. On the first run Cairn imports remote subscriptions and remote state; later runs push locally changed read/starred state before pulling remote deltas. A local change after the previous successful cursor wins over stale remote state.
+FreshRSS, Google Reader compatible services, Miniflux, Fever, Feedbin, and Nextcloud News implement one adapter contract. Each account owns an opaque incremental cursor plus feed and entry mappings. On the first run Aurora imports remote subscriptions and remote state; later runs push locally changed read/starred state before pulling remote deltas. A local change after the previous successful cursor wins over stale remote state.
+
+WebDAV and iCloud Drive accounts use a separate portable library-snapshot path while sharing the encrypted account store and scheduler. The snapshot excludes device tokens, provider credentials, jobs, and local sync metadata. Each target stores independent local and remote fingerprints, so WebDAV and iCloud can run together. One-sided changes synchronize automatically; two-sided changes stop with a conflict until the user explicitly uploads the local library or restores the cloud copy.
 
 Credentials are encrypted at rest with an installation master key stored outside SQLite. REST responses, logs, jobs, and events never contain credentials. Sync endpoints use the same SSRF policy as feed fetching; private network endpoints require an explicit per-account opt-in. Sync jobs and feed refresh jobs share the persistent queue but have independent handlers, so a remote adapter failure cannot block local feed refresh.
 
@@ -104,7 +106,7 @@ Credentials are encrypted at rest with an installation master key stored outside
 
 OpenAI-compatible and Ollama providers implement one completion contract. Provider profiles contain an endpoint, model, encrypted API key, bounded generation settings, network policy, and explicit remote-content approval. Loopback providers do not require transmission approval; every non-loopback endpoint does. Provider redirects and resolved addresses pass through the same URL policy used by feed and sync requests.
 
-Summary, translation, key-point extraction, and article chat run in the persistent job queue. Jobs contain only opaque profile, entry, operation, language, and content-hash identifiers; API keys and article bodies never enter job payloads or events. A stable hash of the profile, model, settings, operation, language, and bounded article content prevents unchanged work from being submitted twice. Results and token usage are committed atomically.
+Title translation, summary, full translation, key-point extraction, and article chat run in the persistent job queue. Title translation sends only the article title. Other jobs contain only opaque profile, entry, operation, language, and content-hash identifiers; API keys and article bodies never enter job payloads or events. A stable hash of the profile, model, settings, operation, language, and bounded article content prevents unchanged work from being submitted twice. Results and token usage are committed atomically.
 
 The AI prompt boundary is read-only. Article content is wrapped as untrusted quoted material, provider requests expose no tools or callbacks, and AI output has no path to subscription or content mutation services. Cancelling a running job cancels its provider request context.
 

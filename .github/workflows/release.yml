@@ -6,7 +6,7 @@ on:
       version:
         description: Semantic version without a leading v
         required: true
-        default: 0.1.0
+        default: 0.1.8
   push:
     tags:
       - "v*.*.*"
@@ -44,7 +44,7 @@ jobs:
           pnpm --dir web licenses list --prod --json > dist/licenses/javascript-licenses.json
       - uses: actions/upload-artifact@v4
         with:
-          name: Cairn-${{ github.run_id }}-license-inventory
+          name: dependency-license-inventory-${{ github.run_id }}
           path: dist/licenses
 
   macos-universal:
@@ -84,68 +84,65 @@ jobs:
       - name: Build universal application
         shell: bash
         run: |
-          mkdir -p dist/Cairn.app/Contents/{MacOS,Resources}
-          wails3 generate icons -input build/icons/Aurora-1024.png -macfilename build/darwin/Cairn.icns -windowsfilename build/windows/Cairn.ico
+          mkdir -p dist/Aurora.app/Contents/{MacOS,Resources}
+          wails3 generate icons -input build/icons/Aurora-1024.png -macfilename build/darwin/Aurora.icns -windowsfilename build/windows/Aurora.ico
           for ARCH in amd64 arm64; do
             CGO_ENABLED=1 GOOS=darwin GOARCH="$ARCH" \
               CGO_CFLAGS="-mmacosx-version-min=12.0" CGO_LDFLAGS="-mmacosx-version-min=12.0" \
               MACOSX_DEPLOYMENT_TARGET=12.0 \
               go build -tags desktop -trimpath -buildvcs=false \
-              -ldflags "-s -w -X github.com/cairn-reader/cairn/internal/version.Version=$VERSION" \
-              -o "dist/Cairn-$ARCH" ./cmd/cairn-desktop
+              -ldflags "-s -w -X github.com/Zijinn/Aurora/internal/version.Version=$VERSION" \
+              -o "dist/Aurora-$ARCH" ./cmd/cairn-desktop
           done
-          lipo -create -output dist/Cairn.app/Contents/MacOS/Cairn dist/Cairn-amd64 dist/Cairn-arm64
-          rm dist/Cairn-amd64 dist/Cairn-arm64
-          cp build/darwin/Cairn.icns dist/Cairn.app/Contents/Resources/
-          mkdir -p dist/Cairn.app/Contents/Resources/web
-          cp -R web/dist dist/Cairn.app/Contents/Resources/web/
-          cp build/darwin/Info.plist dist/Cairn.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" dist/Cairn.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" dist/Cairn.app/Contents/Info.plist
-          lipo -archs dist/Cairn.app/Contents/MacOS/Cairn | grep -q "x86_64 arm64\|arm64 x86_64"
+          lipo -create -output dist/Aurora.app/Contents/MacOS/Aurora dist/Aurora-amd64 dist/Aurora-arm64
+          rm dist/Aurora-amd64 dist/Aurora-arm64
+          cp build/darwin/Aurora.icns dist/Aurora.app/Contents/Resources/
+          mkdir -p dist/Aurora.app/Contents/Resources/web
+          cp -R web/dist dist/Aurora.app/Contents/Resources/web/
+          cp build/darwin/Info.plist dist/Aurora.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" dist/Aurora.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" dist/Aurora.app/Contents/Info.plist
+          lipo -archs dist/Aurora.app/Contents/MacOS/Aurora | grep -q "x86_64 arm64\|arm64 x86_64"
       - name: Import signing certificate
         if: ${{ env.MACOS_CERTIFICATE != '' && env.MACOS_SIGNING_IDENTITY != '' }}
         shell: bash
         run: |
-          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cairn.p12"
-          security create-keychain -p runner "$RUNNER_TEMP/cairn.keychain-db"
-          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/cairn.keychain-db"
-          security unlock-keychain -p runner "$RUNNER_TEMP/cairn.keychain-db"
-          security import "$RUNNER_TEMP/cairn.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$RUNNER_TEMP/cairn.keychain-db"
-          security list-keychains -d user -s "$RUNNER_TEMP/cairn.keychain-db" login.keychain-db
-          security set-key-partition-list -S apple-tool:,apple: -s -k runner "$RUNNER_TEMP/cairn.keychain-db"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/aurora.p12"
+          security create-keychain -p runner "$RUNNER_TEMP/aurora.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/aurora.keychain-db"
+          security unlock-keychain -p runner "$RUNNER_TEMP/aurora.keychain-db"
+          security import "$RUNNER_TEMP/aurora.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$RUNNER_TEMP/aurora.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/aurora.keychain-db" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: -s -k runner "$RUNNER_TEMP/aurora.keychain-db"
       - name: Sign application
         shell: bash
         run: |
           if [[ -n "$MACOS_SIGNING_IDENTITY" ]]; then
-            codesign --force --deep --options runtime --timestamp --entitlements build/darwin/entitlements.plist --sign "$MACOS_SIGNING_IDENTITY" dist/Cairn.app
+            codesign --force --deep --options runtime --timestamp --entitlements build/darwin/entitlements.plist --sign "$MACOS_SIGNING_IDENTITY" dist/Aurora.app
           else
-            codesign --force --deep --options runtime --entitlements build/darwin/entitlements.plist --sign - dist/Cairn.app
+            codesign --force --deep --options runtime --entitlements build/darwin/entitlements.plist --sign - dist/Aurora.app
           fi
-          codesign --verify --deep --strict --verbose=2 dist/Cairn.app
+          codesign --verify --deep --strict --verbose=2 dist/Aurora.app
       - name: Notarize application
         if: ${{ env.MACOS_SIGNING_IDENTITY != '' && env.APPLE_ID != '' && env.APPLE_APP_PASSWORD != '' && env.APPLE_TEAM_ID != '' }}
         shell: bash
         run: |
-          ditto -c -k --keepParent dist/Cairn.app "$RUNNER_TEMP/Cairn-notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/Cairn-notarize.zip" --wait \
+          ditto -c -k --keepParent dist/Aurora.app "$RUNNER_TEMP/Aurora-notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/Aurora-notarize.zip" --wait \
             --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID"
-          xcrun stapler staple dist/Cairn.app
-      - name: Create DMG and checksums
+          xcrun stapler staple dist/Aurora.app
+      - name: Create DMG
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/dmg"
-          cp -R dist/Cairn.app "$RUNNER_TEMP/dmg/"
+          cp -R dist/Aurora.app "$RUNNER_TEMP/dmg/"
           ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
-          hdiutil create -volname Cairn -srcfolder "$RUNNER_TEMP/dmg" -ov -format UDZO "dist/Cairn-$VERSION-macos-universal.dmg"
-          if [[ -n "$MACOS_SIGNING_IDENTITY" ]]; then codesign --timestamp --sign "$MACOS_SIGNING_IDENTITY" "dist/Cairn-$VERSION-macos-universal.dmg"; fi
-          shasum -a 256 "dist/Cairn-$VERSION-macos-universal.dmg" > "dist/Cairn-$VERSION-macos-universal.dmg.sha256"
+          hdiutil create -volname Aurora -srcfolder "$RUNNER_TEMP/dmg" -ov -format UDZO "dist/Aurora-$VERSION-macos-universal.dmg"
+          if [[ -n "$MACOS_SIGNING_IDENTITY" ]]; then codesign --timestamp --sign "$MACOS_SIGNING_IDENTITY" "dist/Aurora-$VERSION-macos-universal.dmg"; fi
       - uses: actions/upload-artifact@v4
         with:
-          name: Cairn-${{ env.VERSION }}-macos-universal
-          path: |
-            dist/Cairn-${{ env.VERSION }}-macos-universal.dmg
-            dist/Cairn-${{ env.VERSION }}-macos-universal.dmg.sha256
+          name: Aurora-${{ env.VERSION }}-macos-universal
+          path: dist/Aurora-${{ env.VERSION }}-macos-universal.dmg
 
   windows-x64:
     needs: license-inventory
@@ -184,12 +181,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          wails3 generate icons -input build/icons/Aurora-1024.png -macfilename build/darwin/Cairn.icns -windowsfilename build/windows/Cairn.ico
+          wails3 generate icons -input build/icons/Aurora-1024.png -macfilename build/darwin/Aurora.icns -windowsfilename build/windows/Aurora.ico
           (Get-Content build/windows/info.json -Raw).Replace('0.1.0', $env:VERSION) | Set-Content build/windows/info.release.json
           (Get-Content build/windows/wails.exe.manifest -Raw).Replace('version="0.1.0"', "version=`"$($env:VERSION)`"") | Set-Content build/windows/wails.release.exe.manifest
-          wails3 generate syso -arch amd64 -icon build/windows/Cairn.ico -manifest build/windows/wails.release.exe.manifest -info build/windows/info.release.json -out cairn_windows_amd64.syso
-          go build -tags desktop -trimpath -buildvcs=false -ldflags "-s -w -H windowsgui -X github.com/cairn-reader/cairn/internal/version.Version=$($env:VERSION)" -o dist/Cairn.exe ./cmd/cairn-desktop
-          Remove-Item cairn_windows_amd64.syso
+          wails3 generate syso -arch amd64 -icon build/windows/Aurora.ico -manifest build/windows/wails.release.exe.manifest -info build/windows/info.release.json -out aurora_windows_amd64.syso
+          go build -tags desktop -trimpath -buildvcs=false -ldflags "-s -w -H windowsgui -X github.com/Zijinn/Aurora/internal/version.Version=$($env:VERSION)" -o dist/Aurora.exe ./cmd/cairn-desktop
+          Remove-Item aurora_windows_amd64.syso
       - name: Locate signing tool
         if: ${{ env.WINDOWS_CERTIFICATE != '' }}
         shell: pwsh
@@ -198,35 +195,27 @@ jobs:
             Where-Object FullName -Match '\\x64\\signtool.exe$' | Sort-Object FullName -Descending | Select-Object -First 1
           if (-not $tool) { throw "signtool.exe not found" }
           "SIGNTOOL=$($tool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cairn.pfx", [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\aurora.pfx", [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
       - name: Sign application
         if: ${{ env.WINDOWS_CERTIFICATE != '' }}
         shell: pwsh
-        run: '& "$env:SIGNTOOL" sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f "$env:RUNNER_TEMP\cairn.pfx" /p "$env:WINDOWS_CERTIFICATE_PASSWORD" dist/Cairn.exe'
+        run: '& "$env:SIGNTOOL" sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f "$env:RUNNER_TEMP\aurora.pfx" /p "$env:WINDOWS_CERTIFICATE_PASSWORD" dist/Aurora.exe'
       - name: Build NSIS installer
         shell: pwsh
         run: |
           wails3 generate webview2bootstrapper -dir build/windows
-          $out = "$pwd\dist\Cairn-$($env:VERSION)-windows-x64-setup.exe"
+          $out = "$pwd\dist\Aurora-$($env:VERSION)-windows-x64-setup.exe"
           $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
           if (-not (Test-Path $makensis)) { throw "makensis.exe not found at $makensis" }
-          & $makensis "/DVERSION=$($env:VERSION)" "/DAPP_EXE=$pwd\dist\Cairn.exe" "/DAPP_ICON=$pwd\build\windows\Cairn.ico" "/DLICENSE_FILE=$pwd\LICENSE" "/DWEBVIEW2_BOOTSTRAPPER=$pwd\build\windows\MicrosoftEdgeWebview2Setup.exe" "/DWEB_ASSETS=$pwd\web\dist" "/DOUT_FILE=$out" build/windows/installer.nsi
+          & $makensis "/DVERSION=$($env:VERSION)" "/DAPP_EXE=$pwd\dist\Aurora.exe" "/DAPP_ICON=$pwd\build\windows\Aurora.ico" "/DLICENSE_FILE=$pwd\LICENSE" "/DWEBVIEW2_BOOTSTRAPPER=$pwd\build\windows\MicrosoftEdgeWebview2Setup.exe" "/DWEB_ASSETS=$pwd\web\dist" "/DOUT_FILE=$out" build/windows/installer.nsi
       - name: Sign installer
         if: ${{ env.WINDOWS_CERTIFICATE != '' }}
         shell: pwsh
-        run: '& "$env:SIGNTOOL" sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f "$env:RUNNER_TEMP\cairn.pfx" /p "$env:WINDOWS_CERTIFICATE_PASSWORD" "dist\Cairn-$($env:VERSION)-windows-x64-setup.exe"'
-      - name: Create checksum
-        shell: pwsh
-        run: |
-          $file = "dist\Cairn-$($env:VERSION)-windows-x64-setup.exe"
-          $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $(Split-Path $file -Leaf)" | Set-Content "$file.sha256"
+        run: '& "$env:SIGNTOOL" sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f "$env:RUNNER_TEMP\aurora.pfx" /p "$env:WINDOWS_CERTIFICATE_PASSWORD" "dist\Aurora-$($env:VERSION)-windows-x64-setup.exe"'
       - uses: actions/upload-artifact@v4
         with:
-          name: Cairn-${{ env.VERSION }}-windows-x64
-          path: |
-            dist/Cairn-${{ env.VERSION }}-windows-x64-setup.exe
-            dist/Cairn-${{ env.VERSION }}-windows-x64-setup.exe.sha256
+          name: Aurora-${{ env.VERSION }}-windows-x64
+          path: dist/Aurora-${{ env.VERSION }}-windows-x64-setup.exe
 
   publish-release:
     if: ${{ github.ref_type == 'tag' }}
@@ -240,7 +229,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: Cairn-*
+          pattern: Aurora-*
           path: release-assets
           merge-multiple: true
       - name: Publish GitHub release
@@ -250,6 +239,6 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Cairn ${GITHUB_REF_NAME#v}" \
+            --title "Aurora ${GITHUB_REF_NAME#v}" \
             --generate-notes \
             --verify-tag

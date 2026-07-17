@@ -22,13 +22,18 @@ export interface StateMutationRecord {
 export async function writeCache<T>(key: string, value: T): Promise<void> {
   const database = await openDatabase()
   if (!database) return
-  await transactionPromise(database, cacheStore, "readwrite", (store) => store.put({ key, value, updatedAt: Date.now() } satisfies CacheRecord<T>))
+  await transactionPromise(database, cacheStore, "readwrite", (store) =>
+    store.put({ key, value, updatedAt: Date.now() } satisfies CacheRecord<T>),
+  )
 }
 
 export async function readCache<T>(key: string): Promise<T | undefined> {
   const database = await openDatabase()
   if (!database) return undefined
-  const request = database.transaction(cacheStore).objectStore(cacheStore).get(key) as unknown as IDBRequest<CacheRecord<T> | undefined>
+  const request = database
+    .transaction(cacheStore)
+    .objectStore(cacheStore)
+    .get(key) as unknown as IDBRequest<CacheRecord<T> | undefined>
   const record = await requestPromise(request)
   if (!record || Date.now() - record.updatedAt > maxCacheAge) return undefined
   return record.value
@@ -44,14 +49,20 @@ export async function enqueueStateMutation(record: StateMutationRecord): Promise
 export async function flushMutationOutbox(): Promise<number> {
   const database = await openDatabase()
   if (!database) return 0
-  const request = database.transaction(outboxStore).objectStore(outboxStore).getAll() as unknown as IDBRequest<StateMutationRecord[]>
+  const request = database
+    .transaction(outboxStore)
+    .objectStore(outboxStore)
+    .getAll() as unknown as IDBRequest<StateMutationRecord[]>
   const records = await requestPromise(request)
   records.sort((left, right) => left.createdAt - right.createdAt)
   let completed = 0
   for (const record of records) {
     let response: Response
     try {
-      const headers = new Headers({ "Content-Type": "application/json", Accept: "application/json" })
+      const headers = new Headers({
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      })
       const token = localStorage.getItem("cairn-device-token")
       if (token) headers.set("Authorization", `Bearer ${token}`)
       response = await fetch(`/api/v1/entries/${encodeURIComponent(record.entryID)}/state`, {
@@ -67,8 +78,16 @@ export async function flushMutationOutbox(): Promise<number> {
     } catch {
       break
     }
-    if (response.ok || (response.status >= 400 && response.status < 500 && response.status !== 401 && response.status !== 429)) {
-      await transactionPromise(database, outboxStore, "readwrite", (store) => store.delete(record.mutationID))
+    if (
+      response.ok ||
+      (response.status >= 400 &&
+        response.status < 500 &&
+        response.status !== 401 &&
+        response.status !== 429)
+    ) {
+      await transactionPromise(database, outboxStore, "readwrite", (store) =>
+        store.delete(record.mutationID),
+      )
       completed++
       continue
     }
@@ -77,12 +96,12 @@ export async function flushMutationOutbox(): Promise<number> {
   return completed
 }
 
-export function entryPageCacheKey(scopeKey: string, query: string, cursor?: string) {
-  return `entries:${scopeKey}:${query.trim()}:${cursor ?? "first"}`
+export function entryPageCacheKey(scopeKey: string, query: string, cursor?: string, variant = "") {
+  return `entries:${scopeKey}:${query.trim()}:${cursor ?? "first"}:${variant}`
 }
 
-export function entryDetailCacheKey(entryID: string) {
-  return `entry:${entryID}`
+export function entryDetailCacheKey(entryID: string, variant = "") {
+  return variant ? `entry:${entryID}:${variant}` : `entry:${entryID}`
 }
 
 async function updateCachedEntryState(
@@ -93,7 +112,9 @@ async function updateCachedEntryState(
 ) {
   const transaction = database.transaction(cacheStore, "readwrite")
   const store = transaction.objectStore(cacheStore)
-  const request = store.getAll() as unknown as IDBRequest<Array<CacheRecord<EntryPage | Record<string, unknown>>>>
+  const request = store.getAll() as unknown as IDBRequest<
+    Array<CacheRecord<EntryPage | Record<string, unknown>>>
+  >
   const records = await requestPromise(request)
   for (const record of records) {
     if (record.key.startsWith("entries:")) {
@@ -105,9 +126,17 @@ async function updateCachedEntryState(
         return { ...entry, state: { ...entry.state, ...patch, updated_at: updatedAt } }
       })
       if (changed) store.put({ ...record, value: page, updatedAt: Date.now() })
-    } else if (record.key === entryDetailCacheKey(entryID)) {
+    } else if (
+      record.key === entryDetailCacheKey(entryID) ||
+      record.key.startsWith(`${entryDetailCacheKey(entryID)}:`)
+    ) {
       const entry = record.value as { state?: EntryState }
-      if (entry.state) store.put({ ...record, value: { ...entry, state: { ...entry.state, ...patch, updated_at: updatedAt } }, updatedAt: Date.now() })
+      if (entry.state)
+        store.put({
+          ...record,
+          value: { ...entry, state: { ...entry.state, ...patch, updated_at: updatedAt } },
+          updatedAt: Date.now(),
+        })
     }
   }
   await transactionComplete(transaction)
@@ -121,7 +150,8 @@ function openDatabase(): Promise<IDBDatabase | null> {
     const request = indexedDB.open(databaseName, 1)
     request.onupgradeneeded = () => {
       const database = request.result
-      if (!database.objectStoreNames.contains(cacheStore)) database.createObjectStore(cacheStore, { keyPath: "key" })
+      if (!database.objectStoreNames.contains(cacheStore))
+        database.createObjectStore(cacheStore, { keyPath: "key" })
       if (!database.objectStoreNames.contains(outboxStore)) {
         const store = database.createObjectStore(outboxStore, { keyPath: "mutationID" })
         store.createIndex("createdAt", "createdAt")
@@ -133,7 +163,12 @@ function openDatabase(): Promise<IDBDatabase | null> {
   return databasePromise
 }
 
-function transactionPromise(database: IDBDatabase, storeName: string, mode: IDBTransactionMode, operation: (store: IDBObjectStore) => IDBRequest) {
+function transactionPromise(
+  database: IDBDatabase,
+  storeName: string,
+  mode: IDBTransactionMode,
+  operation: (store: IDBObjectStore) => IDBRequest,
+) {
   const transaction = database.transaction(storeName, mode)
   operation(transaction.objectStore(storeName))
   return transactionComplete(transaction)
@@ -143,7 +178,8 @@ function transactionComplete(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve()
     transaction.onerror = () => reject(transaction.error ?? new Error("Offline transaction failed"))
-    transaction.onabort = () => reject(transaction.error ?? new Error("Offline transaction aborted"))
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error("Offline transaction aborted"))
   })
 }
 

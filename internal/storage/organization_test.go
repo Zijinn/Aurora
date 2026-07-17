@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cairn-reader/cairn/internal/domain"
+	"github.com/Zijinn/Aurora/internal/domain"
 )
 
 func TestFolderCycleAndAutomationRules(t *testing.T) {

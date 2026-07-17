@@ -17,30 +17,80 @@ beforeEach(() => {
     theme: "system",
   })
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
     if (url.includes("/api/v1/status")) {
-      return Promise.resolve(jsonResponse({ status: "ready", version: "test", api_version: "v1", database_ready: true, capabilities: ["rss"] }))
+      return Promise.resolve(
+        jsonResponse({
+          status: "ready",
+          version: "test",
+          api_version: "v1",
+          database_ready: true,
+          capabilities: ["rss"],
+        }),
+      )
     }
     if (url.includes("/api/v1/tags")) {
-      return Promise.resolve(jsonResponse({ items: [{ id: "tag-research", name: "Research", color: "#167a72", position: 0, created_at: "2026-07-17T00:00:00Z" }] }))
+      return Promise.resolve(
+        jsonResponse({
+          items: [
+            {
+              id: "tag-research",
+              name: "Research",
+              color: "#167a72",
+              position: 0,
+              created_at: "2026-07-17T00:00:00Z",
+            },
+          ],
+        }),
+      )
     }
     if (url.includes("/api/v1/saved-filters")) {
-      return Promise.resolve(jsonResponse({ items: [{ id: "filter-favorites", name: "Favorites", query: { state: "starred" }, position: 0, created_at: "2026-07-17T00:00:00Z", updated_at: "2026-07-17T00:00:00Z" }] }))
+      return Promise.resolve(
+        jsonResponse({
+          items: [
+            {
+              id: "filter-favorites",
+              name: "Favorites",
+              query: { state: "starred" },
+              position: 0,
+              created_at: "2026-07-17T00:00:00Z",
+              updated_at: "2026-07-17T00:00:00Z",
+            },
+          ],
+        }),
+      )
     }
-    if (url.includes("/api/v1/subscriptions") || url.includes("/api/v1/folders") || url.includes("/api/v1/devices") || url.includes("/api/v1/sync/accounts") || url.includes("/api/v1/rules")) {
+    if (
+      url.includes("/api/v1/subscriptions") ||
+      url.includes("/api/v1/folders") ||
+      url.includes("/api/v1/devices") ||
+      url.includes("/api/v1/sync/accounts") ||
+      url.includes("/api/v1/rules")
+    ) {
       return Promise.resolve(jsonResponse({ items: [] }))
     }
     if (url.includes("/api/v1/sync/providers")) {
-      return Promise.resolve(jsonResponse({ items: [
-        { id: "freshrss", name: "FreshRSS" },
-        { id: "miniflux", name: "Miniflux" },
-      ] }))
+      return Promise.resolve(
+        jsonResponse({
+          items: [
+            { id: "freshrss", name: "FreshRSS" },
+            { id: "miniflux", name: "Miniflux" },
+            { id: "webdav", name: "WebDAV" },
+            { id: "icloud", name: "iCloud Drive" },
+          ],
+        }),
+      )
     }
     if (url.includes("/api/v1/ai/providers")) {
-      return Promise.resolve(jsonResponse({ items: [
-        { id: "openai_compatible", name: "OpenAI compatible" },
-        { id: "ollama", name: "Ollama" },
-      ] }))
+      return Promise.resolve(
+        jsonResponse({
+          items: [
+            { id: "openai_compatible", name: "OpenAI compatible" },
+            { id: "ollama", name: "Ollama" },
+          ],
+        }),
+      )
     }
     if (url.includes("/api/v1/ai/profiles")) {
       return Promise.resolve(jsonResponse({ items: [] }))
@@ -63,7 +113,7 @@ afterEach(() => {
   delete document.documentElement.dataset.desktop
 })
 
-describe("Cairn reading experience", () => {
+describe("Aurora reading experience", () => {
   it("renders the empty reading state and reports a ready library", async () => {
     renderApp()
     expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument()
@@ -101,7 +151,10 @@ describe("Cairn reading experience", () => {
   it("opens the external sync account workflow", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
-    const syncSection = screen.getByRole("heading", { name: "External sync" }).closest("section")
+    fireEvent.click(screen.getByRole("button", { name: "Sync" }))
+    const syncSection = screen
+      .getByRole("heading", { name: "Reader service sync" })
+      .closest("section")
     expect(syncSection).not.toBeNull()
     fireEvent.click(within(syncSection!).getByRole("button", { name: "Add" }))
     expect(screen.getByRole("heading", { name: "Add sync account" })).toBeInTheDocument()
@@ -110,9 +163,29 @@ describe("Cairn reading experience", () => {
     expect(screen.getByLabelText("Allow private network endpoint")).toBeInTheDocument()
   })
 
+  it("configures iCloud Drive without making it exclusive with WebDAV", async () => {
+    renderApp()
+    fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
+    fireEvent.click(screen.getByRole("button", { name: "Sync" }))
+    const cloudSection = screen
+      .getByRole("heading", { name: "Library cloud sync" })
+      .closest("section")
+		expect(cloudSection).not.toBeNull()
+		fireEvent.click(within(cloudSection!).getByRole("button", { name: "Add" }))
+		await screen.findByRole("option", { name: "iCloud Drive" })
+		const provider = screen.getByRole("combobox", { name: "Provider" })
+    fireEvent.change(provider, {
+      target: { value: "icloud" },
+    })
+    expect(provider).toHaveValue("icloud")
+    expect(screen.getByLabelText("iCloud file path")).toHaveValue("")
+    expect(screen.getByRole("button", { name: "Add account" })).toBeEnabled()
+  })
+
   it("requires privacy confirmation before configuring a remote AI provider", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
+    fireEvent.click(screen.getByRole("button", { name: "AI & language" }))
     const aiSection = screen.getByRole("heading", { name: "AI providers" }).closest("section")
     expect(aiSection).not.toBeNull()
     fireEvent.click(within(aiSection!).getByRole("button", { name: "Add" }))
@@ -129,6 +202,7 @@ describe("Cairn reading experience", () => {
   it("opens the library organization workflow", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
+    fireEvent.click(screen.getByRole("button", { name: "Library" }))
     fireEvent.click(screen.getByRole("button", { name: "Manage" }))
     expect(await screen.findByRole("heading", { name: "Library organization" })).toBeInTheDocument()
     expect(screen.getByLabelText("Folder name")).toBeInTheDocument()
@@ -143,7 +217,7 @@ describe("Cairn reading experience", () => {
     const language = screen.getByRole("combobox", { name: "Interface language" })
     fireEvent.change(language, { target: { value: "zh-CN" } })
     expect(useReaderStore.getState().locale).toBe("zh-CN")
-    expect(screen.getByRole("heading", { name: "偏好设置" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "界面" })).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "关闭" }))
     expect(screen.getByRole("heading", { name: "今天" })).toBeInTheDocument()
     expect(localStorage.getItem("cairn-reader-preferences")).toContain("zh-CN")
@@ -184,13 +258,21 @@ describe("Cairn reading experience", () => {
       discovered_at: "2026-07-17T12:00:00Z",
       lead_image_url: null,
       tag_ids: [],
-      state: { is_read: true, is_starred: false, is_read_later: false, updated_at: "2026-07-17T12:00:00Z" },
+      state: {
+        is_read: true,
+        is_starred: false,
+        is_read_later: false,
+        updated_at: "2026-07-17T12:00:00Z",
+      },
     }
     const defaultFetch = vi.mocked(fetch).getMockImplementation()
     vi.mocked(fetch).mockImplementation((input, init) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
       if (url.includes("/api/v1/entries/entry-1")) {
-        return Promise.resolve(jsonResponse({ ...entry, sanitized_html: "<p>Article body</p>", readability_html: null }))
+        return Promise.resolve(
+          jsonResponse({ ...entry, sanitized_html: "<p>Article body</p>", readability_html: null }),
+        )
       }
       return defaultFetch!(input, init)
     })
@@ -238,17 +320,27 @@ describe("Cairn reading experience", () => {
 })
 
 function renderApp() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  return render(<QueryClientProvider client={queryClient}><App /></QueryClientProvider>)
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>,
+  )
 }
 
 function jsonResponse(value: unknown, status = 200) {
-  return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } })
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
 }
 
 function requestedURLIncludes(value: string) {
   return vi.mocked(fetch).mock.calls.some(([input]) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
     return url.includes(value)
   })
 }

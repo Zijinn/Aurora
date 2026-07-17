@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cairn-reader/cairn/internal/domain"
+	"github.com/Zijinn/Aurora/internal/domain"
 	"golang.org/x/net/html"
 )
 
