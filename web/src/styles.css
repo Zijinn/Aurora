@@ -155,8 +155,8 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
   justify-content: space-between;
 }
 .brand { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.brand__mark { display: grid; width: 28px; height: 28px; place-items: center; color: #fff; background: var(--accent); border-radius: var(--radius-control); }
-.brand__mark svg { width: 17px; height: 17px; }
+.brand__mark { display: block; width: 28px; height: 28px; flex: 0 0 28px; overflow: hidden; background: #050d25; border-radius: var(--radius-control); }
+.brand__mark img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .brand__name { font-size: 16px; font-weight: 760; }
 
 .icon-button {
@@ -504,9 +504,8 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 .sidebar { padding: max(24px, env(safe-area-inset-top)) 14px 16px max(14px, env(safe-area-inset-left)); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(24px); }
 .sidebar__header { padding: 0 10px; }
 .brand { gap: 11px; min-height: 42px; }
-.brand__mark { width: 30px; height: 30px; color: #fff; background: linear-gradient(140deg, #18204b, var(--accent-fill) 56%, #52e9ed); border-radius: 9px; box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 34%, transparent); }
-.brand__mark svg { width: 16px; height: 16px; }
-.brand__name { font-size: 19px; font-weight: 650; letter-spacing: -0.03em; }
+.brand__mark { width: 30px; height: 30px; flex-basis: 30px; border-radius: 8px; box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 28%, transparent); }
+.brand__name { font-size: 19px; font-weight: 650; letter-spacing: 0; }
 .search-box { height: 36px; margin-top: 22px; background: color-mix(in srgb, var(--surface-muted) 72%, transparent); border: 1px solid var(--border); border-radius: 10px; }
 .search-box:focus-within { background: var(--surface-raised); border-color: color-mix(in srgb, var(--accent) 50%, var(--border-strong)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
 .nav-list { gap: 2px; margin-top: 30px; }

@@ -1,38 +1,34 @@
 import { mkdir } from "node:fs/promises"
 import { resolve } from "node:path"
-import { StackSimple } from "@phosphor-icons/react"
-import { createElement } from "react"
-import { renderToStaticMarkup } from "react-dom/server"
 import sharp from "sharp"
 
+const sourcePath = resolve(import.meta.dirname, "../assets/brand/aurora-product-icon.png")
 const outputDir = resolve(import.meta.dirname, "../public/icons")
+const nativeOutputDir = resolve(import.meta.dirname, "../../build/icons")
 await mkdir(outputDir, { recursive: true })
+await mkdir(nativeOutputDir, { recursive: true })
 
-const makeIcon = async (size, maskable = false) => {
-  const iconSize = Math.round(size * (maskable ? 0.48 : 0.58))
-  const icon = renderToStaticMarkup(
-    createElement(StackSimple, {
-      color: "#f4f3ef",
-      size: iconSize,
-      weight: "bold",
-    }),
-  )
-  return sharp({
-    create: {
-      width: size,
-      height: size,
-      channels: 4,
-      background: "#153f3b",
-    },
-  })
-    .composite([{ input: Buffer.from(icon), gravity: "center" }])
-    .png()
+const metadata = await sharp(sourcePath).metadata()
+if (metadata.width !== metadata.height || (metadata.width ?? 0) < 1024) {
+  throw new Error("Aurora icon source must be a square image at least 1024px wide")
 }
 
-for (const [name, size, maskable] of [
-  ["cairn-192.png", 192, false],
-  ["cairn-512.png", 512, false],
-  ["cairn-maskable-512.png", 512, true],
+const writeIcon = (path, size) =>
+  sharp(sourcePath)
+    .rotate()
+    .resize(size, size, { fit: "cover", kernel: sharp.kernel.lanczos3 })
+    .toColorspace("srgb")
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toFile(path)
+
+for (const [name, size] of [
+  ["aurora-32.png", 32],
+  ["aurora-180.png", 180],
+  ["aurora-192.png", 192],
+  ["aurora-512.png", 512],
+  ["aurora-maskable-512.png", 512],
 ]) {
-  await (await makeIcon(size, maskable)).toFile(resolve(outputDir, name))
+  await writeIcon(resolve(outputDir, name), size)
 }
+
+await writeIcon(resolve(nativeOutputDir, "Aurora-1024.png"), 1024)

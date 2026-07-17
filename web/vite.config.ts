@@ -24,11 +24,17 @@ export default defineConfig({
     },
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["icons/cairn-192.png", "icons/cairn-512.png"],
+      includeAssets: [
+        "icons/aurora-32.png",
+        "icons/aurora-180.png",
+        "icons/aurora-192.png",
+        "icons/aurora-512.png",
+      ],
       manifest: {
         name: "Aurora",
         short_name: "Aurora",
         description: "A private reading home for the open web.",
+        lang: "zh-CN",
         theme_color: "#f5f5f6",
         background_color: "#ffffff",
         display: "standalone",
@@ -37,17 +43,17 @@ export default defineConfig({
         scope: "/",
         icons: [
           {
-            src: "/icons/cairn-192.png",
+            src: "/icons/aurora-192.png",
             sizes: "192x192",
             type: "image/png",
           },
           {
-            src: "/icons/cairn-512.png",
+            src: "/icons/aurora-512.png",
             sizes: "512x512",
             type: "image/png",
           },
           {
-            src: "/icons/cairn-maskable-512.png",
+            src: "/icons/aurora-maskable-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
