@@ -491,45 +491,47 @@ export function AppShell() {
           onPreferences={() => setPreferencesOpen(true)}
           onAdd={() => setAddOpen(true)}
         />
-        <TimelinePane
-          scope={scope}
-          entries={entries}
-          subscriptions={subscriptions.data?.items ?? []}
-          selectedEntryID={selectedEntryID}
-          viewMode={viewMode}
-          isLoading={entriesQuery.isPending}
-          isFetchingNext={entriesQuery.isFetchingNextPage}
-          hasNextPage={entriesQuery.hasNextPage}
-          error={entriesQuery.error}
-          markReadPending={markReadMutation.isPending}
-          refreshPending={refreshMutation.isPending}
-          onScopeChange={setScope}
-          onSelect={selectEntry}
-          onAdd={() => setAddOpen(true)}
-          onRetry={() => void entriesQuery.refetch()}
-          onLoadMore={() => void entriesQuery.fetchNextPage()}
-          onMarkAllRead={() => markReadMutation.mutate()}
-          onRefresh={(feedID) => refreshMutation.mutate(feedID)}
-          onToggleStar={(entry) => mutateState(entry, { is_starred: !entry.state.is_starred })}
-        />
+        <div className="workspace-body">
+          <TimelinePane
+            scope={scope}
+            entries={entries}
+            subscriptions={subscriptions.data?.items ?? []}
+            selectedEntryID={selectedEntryID}
+            viewMode={viewMode}
+            isLoading={entriesQuery.isPending}
+            isFetchingNext={entriesQuery.isFetchingNextPage}
+            hasNextPage={entriesQuery.hasNextPage}
+            error={entriesQuery.error}
+            markReadPending={markReadMutation.isPending}
+            refreshPending={refreshMutation.isPending}
+            onScopeChange={setScope}
+            onSelect={selectEntry}
+            onAdd={() => setAddOpen(true)}
+            onRetry={() => void entriesQuery.refetch()}
+            onLoadMore={() => void entriesQuery.fetchNextPage()}
+            onMarkAllRead={() => markReadMutation.mutate()}
+            onRefresh={(feedID) => refreshMutation.mutate(feedID)}
+            onToggleStar={(entry) => mutateState(entry, { is_starred: !entry.state.is_starred })}
+          />
+          <ReaderPane
+            key={selectedEntryID ?? "empty-reader"}
+            summary={selectedEntry}
+            detail={entryDetail.data}
+            isLoading={entryDetail.isPending && selectedEntryID !== null}
+            error={entryDetail.error}
+            mutationPending={stateMutation.isPending || tagMutation.isPending}
+            readabilityPending={readabilityMutation.isPending}
+            aiProfiles={aiProfiles.data?.items ?? []}
+            tags={tags.data?.items ?? []}
+            onBack={closeMobileReader}
+            onRetry={() => void entryDetail.refetch()}
+            onStateChange={mutateState}
+            onTagsChange={(entryID, tagIDs) => tagMutation.mutate({ entryID, tagIDs })}
+            onFetchReadability={(entryID) => readabilityMutation.mutate(entryID)}
+            onConfigureAI={() => setAIProfileOpen(true)}
+          />
+        </div>
       </section>
-      <ReaderPane
-        key={selectedEntryID ?? "empty-reader"}
-        summary={selectedEntry}
-        detail={entryDetail.data}
-        isLoading={entryDetail.isPending && selectedEntryID !== null}
-        error={entryDetail.error}
-        mutationPending={stateMutation.isPending || tagMutation.isPending}
-        readabilityPending={readabilityMutation.isPending}
-        aiProfiles={aiProfiles.data?.items ?? []}
-        tags={tags.data?.items ?? []}
-        onBack={closeMobileReader}
-        onRetry={() => void entryDetail.refetch()}
-        onStateChange={mutateState}
-        onTagsChange={(entryID, tagIDs) => tagMutation.mutate({ entryID, tagIDs })}
-        onFetchReadability={(entryID) => readabilityMutation.mutate(entryID)}
-        onConfigureAI={() => setAIProfileOpen(true)}
-      />
       <PaneDivider
         edge="sidebar"
         value={constrainedPaneLayout.sidebarWidth}

@@ -178,7 +178,7 @@ function TimelineEntry({
           <time dateTime={entry.published_at}>{formatRelativeTime(entry.published_at, locale)}</time>
         </div>
         <h2>{entry.title || t("untitled")}</h2>
-        {(viewMode === "card" || viewMode === "magazine" || viewMode === "image") && entry.summary && <p>{entry.summary}</p>}
+        {entry.summary && <p className="timeline-entry__summary">{entry.summary}</p>}
         {entry.author && <span className="timeline-entry__author">{entry.author}</span>}
       </button>
       <button

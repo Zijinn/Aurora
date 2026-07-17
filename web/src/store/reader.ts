@@ -21,7 +21,7 @@ export interface PaneLayout {
   timelineWidth: number
 }
 
-export const defaultPaneLayout: PaneLayout = { sidebarWidth: 232, timelineWidth: 424 }
+export const defaultPaneLayout: PaneLayout = { sidebarWidth: 232, timelineWidth: 376 }
 
 interface ReaderStore {
   scope: LibraryScope

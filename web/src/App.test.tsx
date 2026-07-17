@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import App from "./App"
@@ -169,6 +169,41 @@ describe("Cairn reading experience", () => {
     expect(await screen.findByRole("button", { name: "Minimise window" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Maximise or restore window" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Close window" })).toBeInTheDocument()
+  })
+
+  it("opens articles in the shared three-pane desktop workspace", async () => {
+    const entry = {
+      id: "entry-1",
+      feed_id: "feed-1",
+      feed_title: "The Observatory",
+      canonical_url: "https://example.com/story",
+      title: "A quieter interface",
+      author: "Mira Chen",
+      summary: "Designing a calmer relationship with the open web.",
+      published_at: "2026-07-17T12:00:00Z",
+      discovered_at: "2026-07-17T12:00:00Z",
+      lead_image_url: null,
+      tag_ids: [],
+      state: { is_read: true, is_starred: false, is_read_later: false, updated_at: "2026-07-17T12:00:00Z" },
+    }
+    const defaultFetch = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
+      if (url.includes("/api/v1/entries/entry-1")) {
+        return Promise.resolve(jsonResponse({ ...entry, sanitized_html: "<p>Article body</p>", readability_html: null }))
+      }
+      return defaultFetch!(input, init)
+    })
+
+    renderApp()
+    act(() => useReaderStore.getState().selectEntry(entry.id))
+    await screen.findByRole("heading", { level: 1, name: entry.title })
+
+    const shell = document.querySelector(".app-shell")
+    const workspaceBody = document.querySelector(".workspace-body")
+    expect(shell).toHaveClass("app-shell--reader-open")
+    expect(workspaceBody).toContainElement(document.querySelector(".timeline"))
+    expect(workspaceBody).toContainElement(document.querySelector(".reader"))
   })
 
   it("exposes keyboard accessible pane resize separators", async () => {
