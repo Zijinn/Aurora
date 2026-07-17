@@ -1,0 +1,1915 @@
+openapi: 3.1.0
+info:
+  title: Cairn API
+  version: 0.1.0
+  description: Versioned API shared by Cairn desktop, PWA, and future mobile clients.
+  license:
+    name: GPL-3.0-only
+servers:
+  - url: http://127.0.0.1:7381
+paths:
+  /healthz:
+    get:
+      operationId: getLiveness
+      tags: [system]
+      security: []
+      responses:
+        "200":
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /api/v1/status:
+    get:
+      operationId: getStatus
+      tags: [system]
+      responses:
+        "200":
+          description: Server readiness and capability status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+  /api/v1/:
+    get:
+      operationId: getApiRoot
+      tags: [system]
+      responses:
+        "200":
+          description: API identity.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, api_version]
+                properties:
+                  name:
+                    type: string
+                  api_version:
+                    type: string
+  /api/v1/feeds:
+    get:
+      operationId: listFeeds
+      tags: [feeds]
+      responses:
+        "200":
+          description: Feeds with subscription metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Feed"
+    post:
+      operationId: createFeed
+      tags: [feeds]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFeedRequest"
+      responses:
+        "201":
+          description: Feed and subscription created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feed"
+        "400":
+          $ref: "#/components/responses/Problem"
+  /api/v1/feeds/discover:
+    post:
+      operationId: discoverFeeds
+      tags: [feeds]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+      responses:
+        "200":
+          description: Feed candidates discovered from the URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FeedCandidate"
+        "400":
+          $ref: "#/components/responses/Problem"
+  /api/v1/feeds/{feedId}:
+    parameters:
+      - $ref: "#/components/parameters/FeedId"
+    get:
+      operationId: getFeed
+      tags: [feeds]
+      responses:
+        "200":
+          description: Feed detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feed"
+        "404":
+          $ref: "#/components/responses/Problem"
+    patch:
+      operationId: updateFeed
+      tags: [feeds]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFeedRequest"
+      responses:
+        "200":
+          description: Updated subscription settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        "404":
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteFeed
+      tags: [feeds]
+      responses:
+        "204":
+          description: Subscription removed. Orphan cleanup is asynchronous.
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/feeds/{feedId}/refresh:
+    parameters:
+      - $ref: "#/components/parameters/FeedId"
+    post:
+      operationId: refreshFeed
+      tags: [feeds, jobs]
+      responses:
+        "202":
+          description: Refresh job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+  /api/v1/subscriptions:
+    get:
+      operationId: listSubscriptions
+      tags: [subscriptions]
+      responses:
+        "200":
+          description: Subscription tree source data.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Subscription"
+  /api/v1/folders:
+    get:
+      operationId: listFolders
+      tags: [subscriptions]
+      responses:
+        "200":
+          description: Folder hierarchy source data.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Folder"
+    post:
+      operationId: createFolder
+      tags: [subscriptions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFolderRequest"
+      responses:
+        "201":
+          description: Folder created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Folder"
+  /api/v1/folders/{folderId}:
+    parameters:
+      - $ref: "#/components/parameters/FolderId"
+    patch:
+      operationId: updateFolder
+      tags: [subscriptions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFolderRequest"
+      responses:
+        "200":
+          description: Folder updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Folder"
+        "409":
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteFolder
+      tags: [subscriptions]
+      responses:
+        "204":
+          description: Folder deleted.
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/entries:
+    get:
+      operationId: listEntries
+      tags: [entries]
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 30
+        - name: feed_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: folder_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: tag_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [all, unread, starred, read_later]
+        - name: query
+          in: query
+          schema:
+            type: string
+            maxLength: 500
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Cursor-paginated timeline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryPage"
+  /api/v1/entries/mark-read:
+    post:
+      operationId: markEntriesRead
+      tags: [entries]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                feed_id:
+                  type: string
+                  format: uuid
+                folder_id:
+                  type: string
+                  format: uuid
+                tag_id:
+                  type: string
+                  format: uuid
+                state:
+                  type: string
+                  enum: [all, unread, starred, read_later]
+                query:
+                  type: string
+                  maxLength: 500
+                since:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: Matching unread entries were marked read.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated]
+                properties:
+                  updated:
+                    type: integer
+                    minimum: 0
+  /api/v1/entries/{entryId}:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+    get:
+      operationId: getEntry
+      tags: [entries]
+      responses:
+        "200":
+          description: Entry detail and sanitized content.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryDetail"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/entries/{entryId}/state:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+    patch:
+      operationId: updateEntryState
+      tags: [entries]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEntryStateRequest"
+      responses:
+        "200":
+          description: Authoritative entry state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryState"
+  /api/v1/entries/{entryId}/readability:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+    post:
+      operationId: fetchReadability
+      tags: [entries, jobs]
+      responses:
+        "202":
+          description: Full-text extraction job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+  /api/v1/entries/{entryId}/tags:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+    put:
+      operationId: setEntryTags
+      tags: [entries, tags]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tag_ids]
+              properties:
+                tag_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: Entry tags replaced.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tag_ids]
+                properties:
+                  tag_ids:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+  /api/v1/tags:
+    get:
+      operationId: listTags
+      tags: [tags]
+      responses:
+        "200":
+          description: Profile tags.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagList"
+    post:
+      operationId: createTag
+      tags: [tags]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTagRequest"
+      responses:
+        "201":
+          description: Tag created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+  /api/v1/tags/{tagId}:
+    delete:
+      operationId: deleteTag
+      tags: [tags]
+      parameters:
+        - $ref: "#/components/parameters/TagId"
+      responses:
+        "204":
+          description: Tag deleted.
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/rules:
+    get:
+      operationId: listRules
+      tags: [rules]
+      responses:
+        "200":
+          description: Automation rules.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuleList"
+    post:
+      operationId: createRule
+      tags: [rules]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRuleRequest"
+      responses:
+        "201":
+          description: Rule created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rule"
+  /api/v1/rules/{ruleId}:
+    delete:
+      operationId: deleteRule
+      tags: [rules]
+      parameters:
+        - $ref: "#/components/parameters/RuleId"
+      responses:
+        "204":
+          description: Rule deleted.
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/saved-filters:
+    get:
+      operationId: listSavedFilters
+      tags: [filters]
+      responses:
+        "200":
+          description: Saved timeline filters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedFilterList"
+    post:
+      operationId: createSavedFilter
+      tags: [filters]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSavedFilterRequest"
+      responses:
+        "201":
+          description: Saved filter created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedFilter"
+  /api/v1/saved-filters/{filterId}:
+    delete:
+      operationId: deleteSavedFilter
+      tags: [filters]
+      parameters:
+        - $ref: "#/components/parameters/FilterId"
+      responses:
+        "204":
+          description: Saved filter deleted.
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/imports/opml:
+    post:
+      operationId: importOpml
+      tags: [opml, jobs]
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              type: string
+          text/xml:
+            schema:
+              type: string
+      responses:
+        "202":
+          description: Import job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+  /api/v1/exports/opml:
+    get:
+      operationId: exportOpml
+      tags: [opml]
+      responses:
+        "200":
+          description: OPML export.
+          content:
+            text/xml:
+              schema:
+                type: string
+  /api/v1/jobs/{jobId}:
+    get:
+      operationId: getJob
+      tags: [jobs]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Job state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/jobs/{jobId}/cancel:
+    post:
+      operationId: cancelJob
+      tags: [jobs]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Queued or running job cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "409":
+          $ref: "#/components/responses/Problem"
+  /api/v1/events:
+    get:
+      operationId: streamEvents
+      tags: [events]
+      responses:
+        "200":
+          description: Server-sent event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /api/v1/backup:
+    get:
+      operationId: exportBackup
+      tags: [backup]
+      responses:
+        "200":
+          description: Complete logical Cairn backup.
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/v1/restore:
+    post:
+      operationId: restoreBackup
+      tags: [backup]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Backup restored transactionally.
+        "422":
+          $ref: "#/components/responses/Problem"
+  /api/v1/devices/pair:
+    post:
+      operationId: pairDevice
+      tags: [devices]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, platform]
+              properties:
+                code:
+                  type: string
+                  minLength: 6
+                  maxLength: 12
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                platform:
+                  type: string
+                  enum: [web, ipad, windows, macos, ios, android]
+      responses:
+        "201":
+          description: Device paired. Token is returned only once.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device, token]
+                properties:
+                  device:
+                    $ref: "#/components/schemas/Device"
+                  token:
+                    type: string
+        "400":
+          $ref: "#/components/responses/Problem"
+  /api/v1/devices/pairing-code:
+    post:
+      operationId: createPairingCode
+      tags: [devices]
+      responses:
+        "201":
+          description: One-time pairing code for a trusted device.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, expires_at]
+                properties:
+                  code:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+  /api/v1/devices:
+    get:
+      operationId: listDevices
+      tags: [devices]
+      responses:
+        "200":
+          description: Paired devices without bearer tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Device"
+  /api/v1/devices/{deviceId}:
+    delete:
+      operationId: revokeDevice
+      tags: [devices]
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "204":
+          description: Device token revoked.
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/sync/providers:
+    get:
+      operationId: listSyncProviders
+      tags: [sync]
+      responses:
+        "200":
+          description: Supported external synchronization protocols.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SyncProvider"
+  /api/v1/sync/accounts:
+    get:
+      operationId: listSyncAccounts
+      tags: [sync]
+      responses:
+        "200":
+          description: Configured sync accounts without credentials.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SyncAccount"
+    post:
+      operationId: createSyncAccount
+      tags: [sync]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSyncAccountRequest"
+      responses:
+        "201":
+          description: Encrypted sync account created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncAccount"
+        "400":
+          $ref: "#/components/responses/Problem"
+  /api/v1/sync/accounts/{accountId}:
+    parameters:
+      - $ref: "#/components/parameters/SyncAccountId"
+    patch:
+      operationId: updateSyncAccount
+      tags: [sync]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSyncAccountRequest"
+      responses:
+        "200":
+          description: Sync account updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncAccount"
+        "404":
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteSyncAccount
+      tags: [sync]
+      responses:
+        "204":
+          description: Sync account and mappings deleted.
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/sync/accounts/{accountId}/sync:
+    parameters:
+      - $ref: "#/components/parameters/SyncAccountId"
+    post:
+      operationId: runSyncAccount
+      tags: [sync, jobs]
+      responses:
+        "202":
+          description: Account sync job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "409":
+          $ref: "#/components/responses/Problem"
+  /api/v1/ai/providers:
+    get:
+      operationId: listAIProviders
+      tags: [ai]
+      responses:
+        "200":
+          description: Supported AI provider protocols.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AIProvider"
+  /api/v1/ai/profiles:
+    get:
+      operationId: listAIProfiles
+      tags: [ai]
+      responses:
+        "200":
+          description: Configured AI profiles without API keys.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AIProfile"
+    post:
+      operationId: createAIProfile
+      tags: [ai]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAIProfileRequest"
+      responses:
+        "201":
+          description: Encrypted AI profile created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIProfile"
+        "428":
+          $ref: "#/components/responses/Problem"
+  /api/v1/ai/profiles/{profileId}:
+    parameters:
+      - $ref: "#/components/parameters/AIProfileId"
+    patch:
+      operationId: updateAIProfile
+      tags: [ai]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAIProfileRequest"
+      responses:
+        "200":
+          description: AI profile updated without exposing its API key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIProfile"
+        "404":
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteAIProfile
+      tags: [ai]
+      responses:
+        "204":
+          description: AI profile deleted. Existing results and chats remain without the profile link.
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/ai/usage:
+    get:
+      operationId: getAIUsage
+      tags: [ai]
+      responses:
+        "200":
+          description: Aggregate token usage for the local profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIUsage"
+  /api/v1/entries/{entryId}/ai-results:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+    get:
+      operationId: listAIResults
+      tags: [entries, ai]
+      responses:
+        "200":
+          description: Cached AI results for the article.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AIResult"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/entries/{entryId}/ai/{operation}:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+      - name: operation
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [summary, translation, key-points]
+    post:
+      operationId: runAIOperation
+      tags: [entries, ai, jobs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                profile_id:
+                  type: string
+                  format: uuid
+                language:
+                  type: string
+                  maxLength: 40
+                  default: auto
+      responses:
+        "200":
+          description: Matching cached result returned without a provider request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIStartResponse"
+        "202":
+          description: AI operation job accepted or an equivalent pending job returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIStartResponse"
+        "428":
+          $ref: "#/components/responses/Problem"
+  /api/v1/entries/{entryId}/ai-chat:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+    post:
+      operationId: startAIChat
+      tags: [entries, ai, jobs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                profile_id:
+                  type: string
+                  format: uuid
+                session_id:
+                  type: string
+                  format: uuid
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 4000
+      responses:
+        "202":
+          description: Article chat job accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job, session]
+                properties:
+                  job:
+                    $ref: "#/components/schemas/Job"
+                  session:
+                    $ref: "#/components/schemas/AIChatSession"
+        "428":
+          $ref: "#/components/responses/Problem"
+  /api/v1/ai/chats/{sessionId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getAIChat
+      tags: [ai]
+      responses:
+        "200":
+          description: Persisted article chat session and messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIChatSession"
+        "404":
+          $ref: "#/components/responses/Problem"
+components:
+  securitySchemes:
+    deviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: CairnDeviceToken
+  parameters:
+    FeedId:
+      name: feedId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EntryId:
+      name: entryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SyncAccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AIProfileId:
+      name: profileId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FolderId:
+      name: folderId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TagId:
+      name: tagId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RuleId:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FilterId:
+      name: filterId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Problem:
+      description: Request failed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+    Status:
+      type: object
+      required: [status, version, api_version, database_ready, capabilities]
+      properties:
+        status:
+          type: string
+          enum: [ready, degraded]
+        version:
+          type: string
+        api_version:
+          type: string
+        database_ready:
+          type: boolean
+        device_auth_required:
+          type: boolean
+        device_authenticated:
+          type: boolean
+        capabilities:
+          type: array
+          items:
+            type: string
+    Feed:
+      type: object
+      required: [id, url, title, failure_count, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        canonical_url:
+          type: [string, "null"]
+          format: uri
+        site_url:
+          type: [string, "null"]
+          format: uri
+        title:
+          type: string
+        description:
+          type: [string, "null"]
+        icon_url:
+          type: [string, "null"]
+          format: uri
+        format:
+          type: [string, "null"]
+          enum: [rss, atom, json, null]
+        last_checked_at:
+          type: [string, "null"]
+          format: date-time
+        last_success_at:
+          type: [string, "null"]
+          format: date-time
+        failure_count:
+          type: integer
+          minimum: 0
+        last_error_code:
+          type: [string, "null"]
+        last_error_message:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    FeedCandidate:
+      type: object
+      required: [url, title]
+      properties:
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+        site_url:
+          type: [string, "null"]
+          format: uri
+    CreateFeedRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        folder_id:
+          type: [string, "null"]
+          format: uuid
+        title_override:
+          type: [string, "null"]
+          maxLength: 300
+    UpdateFeedRequest:
+      type: object
+      properties:
+        folder_id:
+          type: [string, "null"]
+          format: uuid
+        title_override:
+          type: [string, "null"]
+          maxLength: 300
+        view_mode:
+          type: string
+          enum: [compact, standard, card, magazine, image]
+        refresh_interval_minutes:
+          type: integer
+          minimum: 0
+          maximum: 10080
+        hide_from_timeline:
+          type: boolean
+    Subscription:
+      type: object
+      required: [id, feed_id, title, view_mode, hide_from_timeline]
+      properties:
+        id:
+          type: string
+          format: uuid
+        feed_id:
+          type: string
+          format: uuid
+        folder_id:
+          type: [string, "null"]
+          format: uuid
+        title:
+          type: string
+        icon_url:
+          type: [string, "null"]
+          format: uri
+        unread_count:
+          type: integer
+          minimum: 0
+        view_mode:
+          type: string
+          enum: [compact, standard, card, magazine, image]
+        hide_from_timeline:
+          type: boolean
+    Folder:
+      type: object
+      required: [id, name, position, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        parent_id:
+          type: [string, "null"]
+          format: uuid
+        name:
+          type: string
+        position:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Entry:
+      type: object
+      required: [id, feed_id, title, published_at, tag_ids, state]
+      properties:
+        id:
+          type: string
+          format: uuid
+        feed_id:
+          type: string
+          format: uuid
+        feed_title:
+          type: string
+        title:
+          type: string
+        author:
+          type: [string, "null"]
+        summary:
+          type: [string, "null"]
+        canonical_url:
+          type: [string, "null"]
+          format: uri
+        lead_image_url:
+          type: [string, "null"]
+          format: uri
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        published_at:
+          type: string
+          format: date-time
+        state:
+          $ref: "#/components/schemas/EntryState"
+    EntryDetail:
+      allOf:
+        - $ref: "#/components/schemas/Entry"
+        - type: object
+          required: [sanitized_html]
+          properties:
+            sanitized_html:
+              type: string
+            readability_html:
+              type: [string, "null"]
+            audio_url:
+              type: [string, "null"]
+              format: uri
+            video_url:
+              type: [string, "null"]
+              format: uri
+    EntryState:
+      type: object
+      required: [is_read, is_starred, is_read_later, updated_at]
+      properties:
+        is_read:
+          type: boolean
+        is_starred:
+          type: boolean
+        is_read_later:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+    UpdateEntryStateRequest:
+      type: object
+      required: [mutation_id]
+      properties:
+        mutation_id:
+          type: string
+          format: uuid
+        is_read:
+          type: boolean
+        is_starred:
+          type: boolean
+        is_read_later:
+          type: boolean
+        device_time:
+          type: string
+          format: date-time
+    EntryPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entry"
+        next_cursor:
+          type: [string, "null"]
+    Job:
+      type: object
+      required: [id, kind, state, progress_current, progress_total, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        state:
+          type: string
+          enum: [queued, running, succeeded, failed, cancelled]
+        progress_current:
+          type: integer
+          minimum: 0
+        progress_total:
+          type: integer
+          minimum: 0
+        error_code:
+          type: [string, "null"]
+        error_message:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Device:
+      type: object
+      required: [id, name, platform, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        platform:
+          type: string
+        last_seen_at:
+          type: [string, "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: [string, "null"]
+          format: date-time
+    SyncProvider:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          enum: [freshrss, google_reader, miniflux, fever, feedbin, nextcloud_news]
+        name:
+          type: string
+    SyncCredentials:
+      type: object
+      writeOnly: true
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        api_key:
+          type: string
+          format: password
+        token:
+          type: string
+          format: password
+    CreateSyncAccountRequest:
+      type: object
+      required: [provider, name, endpoint, credentials, allow_private_network, sync_interval_minutes]
+      properties:
+        provider:
+          type: string
+          enum: [freshrss, google_reader, miniflux, fever, feedbin, nextcloud_news]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        endpoint:
+          type: string
+          format: uri
+        credentials:
+          $ref: "#/components/schemas/SyncCredentials"
+        enabled:
+          type: boolean
+          default: true
+        allow_private_network:
+          type: boolean
+          default: false
+        sync_interval_minutes:
+          type: integer
+          minimum: 5
+          maximum: 10080
+          default: 30
+    UpdateSyncAccountRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        endpoint:
+          type: string
+          format: uri
+        credentials:
+          $ref: "#/components/schemas/SyncCredentials"
+        enabled:
+          type: boolean
+        allow_private_network:
+          type: boolean
+        sync_interval_minutes:
+          type: integer
+          minimum: 5
+          maximum: 10080
+    SyncAccount:
+      type: object
+      required: [id, provider, name, endpoint, enabled, allow_private_network, sync_interval_minutes, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [freshrss, google_reader, miniflux, fever, feedbin, nextcloud_news]
+        name:
+          type: string
+        endpoint:
+          type: string
+          format: uri
+        enabled:
+          type: boolean
+        allow_private_network:
+          type: boolean
+        sync_interval_minutes:
+          type: integer
+          minimum: 5
+          maximum: 10080
+        last_sync_at:
+          type: [string, "null"]
+          format: date-time
+        next_sync_at:
+          type: [string, "null"]
+          format: date-time
+        last_attempt_at:
+          type: [string, "null"]
+          format: date-time
+        last_error_code:
+          type: [string, "null"]
+        last_error_message:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AIProvider:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          enum: [openai_compatible, ollama]
+        name:
+          type: string
+    AISettings:
+      type: object
+      properties:
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+    CreateAIProfileRequest:
+      type: object
+      required: [provider, endpoint, model]
+      properties:
+        provider:
+          type: string
+          enum: [openai_compatible, ollama]
+        name:
+          type: string
+          maxLength: 120
+        endpoint:
+          type: string
+          format: uri
+        model:
+          type: string
+          maxLength: 200
+        api_key:
+          type: string
+          format: password
+          writeOnly: true
+        settings:
+          $ref: "#/components/schemas/AISettings"
+        enabled:
+          type: boolean
+          default: true
+        allow_private_network:
+          type: boolean
+          default: false
+        remote_content_approved:
+          type: boolean
+          default: false
+        is_default:
+          type: boolean
+          default: false
+    UpdateAIProfileRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        endpoint:
+          type: string
+          format: uri
+        model:
+          type: string
+          maxLength: 200
+        api_key:
+          type: string
+          format: password
+          writeOnly: true
+        settings:
+          $ref: "#/components/schemas/AISettings"
+        enabled:
+          type: boolean
+        allow_private_network:
+          type: boolean
+        remote_content_approved:
+          type: boolean
+        is_default:
+          type: boolean
+    AIProfile:
+      type: object
+      required: [id, provider, name, endpoint, model, enabled, allow_private_network, remote_content_approved, is_default, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [openai_compatible, ollama]
+        name:
+          type: string
+        endpoint:
+          type: string
+          format: uri
+        model:
+          type: string
+        enabled:
+          type: boolean
+        allow_private_network:
+          type: boolean
+        remote_content_approved:
+          type: boolean
+        is_default:
+          type: boolean
+        last_used_at:
+          type: [string, "null"]
+          format: date-time
+        last_error_code:
+          type: [string, "null"]
+        last_error_message:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AIUsage:
+      type: object
+      required: [input_tokens, output_tokens, total_tokens]
+      properties:
+        input_tokens:
+          type: integer
+          minimum: 0
+        output_tokens:
+          type: integer
+          minimum: 0
+        total_tokens:
+          type: integer
+          minimum: 0
+    AIResult:
+      type: object
+      required: [id, entry_id, operation, language, input_hash, result_text, usage, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ai_profile_id:
+          type: [string, "null"]
+          format: uuid
+        entry_id:
+          type: string
+          format: uuid
+        operation:
+          type: string
+          enum: [summary, translation, key_points]
+        language:
+          type: string
+        input_hash:
+          type: string
+        result_text:
+          type: string
+        usage:
+          $ref: "#/components/schemas/AIUsage"
+        created_at:
+          type: string
+          format: date-time
+    AIStartResponse:
+      type: object
+      required: [cached]
+      properties:
+        cached:
+          type: boolean
+        result:
+          $ref: "#/components/schemas/AIResult"
+        job:
+          $ref: "#/components/schemas/Job"
+    AIChatMessage:
+      type: object
+      required: [id, role, content, metadata, status, usage, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [pending, streaming, completed, failed]
+        usage:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+    AIChatSession:
+      type: object
+      required: [id, title, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ai_profile_id:
+          type: [string, "null"]
+          format: uuid
+        entry_id:
+          type: [string, "null"]
+          format: uuid
+        title:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AIChatMessage"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateFolderRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        parent_id:
+          type: [string, "null"]
+          format: uuid
+    UpdateFolderRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        parent_id:
+          type: [string, "null"]
+          format: uuid
+        position:
+          type: integer
+    Tag:
+      type: object
+      required: [id, name, position, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: [string, "null"]
+        position:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    TagList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+    CreateTagRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        color:
+          type: [string, "null"]
+    Rule:
+      type: object
+      required: [id, name, enabled, priority, conditions, actions, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+        conditions:
+          type: object
+          additionalProperties: true
+        actions:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RuleList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Rule"
+    CreateRuleRequest:
+      type: object
+      required: [name, conditions, actions]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        enabled:
+          type: boolean
+          default: true
+        priority:
+          type: integer
+        conditions:
+          type: object
+          additionalProperties: true
+        actions:
+          type: object
+          additionalProperties: true
+    SavedFilter:
+      type: object
+      required: [id, name, query, position, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        query:
+          type: object
+          additionalProperties: true
+        position:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SavedFilterList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SavedFilter"
+    CreateSavedFilterRequest:
+      type: object
+      required: [name, query]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        query:
+          type: object
+          additionalProperties: true
+    Problem:
+      type: object
+      required: [type, title, status, code, request_id]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          type: string
+        request_id:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+security:
+  - deviceToken: []

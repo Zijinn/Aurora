@@ -1,0 +1,31 @@
+.PHONY: build check dev dev-server dev-web format test
+
+build:
+	pnpm --dir web build
+	go build -o bin/cairn-server ./cmd/cairn-server
+
+check:
+	go test ./...
+	go vet ./...
+	pnpm --dir web typecheck
+	pnpm --dir web lint
+	pnpm --dir web test
+	pnpm --dir web build
+
+dev:
+	pnpm dev
+
+dev-server:
+	go run ./cmd/cairn-server
+
+dev-web:
+	pnpm --dir web dev
+
+format:
+	gofmt -w cmd internal
+	pnpm --dir web format
+
+test:
+	go test ./...
+	pnpm --dir web test
+

@@ -1,0 +1,15 @@
+{
+  "version": "https://jsonfeed.org/version/1.1",
+  "title": "Cairn Test JSON Feed",
+  "home_page_url": "https://example.org/",
+  "feed_url": "https://example.org/feed.json",
+  "items": [
+    {
+      "id": "json-entry-1",
+      "url": "https://example.org/articles/one",
+      "title": "First JSON entry",
+      "content_html": "<p>JSON Feed content</p>",
+      "date_published": "2026-07-17T03:00:00Z"
+    }
+  ]
+}

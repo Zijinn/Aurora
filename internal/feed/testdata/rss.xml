@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Cairn Test RSS</title>
+    <link>https://example.com/</link>
+    <description>RSS fixture</description>
+    <item>
+      <guid isPermaLink="false">rss-entry-1</guid>
+      <title>First RSS entry</title>
+      <link>https://example.com/posts/first</link>
+      <pubDate>Fri, 17 Jul 2026 01:00:00 GMT</pubDate>
+      <description><![CDATA[
+        <p>Hello <strong>open web</strong>.</p>
+        <img src="/images/first.jpg" onerror="alert(1)">
+        <script>alert('blocked')</script>
+      ]]></description>
+    </item>
+  </channel>
+</rss>

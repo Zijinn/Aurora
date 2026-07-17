@@ -1,0 +1,120 @@
+package opml
+
+import (
+	"encoding/xml"
+	"fmt"
+	"strings"
+	"time"
+)
+
+type Source struct {
+	Title      string
+	XMLURL     string
+	HTMLURL    string
+	FolderPath []string
+}
+
+type document struct {
+	XMLName xml.Name `xml:"opml"`
+	Version string   `xml:"version,attr"`
+	Head    head     `xml:"head"`
+	Body    body     `xml:"body"`
+}
+
+type head struct {
+	Title       string `xml:"title"`
+	DateCreated string `xml:"dateCreated,omitempty"`
+}
+
+type body struct {
+	Outlines []outline `xml:"outline"`
+}
+
+type outline struct {
+	Text     string    `xml:"text,attr"`
+	Title    string    `xml:"title,attr,omitempty"`
+	Type     string    `xml:"type,attr,omitempty"`
+	XMLURL   string    `xml:"xmlUrl,attr,omitempty"`
+	HTMLURL  string    `xml:"htmlUrl,attr,omitempty"`
+	Children []outline `xml:"outline,omitempty"`
+}
+
+func Parse(data []byte) ([]Source, error) {
+	var parsed document
+	if err := xml.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("parse OPML: %w", err)
+	}
+	if !strings.EqualFold(parsed.XMLName.Local, "opml") {
+		return nil, fmt.Errorf("parse OPML: root element is not opml")
+	}
+	result := make([]Source, 0)
+	var flatten func([]outline, []string)
+	flatten = func(items []outline, path []string) {
+		for _, item := range items {
+			title := strings.TrimSpace(item.Title)
+			if title == "" {
+				title = strings.TrimSpace(item.Text)
+			}
+			if strings.TrimSpace(item.XMLURL) != "" {
+				result = append(result, Source{
+					Title:      title,
+					XMLURL:     strings.TrimSpace(item.XMLURL),
+					HTMLURL:    strings.TrimSpace(item.HTMLURL),
+					FolderPath: append([]string(nil), path...),
+				})
+				continue
+			}
+			nextPath := path
+			if title != "" {
+				nextPath = append(append([]string(nil), path...), title)
+			}
+			flatten(item.Children, nextPath)
+		}
+	}
+	flatten(parsed.Body.Outlines, nil)
+	return result, nil
+}
+
+func Export(title string, sources []Source) ([]byte, error) {
+	root := outline{Children: make([]outline, 0)}
+	for _, source := range sources {
+		container := &root
+		for _, folder := range source.FolderPath {
+			folder = strings.TrimSpace(folder)
+			if folder == "" {
+				continue
+			}
+			index := -1
+			for candidate := range container.Children {
+				child := &container.Children[candidate]
+				if child.XMLURL == "" && child.Text == folder {
+					index = candidate
+					break
+				}
+			}
+			if index == -1 {
+				container.Children = append(container.Children, outline{Text: folder, Title: folder})
+				index = len(container.Children) - 1
+			}
+			container = &container.Children[index]
+		}
+		sourceTitle := strings.TrimSpace(source.Title)
+		if sourceTitle == "" {
+			sourceTitle = source.XMLURL
+		}
+		container.Children = append(container.Children, outline{
+			Text: sourceTitle, Title: sourceTitle, Type: "rss",
+			XMLURL: source.XMLURL, HTMLURL: source.HTMLURL,
+		})
+	}
+	parsed := document{
+		Version: "2.0",
+		Head:    head{Title: title, DateCreated: time.Now().UTC().Format(time.RFC1123Z)},
+		Body:    body{Outlines: root.Children},
+	}
+	body, err := xml.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode OPML: %w", err)
+	}
+	return append([]byte(xml.Header), body...), nil
+}

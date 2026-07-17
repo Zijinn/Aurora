@@ -1,0 +1,249 @@
+export interface ServerStatus {
+  status: "ready" | "degraded"
+  version: string
+  api_version: string
+  database_ready: boolean
+  capabilities: string[]
+  device_auth_required: boolean
+  device_authenticated: boolean
+}
+
+export interface Device {
+  id: string
+  name: string
+  platform: "web" | "ipad" | "windows" | "macos" | "ios" | "android"
+  last_seen_at: string | null
+  created_at: string
+  revoked_at: string | null
+}
+
+export type SyncProviderID = "freshrss" | "google_reader" | "miniflux" | "fever" | "feedbin" | "nextcloud_news"
+
+export interface SyncProvider {
+  id: SyncProviderID
+  name: string
+}
+
+export interface SyncCredentials {
+  username?: string
+  password?: string
+  api_key?: string
+  token?: string
+}
+
+export interface SyncAccount {
+  id: string
+  provider: SyncProviderID
+  name: string
+  endpoint: string
+  enabled: boolean
+  allow_private_network: boolean
+  sync_interval_minutes: number
+  last_sync_at: string | null
+  next_sync_at: string | null
+  last_attempt_at: string | null
+  last_error_code: string | null
+  last_error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type AIProviderID = "openai_compatible" | "ollama"
+
+export interface AIProvider {
+  id: AIProviderID
+  name: string
+}
+
+export interface AIProfile {
+  id: string
+  provider: AIProviderID
+  name: string
+  endpoint: string
+  model: string
+  enabled: boolean
+  allow_private_network: boolean
+  remote_content_approved: boolean
+  is_default: boolean
+  last_used_at: string | null
+  last_error_code: string | null
+  last_error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AIUsage {
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+}
+
+export type AIOperation = "summary" | "translation" | "key_points"
+
+export interface AIResult {
+  id: string
+  ai_profile_id: string | null
+  entry_id: string
+  operation: AIOperation
+  language: string
+  input_hash: string
+  result_text: string
+  usage: AIUsage
+  created_at: string
+}
+
+export interface AIChatMessage {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  status: "pending" | "streaming" | "completed" | "failed"
+  usage: Partial<AIUsage>
+  created_at: string
+}
+
+export interface AIChatSession {
+  id: string
+  ai_profile_id: string | null
+  entry_id: string | null
+  title: string
+  messages: AIChatMessage[]
+  created_at: string
+  updated_at: string
+}
+
+export type ViewMode = "compact" | "standard" | "card" | "magazine" | "image"
+
+export interface Feed {
+  id: string
+  url: string
+  canonical_url: string
+  site_url: string | null
+  title: string
+  description: string | null
+  icon_url: string | null
+  format: "rss" | "atom" | "json" | null
+  last_checked_at: string | null
+  last_success_at: string | null
+  next_check_at: string | null
+  failure_count: number
+  last_error_code: string | null
+  last_error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Subscription {
+  id: string
+  feed_id: string
+  folder_id: string | null
+  title: string
+  icon_url: string | null
+  unread_count: number
+  view_mode: ViewMode
+  refresh_policy: "inherit" | "fixed" | "intelligent" | "never"
+  refresh_interval_minutes: number
+  hide_from_timeline: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Folder {
+  id: string
+  parent_id: string | null
+  name: string
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Tag {
+  id: string
+  name: string
+  color: string | null
+  position: number
+  created_at: string
+}
+
+export interface Rule {
+  id: string
+  name: string
+  enabled: boolean
+  priority: number
+  conditions: Record<string, unknown>
+  actions: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface SavedFilter {
+  id: string
+  name: string
+  query: Record<string, unknown>
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export interface EntryState {
+  is_read: boolean
+  is_starred: boolean
+  is_read_later: boolean
+  updated_at: string
+}
+
+export interface Entry {
+  id: string
+  feed_id: string
+  feed_title: string
+  canonical_url: string | null
+  title: string
+  author: string | null
+  summary: string | null
+  published_at: string
+  discovered_at: string
+  lead_image_url: string | null
+  audio_url?: string | null
+  video_url?: string | null
+  language?: string | null
+  tag_ids: string[]
+  state: EntryState
+}
+
+export interface EntryDetail extends Entry {
+  sanitized_html: string
+  readability_html: string | null
+}
+
+export interface EntryPage {
+  items: Entry[]
+  next_cursor: string | null
+}
+
+export interface Job {
+  id: string
+  kind: string
+  state: "queued" | "running" | "succeeded" | "failed" | "cancelled"
+  progress_current: number
+  progress_total: number
+  scheduled_at: string
+  started_at: string | null
+  finished_at: string | null
+  error_code: string | null
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ListResponse<T> {
+  items: T[]
+}
+
+export type LibraryScope =
+  | { kind: "today"; title: "Today" }
+  | { kind: "unread"; title: "Unread" }
+  | { kind: "saved"; title: "Saved" }
+  | { kind: "all"; title: "All feeds" }
+  | { kind: "feed"; id: string; title: string }
+  | { kind: "folder"; id: string; title: string }
+  | { kind: "tag"; id: string; title: string }
+  | { kind: "filter"; id: string; title: string; query: Record<string, unknown> }

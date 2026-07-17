@@ -1,0 +1,1 @@
+{"api_version":3,"auth":1,"feeds":{"4":{"id":4,"title":"Fever feed","url":"https://example.com/fever.xml","site_url":"https://example.com"}},"items":[{"id":201,"feed_id":4,"url":"https://example.com/articles/fever-201"}],"unread_item_ids":"201","saved_item_ids":"201"}

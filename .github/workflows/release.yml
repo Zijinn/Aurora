@@ -1,0 +1,227 @@
+name: Release packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without a leading v
+        required: true
+        default: 0.1.0
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  license-inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm --dir web install --frozen-lockfile
+      - name: Generate dependency license inventories
+        shell: bash
+        run: |
+          mkdir -p dist/licenses
+          go install github.com/google/go-licenses@v1.6.0
+          go-licenses report ./... > dist/licenses/go-licenses.csv
+          pnpm --dir web licenses list --prod --json > dist/licenses/javascript-licenses.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cairn-${{ github.run_id }}-license-inventory
+          path: dist/licenses
+
+  macos-universal:
+    needs: license-inventory
+    runs-on: macos-14
+    env:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Resolve version
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version must be x.y.z"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir web build
+      - name: Install Wails build tools
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.117
+      - name: Build universal application
+        shell: bash
+        run: |
+          mkdir -p dist/Cairn.app/Contents/{MacOS,Resources}
+          wails3 generate icons -input web/public/icons/cairn-512.png -macfilename build/darwin/Cairn.icns -windowsfilename build/windows/Cairn.ico
+          for ARCH in amd64 arm64; do
+            CGO_ENABLED=1 GOOS=darwin GOARCH="$ARCH" \
+              CGO_CFLAGS="-mmacosx-version-min=12.0" CGO_LDFLAGS="-mmacosx-version-min=12.0" \
+              MACOSX_DEPLOYMENT_TARGET=12.0 \
+              go build -tags desktop -trimpath -buildvcs=false \
+              -ldflags "-s -w -X github.com/cairn-reader/cairn/internal/version.Version=$VERSION" \
+              -o "dist/Cairn-$ARCH" ./cmd/cairn-desktop
+          done
+          lipo -create -output dist/Cairn.app/Contents/MacOS/Cairn dist/Cairn-amd64 dist/Cairn-arm64
+          rm dist/Cairn-amd64 dist/Cairn-arm64
+          cp build/darwin/Cairn.icns dist/Cairn.app/Contents/Resources/
+          mkdir -p dist/Cairn.app/Contents/Resources/web
+          cp -R web/dist dist/Cairn.app/Contents/Resources/web/
+          cp build/darwin/Info.plist dist/Cairn.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" dist/Cairn.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" dist/Cairn.app/Contents/Info.plist
+          lipo -archs dist/Cairn.app/Contents/MacOS/Cairn | grep -q "x86_64 arm64\|arm64 x86_64"
+      - name: Import signing certificate
+        if: ${{ env.MACOS_CERTIFICATE != '' && env.MACOS_SIGNING_IDENTITY != '' }}
+        shell: bash
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cairn.p12"
+          security create-keychain -p runner "$RUNNER_TEMP/cairn.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/cairn.keychain-db"
+          security unlock-keychain -p runner "$RUNNER_TEMP/cairn.keychain-db"
+          security import "$RUNNER_TEMP/cairn.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$RUNNER_TEMP/cairn.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/cairn.keychain-db" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: -s -k runner "$RUNNER_TEMP/cairn.keychain-db"
+      - name: Sign application
+        shell: bash
+        run: |
+          if [[ -n "$MACOS_SIGNING_IDENTITY" ]]; then
+            codesign --force --deep --options runtime --timestamp --entitlements build/darwin/entitlements.plist --sign "$MACOS_SIGNING_IDENTITY" dist/Cairn.app
+          else
+            codesign --force --deep --options runtime --entitlements build/darwin/entitlements.plist --sign - dist/Cairn.app
+          fi
+          codesign --verify --deep --strict --verbose=2 dist/Cairn.app
+      - name: Notarize application
+        if: ${{ env.MACOS_SIGNING_IDENTITY != '' && env.APPLE_ID != '' && env.APPLE_APP_PASSWORD != '' && env.APPLE_TEAM_ID != '' }}
+        shell: bash
+        run: |
+          ditto -c -k --keepParent dist/Cairn.app "$RUNNER_TEMP/Cairn-notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/Cairn-notarize.zip" --wait \
+            --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID"
+          xcrun stapler staple dist/Cairn.app
+      - name: Create DMG and checksums
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/dmg"
+          cp -R dist/Cairn.app "$RUNNER_TEMP/dmg/"
+          ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
+          hdiutil create -volname Cairn -srcfolder "$RUNNER_TEMP/dmg" -ov -format UDZO "dist/Cairn-$VERSION-macos-universal.dmg"
+          if [[ -n "$MACOS_SIGNING_IDENTITY" ]]; then codesign --timestamp --sign "$MACOS_SIGNING_IDENTITY" "dist/Cairn-$VERSION-macos-universal.dmg"; fi
+          shasum -a 256 "dist/Cairn-$VERSION-macos-universal.dmg" > "dist/Cairn-$VERSION-macos-universal.dmg.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cairn-${{ env.VERSION }}-macos-universal
+          path: |
+            dist/Cairn-${{ env.VERSION }}-macos-universal.dmg
+            dist/Cairn-${{ env.VERSION }}-macos-universal.dmg.sha256
+
+  windows-x64:
+    needs: license-inventory
+    runs-on: windows-latest
+    env:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          if ($env:GITHUB_REF_TYPE -eq "tag") { $version = $env:GITHUB_REF_NAME.TrimStart("v") }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be x.y.z" }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir web build
+      - name: Install packaging tools
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.117
+          choco install nsis --no-progress -y
+      - name: Build Windows application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          wails3 generate icons -input web/public/icons/cairn-512.png -macfilename build/darwin/Cairn.icns -windowsfilename build/windows/Cairn.ico
+          (Get-Content build/windows/info.json -Raw).Replace('0.1.0', $env:VERSION) | Set-Content build/windows/info.release.json
+          (Get-Content build/windows/wails.exe.manifest -Raw).Replace('version="0.1.0"', "version=`"$($env:VERSION)`"") | Set-Content build/windows/wails.release.exe.manifest
+          wails3 generate syso -arch amd64 -icon build/windows/Cairn.ico -manifest build/windows/wails.release.exe.manifest -info build/windows/info.release.json -out cairn_windows_amd64.syso
+          go build -tags desktop -trimpath -buildvcs=false -ldflags "-s -w -H windowsgui -X github.com/cairn-reader/cairn/internal/version.Version=$($env:VERSION)" -o dist/Cairn.exe ./cmd/cairn-desktop
+          Remove-Item cairn_windows_amd64.syso
+      - name: Locate signing tool
+        if: ${{ env.WINDOWS_CERTIFICATE != '' }}
+        shell: pwsh
+        run: |
+          $tool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter signtool.exe -Recurse |
+            Where-Object FullName -Match '\\x64\\signtool.exe$' | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $tool) { throw "signtool.exe not found" }
+          "SIGNTOOL=$($tool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cairn.pfx", [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+      - name: Sign application
+        if: ${{ env.WINDOWS_CERTIFICATE != '' }}
+        shell: pwsh
+        run: '& "$env:SIGNTOOL" sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f "$env:RUNNER_TEMP\cairn.pfx" /p "$env:WINDOWS_CERTIFICATE_PASSWORD" dist/Cairn.exe'
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          wails3 generate webview2bootstrapper -dir build/windows
+          $out = "$pwd\dist\Cairn-$($env:VERSION)-windows-x64-setup.exe"
+          makensis "/DVERSION=$($env:VERSION)" "/DAPP_EXE=$pwd\dist\Cairn.exe" "/DAPP_ICON=$pwd\build\windows\Cairn.ico" "/DLICENSE_FILE=$pwd\LICENSE" "/DWEBVIEW2_BOOTSTRAPPER=$pwd\build\windows\MicrosoftEdgeWebview2Setup.exe" "/DWEB_ASSETS=$pwd\web\dist" "/DOUT_FILE=$out" build/windows/installer.nsi
+      - name: Sign installer
+        if: ${{ env.WINDOWS_CERTIFICATE != '' }}
+        shell: pwsh
+        run: '& "$env:SIGNTOOL" sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f "$env:RUNNER_TEMP\cairn.pfx" /p "$env:WINDOWS_CERTIFICATE_PASSWORD" "dist\Cairn-$($env:VERSION)-windows-x64-setup.exe"'
+      - name: Create checksum
+        shell: pwsh
+        run: |
+          $file = "dist\Cairn-$($env:VERSION)-windows-x64-setup.exe"
+          $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $file -Leaf)" | Set-Content "$file.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cairn-${{ env.VERSION }}-windows-x64
+          path: |
+            dist/Cairn-${{ env.VERSION }}-windows-x64-setup.exe
+            dist/Cairn-${{ env.VERSION }}-windows-x64-setup.exe.sha256
