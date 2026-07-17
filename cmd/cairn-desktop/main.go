@@ -76,7 +76,7 @@ func main() {
 		Frameless:        runtime.GOOS == "windows",
 		BackgroundColour: application.NewRGB(244, 244, 242),
 		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBarHiddenInset,
+			TitleBar: application.MacTitleBarHidden,
 		},
 		Windows: application.WindowsWindow{
 			DisableIcon:            true,

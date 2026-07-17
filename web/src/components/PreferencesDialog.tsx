@@ -156,8 +156,11 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
           <div className="preferences-layout">
             <aside className="preferences-nav">
               <div className="preferences-nav__brand">
-                <span>A</span>
-                <strong>Aurora</strong>
+                <img src="/icons/aurora-192.png" alt="" draggable={false} />
+                <span>
+                  <strong>Aurora</strong>
+                  <small>{t("preferencesTitle")}</small>
+                </span>
               </div>
               <nav aria-label={t("preferencesTitle")}>
                 {tabs.map((tab) => {
@@ -171,6 +174,7 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                       }
                       type="button"
                       key={tab.id}
+                      aria-current={activeTab === tab.id ? "page" : undefined}
                       onClick={() => setActiveTab(tab.id)}
                     >
                       <Icon />
