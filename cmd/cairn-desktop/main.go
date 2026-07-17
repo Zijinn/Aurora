@@ -73,7 +73,38 @@ func main() {
 		MinWidth:         920,
 		MinHeight:        620,
 		URL:              "/",
-		BackgroundColour: application.NewRGB(255, 255, 255),
+		Frameless:        runtime.GOOS == "windows",
+		BackgroundColour: application.NewRGB(244, 244, 242),
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBarHiddenInset,
+		},
+		Windows: application.WindowsWindow{
+			DisableIcon:            true,
+			NonClientRegionSupport: true,
+			Theme:                  application.SystemDefault,
+			CustomTheme: application.ThemeSettings{
+				DarkModeActive: &application.WindowTheme{
+					BorderColour:    application.NewRGBPtr(45, 47, 52),
+					TitleBarColour:  application.NewRGBPtr(13, 14, 16),
+					TitleTextColour: application.NewRGBPtr(241, 242, 244),
+				},
+				DarkModeInactive: &application.WindowTheme{
+					BorderColour:    application.NewRGBPtr(34, 36, 40),
+					TitleBarColour:  application.NewRGBPtr(13, 14, 16),
+					TitleTextColour: application.NewRGBPtr(154, 157, 165),
+				},
+				LightModeActive: &application.WindowTheme{
+					BorderColour:    application.NewRGBPtr(211, 212, 210),
+					TitleBarColour:  application.NewRGBPtr(244, 244, 242),
+					TitleTextColour: application.NewRGBPtr(24, 25, 28),
+				},
+				LightModeInactive: &application.WindowTheme{
+					BorderColour:    application.NewRGBPtr(225, 225, 222),
+					TitleBarColour:  application.NewRGBPtr(244, 244, 242),
+					TitleTextColour: application.NewRGBPtr(104, 107, 114),
+				},
+			},
+		},
 	})
 	window.Center()
 

@@ -8,6 +8,9 @@ import { createRoot } from "react-dom/client"
 import { registerSW } from "virtual:pwa-register"
 
 import App from "./App"
+import { applyDesktopPlatform } from "./lib/desktop"
+
+applyDesktopPlatform()
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,4 +33,3 @@ createRoot(root).render(
     </QueryClientProvider>
   </StrictMode>,
 )
-

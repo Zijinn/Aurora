@@ -34,6 +34,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.13.18
         version: 3.14.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@wailsio/runtime':
+        specifier: 3.0.0-alpha.97
+        version: 3.0.0-alpha.97
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -1808,6 +1811,9 @@ packages:
 
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
+
+  '@wailsio/runtime@3.0.0-alpha.97':
+    resolution: {integrity: sha512-alvEG6B0YqW7AcBcNaUWNMD9q8JWqx5AO6BPOZpijBeq4ZjhQxSom3jvvq8Z1mWSMKPEjSvlFirKIh9NLI3ajA==}
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -5002,6 +5008,8 @@ snapshots:
       '@vitest/pretty-format': 4.1.10
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
+
+  '@wailsio/runtime@3.0.0-alpha.97': {}
 
   acorn-jsx@5.3.2(acorn@8.17.0):
     dependencies:

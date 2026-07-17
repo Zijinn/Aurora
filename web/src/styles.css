@@ -502,7 +502,7 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 /* Aurora reference layout: quiet navigation, one primary workspace, immersive reading. */
 .app-shell { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); background: var(--canvas); }
 .workspace { display: grid; min-width: 0; min-height: 0; grid-template-rows: 54px minmax(0, 1fr); overflow: hidden; }
-.workspace-header { position: relative; z-index: 25; display: grid; grid-template-columns: minmax(150px, 1fr) minmax(280px, 420px) minmax(210px, 1fr); height: 54px; align-items: center; gap: 18px; padding: max(8px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) 8px 22px; background: color-mix(in srgb, var(--canvas) 92%, transparent); border-bottom: 1px solid var(--border); backdrop-filter: blur(18px); }
+.workspace-header { position: relative; z-index: 25; display: grid; grid-template-columns: minmax(150px, 1fr) minmax(280px, 420px) minmax(210px, 1fr); height: 54px; align-items: center; gap: 18px; padding: max(8px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) 8px 22px; background: var(--canvas); border-bottom: 1px solid transparent; }
 .workspace-breadcrumb { display: flex; min-width: 0; align-items: center; gap: 8px; overflow: hidden; font-size: 11px; white-space: nowrap; }
 .workspace-breadcrumb span, .workspace-breadcrumb i { color: var(--text-tertiary); font-style: normal; }
 .workspace-breadcrumb strong { overflow: hidden; font-weight: 650; text-overflow: ellipsis; }
@@ -512,8 +512,39 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 .workspace-search input { min-width: 0; color: var(--text); background: transparent; border: 0; outline: 0; }
 .workspace-search input::placeholder { color: var(--text-tertiary); }
 .workspace-search kbd { font-family: inherit; font-size: 10px; color: var(--text-tertiary); }
-.workspace-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.workspace-actions { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 4px; }
 .workspace-add { margin-left: 6px; }
+
+:root[data-desktop] .sidebar__header,
+:root[data-desktop] .workspace-header {
+  app-region: drag;
+  -webkit-app-region: drag;
+  --wails-draggable: drag;
+  user-select: none;
+}
+:root[data-desktop] .workspace-search,
+:root[data-desktop] .workspace-actions {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+  --wails-draggable: no-drag;
+  user-select: auto;
+}
+:root[data-desktop="macos"] .sidebar__header { padding-left: 74px; }
+:root[data-desktop="windows"] .workspace-header {
+  grid-template-columns: minmax(110px, 0.7fr) minmax(220px, 380px) minmax(310px, 1fr);
+  gap: 12px;
+  padding-right: 6px;
+}
+
+.window-controls { display: flex; height: 34px; align-items: center; gap: 2px; padding-left: 7px; margin-left: 4px; border-left: 1px solid var(--border); }
+.window-control { display: grid; width: 38px; height: 32px; padding: 0; place-items: center; color: var(--text-secondary); background: transparent; border: 0; border-radius: 5px; cursor: default; transition: color 140ms ease, background 140ms ease; }
+.window-control:hover { color: var(--text); background: var(--surface-muted); }
+.window-control svg { width: 14px; height: 14px; stroke-width: 1.8; }
+.window-control--minimise { app-region: minimize; --wails-non-client-region: minimize; }
+.window-control--maximise { app-region: maximize; --wails-non-client-region: maximize; }
+.window-control--close { app-region: close; --wails-non-client-region: close; }
+.window-control--close:hover { color: #fff; background: #c63c43; }
+.window-control:active:not(:disabled) { transform: none; }
 
 .sidebar { padding: max(18px, env(safe-area-inset-top)) 10px 12px max(10px, env(safe-area-inset-left)); background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(18px); }
 .sidebar__header { min-height: 38px; padding: 0 9px; }
@@ -641,6 +672,8 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 
 @media (max-width: 1100px) {
   .workspace-header { grid-template-columns: minmax(120px, 0.8fr) minmax(240px, 380px) minmax(190px, 0.8fr); }
+  :root[data-desktop="windows"] .workspace-add { width: 34px; min-height: 34px; padding: 0; margin-left: 2px; }
+  :root[data-desktop="windows"] .workspace-add span { display: none; }
   .today-overview { grid-template-columns: minmax(250px, 0.9fr) minmax(340px, 1.2fr); }
   .article-header h1 { font-size: 42px; }
 }

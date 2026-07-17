@@ -59,6 +59,8 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   localStorage.clear()
+  delete (window as Window & { _wails?: unknown })._wails
+  delete document.documentElement.dataset.desktop
 })
 
 describe("Cairn reading experience", () => {
@@ -156,6 +158,17 @@ describe("Cairn reading experience", () => {
     expect(document.documentElement.dataset.theme).toBe("dark")
     fireEvent.change(theme, { target: { value: "light" } })
     expect(document.documentElement.dataset.theme).toBe("light")
+  })
+
+  it("integrates window controls into the Aurora header on Windows", async () => {
+    const desktopHost = window as Window & { _wails?: { environment: { OS: string } } }
+    desktopHost._wails = { environment: { OS: "windows" } }
+    document.documentElement.dataset.desktop = "windows"
+    renderApp()
+
+    expect(await screen.findByRole("button", { name: "Minimise window" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Maximise or restore window" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Close window" })).toBeInTheDocument()
   })
 
   it("exposes keyboard accessible pane resize separators", async () => {

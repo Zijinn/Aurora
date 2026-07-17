@@ -1,7 +1,8 @@
-import { GearSix, MagnifyingGlass, Moon, Plus, Sun } from "@phosphor-icons/react"
+import { GearSix, MagnifyingGlass, Minus, Moon, Plus, Square, Sun, X } from "@phosphor-icons/react"
 import { useEffect, useState } from "react"
 
 import type { LibraryScope } from "../api/types"
+import { controlDesktopWindow, desktopPlatform } from "../lib/desktop"
 import { localizedScopeTitle, useTranslation } from "../lib/i18n"
 import type { ThemeMode } from "../store/reader"
 
@@ -18,6 +19,7 @@ interface WorkspaceHeaderProps {
 
 export function WorkspaceHeader(props: WorkspaceHeaderProps) {
   const { locale, t } = useTranslation()
+  const platform = desktopPlatform()
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false)
   const dark = props.theme === "dark" || (props.theme === "system" && systemDark)
 
@@ -65,6 +67,37 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
           <Plus />
           <span>{t("addFeed")}</span>
         </button>
+        {platform === "windows" && (
+          <div className="window-controls" aria-label={t("windowControls")}>
+            <button
+              className="window-control window-control--minimise"
+              type="button"
+              aria-label={t("minimiseWindow")}
+              title={t("minimiseWindow")}
+              onClick={() => void controlDesktopWindow("minimise")}
+            >
+              <Minus aria-hidden="true" />
+            </button>
+            <button
+              className="window-control window-control--maximise"
+              type="button"
+              aria-label={t("maximiseWindow")}
+              title={t("maximiseWindow")}
+              onClick={() => void controlDesktopWindow("maximise")}
+            >
+              <Square aria-hidden="true" />
+            </button>
+            <button
+              className="window-control window-control--close"
+              type="button"
+              aria-label={t("closeWindow")}
+              title={t("closeWindow")}
+              onClick={() => void controlDesktopWindow("close")}
+            >
+              <X aria-hidden="true" />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   )
