@@ -3,6 +3,7 @@ import { CircleNotch, LinkSimple } from "@phosphor-icons/react"
 import { type FormEvent, useState } from "react"
 
 import type { Device } from "../api/types"
+import { useTranslation, type Locale } from "../lib/i18n"
 
 interface PairDeviceDialogProps {
   open: boolean
@@ -12,8 +13,9 @@ interface PairDeviceDialogProps {
 }
 
 export function PairDeviceDialog(props: PairDeviceDialogProps) {
+  const { locale, t } = useTranslation()
   const [code, setCode] = useState("")
-  const [name, setName] = useState(() => defaultDeviceName())
+  const [name, setName] = useState(() => defaultDeviceName(locale))
   const platform = detectPlatform()
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -24,14 +26,14 @@ export function PairDeviceDialog(props: PairDeviceDialogProps) {
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content className="dialog-content pairing-dialog" aria-describedby={undefined} onEscapeKeyDown={(event) => event.preventDefault()} onPointerDownOutside={(event) => event.preventDefault()}>
-          <div className="pairing-header"><span className="pairing-mark"><LinkSimple /></span><Dialog.Title>Pair this device</Dialog.Title></div>
+          <div className="pairing-header"><span className="pairing-mark"><LinkSimple /></span><Dialog.Title>{t("pairThisDevice")}</Dialog.Title></div>
           <form className="dialog-form" onSubmit={submit}>
-            <label className="field-label" htmlFor="pairing-code">Pairing code</label>
+            <label className="field-label" htmlFor="pairing-code">{t("pairingCode")}</label>
             <input id="pairing-code" className="text-input pairing-code" value={code} maxLength={8} autoCapitalize="characters" autoComplete="one-time-code" onChange={(event) => setCode(event.target.value.replace(/[^a-z0-9]/gi, ""))} autoFocus />
-            <label className="field-label" htmlFor="device-name">Device name</label>
+            <label className="field-label" htmlFor="device-name">{t("deviceName")}</label>
             <input id="device-name" className="text-input" value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
             {props.error && <p className="form-error" role="alert">{props.error.message}</p>}
-            <button className="button button--primary pairing-submit" type="submit" disabled={props.pending || code.length < 8 || !name.trim()}>{props.pending ? <CircleNotch className="spin" /> : <LinkSimple />}Pair device</button>
+            <button className="button button--primary pairing-submit" type="submit" disabled={props.pending || code.length < 8 || !name.trim()}>{props.pending ? <CircleNotch className="spin" /> : <LinkSimple />}{t("pairDevice")}</button>
           </form>
         </Dialog.Content>
       </Dialog.Portal>
@@ -49,7 +51,10 @@ function detectPlatform(): Device["platform"] {
   return "web"
 }
 
-function defaultDeviceName() {
+function defaultDeviceName(locale: Locale) {
   const platform = detectPlatform()
-  return platform === "ipad" ? "iPad" : platform === "macos" ? "Mac" : platform === "windows" ? "Windows PC" : "Web browser"
+  if (platform === "ipad") return "iPad"
+  if (platform === "macos") return "Mac"
+  if (platform === "windows") return locale === "zh-CN" ? "Windows 电脑" : "Windows PC"
+  return locale === "zh-CN" ? "网页浏览器" : "Web browser"
 }

@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useState } from "react"
 
 import { cancelJob, getAIChat, getJob, listAIResults, runAIOperation, startAIChat } from "../api/client"
 import type { AIChatSession, AIOperation, AIProfile, AIResult, ListResponse } from "../api/types"
+import { useTranslation } from "../lib/i18n"
 
 interface AIWorkbenchProps {
   entryID: string
@@ -11,18 +12,19 @@ interface AIWorkbenchProps {
   onConfigure: () => void
 }
 
-const operations: Array<{ id: AIOperation; label: string; icon: typeof Brain }> = [
-  { id: "summary", label: "Summary", icon: TextAlignLeft },
-  { id: "translation", label: "Translate", icon: Translate },
-  { id: "key_points", label: "Key points", icon: ListBullets },
+const operations: Array<{ id: AIOperation; labelKey: string; icon: typeof Brain }> = [
+  { id: "summary", labelKey: "summary", icon: TextAlignLeft },
+  { id: "translation", labelKey: "translate", icon: Translate },
+  { id: "key_points", labelKey: "keyPoints", icon: ListBullets },
 ]
 
 export function AIWorkbench(props: AIWorkbenchProps) {
+  const { locale, t } = useTranslation()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<AIOperation | "chat">("summary")
   const [profileID, setProfileID] = useState("")
-  const [language, setLanguage] = useState(() => navigator.language.toLowerCase().startsWith("zh") ? "Chinese" : "English")
+  const [language, setLanguage] = useState(() => locale === "zh-CN" ? "Chinese" : "English")
   const [pendingJobID, setPendingJobID] = useState("")
   const [pendingOperation, setPendingOperation] = useState<AIOperation | null>(null)
   const [sessionID, setSessionID] = useState("")
@@ -86,7 +88,7 @@ export function AIWorkbench(props: AIWorkbenchProps) {
     onSuccess: () => void job.refetch(),
   })
   const latestResult = results.data?.items.find((item) => item.operation === mode)
-  const error = operationMutation.error ?? chatMutation.error ?? cancelMutation.error ?? (job.data?.state === "failed" ? new Error(job.data.error_message ?? "AI task failed") : null)
+  const error = operationMutation.error ?? chatMutation.error ?? cancelMutation.error ?? (job.data?.state === "failed" ? new Error(job.data.error_message ?? t("aiTaskFailed")) : null)
   const startOperation = (operation: AIOperation) => {
     if (!activeProfileID) return
     operationMutation.mutate({ operation, profile: activeProfileID, targetLanguage: operation === "translation" ? language : language })
@@ -98,40 +100,40 @@ export function AIWorkbench(props: AIWorkbenchProps) {
   }
 
   return (
-    <section className={open ? "ai-workbench ai-workbench--open" : "ai-workbench"} aria-label="AI assistant" aria-busy={jobActive}>
+    <section className={open ? "ai-workbench ai-workbench--open" : "ai-workbench"} aria-label={t("aiAssistant")} aria-busy={jobActive}>
       <button className="ai-workbench__toggle" type="button" aria-expanded={open} aria-controls="ai-workbench-panel" onClick={() => setOpen((value) => !value)}><Brain /><span>AI</span></button>
       {open && <div className="ai-workbench__body" id="ai-workbench-panel">
-        {!activeProfile ? <button className="button button--secondary" type="button" onClick={props.onConfigure}><Brain />Configure AI</button> : <>
+        {!activeProfile ? <button className="button button--secondary" type="button" onClick={props.onConfigure}><Brain />{t("configureAI")}</button> : <>
           <div className="ai-workbench__controls">
-            <select className="select-input ai-profile-select" aria-label="AI provider" value={activeProfileID} onChange={(event) => setProfileID(event.target.value)}>
+            <select className="select-input ai-profile-select" aria-label={t("aiProvider")} value={activeProfileID} onChange={(event) => setProfileID(event.target.value)}>
               {props.profiles.filter((profile) => profile.enabled).map((profile) => <option value={profile.id} key={profile.id}>{profile.name}</option>)}
             </select>
-            <select className="select-input ai-language-select" aria-label="AI response language" value={language} onChange={(event) => setLanguage(event.target.value)}>
-              <option value="English">English</option>
-              <option value="Chinese">Chinese</option>
-              <option value="Japanese">Japanese</option>
-              <option value="Spanish">Spanish</option>
-              <option value="French">French</option>
-              <option value="German">German</option>
+            <select className="select-input ai-language-select" aria-label={t("aiResponseLanguage")} value={language} onChange={(event) => setLanguage(event.target.value)}>
+              <option value="English">{t("english")}</option>
+              <option value="Chinese">{t("chinese")}</option>
+              <option value="Japanese">{t("japanese")}</option>
+              <option value="Spanish">{t("spanish")}</option>
+              <option value="French">{t("french")}</option>
+              <option value="German">{t("german")}</option>
             </select>
           </div>
-          <div className="ai-mode-tabs" role="tablist" aria-label="AI tools">
-            {operations.map((operation) => { const Icon = operation.icon; return <button className={mode === operation.id ? "ai-mode-tab ai-mode-tab--active" : "ai-mode-tab"} id={`ai-tab-${operation.id}`} type="button" role="tab" aria-controls="ai-tool-panel" aria-selected={mode === operation.id} key={operation.id} onClick={() => setMode(operation.id)}><Icon />{operation.label}</button> })}
-            <button className={mode === "chat" ? "ai-mode-tab ai-mode-tab--active" : "ai-mode-tab"} id="ai-tab-chat" type="button" role="tab" aria-controls="ai-tool-panel" aria-selected={mode === "chat"} onClick={() => setMode("chat")}><ChatCircle />Chat</button>
+          <div className="ai-mode-tabs" role="tablist" aria-label={t("aiAssistant")}>
+            {operations.map((operation) => { const Icon = operation.icon; return <button className={mode === operation.id ? "ai-mode-tab ai-mode-tab--active" : "ai-mode-tab"} id={`ai-tab-${operation.id}`} type="button" role="tab" aria-controls="ai-tool-panel" aria-selected={mode === operation.id} key={operation.id} onClick={() => setMode(operation.id)}><Icon />{t(operation.labelKey)}</button> })}
+            <button className={mode === "chat" ? "ai-mode-tab ai-mode-tab--active" : "ai-mode-tab"} id="ai-tab-chat" type="button" role="tab" aria-controls="ai-tool-panel" aria-selected={mode === "chat"} onClick={() => setMode("chat")}><ChatCircle />{t("chat")}</button>
           </div>
           {mode === "chat" ? <div className="ai-chat" id="ai-tool-panel" role="tabpanel" aria-labelledby="ai-tab-chat">
             <div className="ai-chat__messages" aria-live="polite">
-              {chat.data?.messages.map((item) => <div className={`ai-chat__message ai-chat__message--${item.role}`} key={item.id}><strong>{item.role === "user" ? "You" : activeProfile?.name ?? "AI"}</strong><p>{item.content}</p></div>)}
+              {chat.data?.messages.map((item) => <div className={`ai-chat__message ai-chat__message--${item.role}`} key={item.id}><strong>{item.role === "user" ? t("you") : activeProfile?.name ?? "AI"}</strong><p>{item.content}</p></div>)}
             </div>
             <form className="ai-chat__form" onSubmit={submitChat}>
-              <textarea className="text-input" aria-label="Ask about this article" placeholder="Ask about this article" maxLength={4000} value={message} onChange={(event) => setMessage(event.target.value)} />
-              <button className="button button--primary" type="submit" disabled={!message.trim() || !activeProfileID || jobActive || chatMutation.isPending}>{chatMutation.isPending || jobActive ? <CircleNotch className="spin" /> : <ChatCircle />}Ask</button>
+              <textarea className="text-input" aria-label={t("askAboutArticle")} placeholder={t("askAboutArticle")} maxLength={4000} value={message} onChange={(event) => setMessage(event.target.value)} />
+              <button className="button button--primary" type="submit" disabled={!message.trim() || !activeProfileID || jobActive || chatMutation.isPending}>{chatMutation.isPending || jobActive ? <CircleNotch className="spin" /> : <ChatCircle />}{t("ask")}</button>
             </form>
           </div> : <div className="ai-operation" id="ai-tool-panel" role="tabpanel" aria-labelledby={`ai-tab-${mode}`}>
-            <button className="button button--primary" type="button" disabled={!activeProfileID || jobActive || operationMutation.isPending} onClick={() => startOperation(mode)}>{operationMutation.isPending || (jobActive && pendingOperation === mode) ? <CircleNotch className="spin" /> : <Brain />}Run {operations.find((item) => item.id === mode)?.label}</button>
-            {latestResult && <div className="ai-result" aria-live="polite"><p>{latestResult.result_text}</p><small>{latestResult.usage.total_tokens ?? 0} tokens</small></div>}
+            <button className="button button--primary" type="button" disabled={!activeProfileID || jobActive || operationMutation.isPending} onClick={() => startOperation(mode)}>{operationMutation.isPending || (jobActive && pendingOperation === mode) ? <CircleNotch className="spin" /> : <Brain />}{t("run")} {t(operations.find((item) => item.id === mode)?.labelKey ?? "summary")}</button>
+            {latestResult && <div className="ai-result" aria-live="polite"><p>{latestResult.result_text}</p><small>{new Intl.NumberFormat(locale).format(latestResult.usage.total_tokens ?? 0)} {t("tokens")}</small></div>}
           </div>}
-          {jobActive && <button className="button button--quiet ai-cancel" type="button" disabled={cancelMutation.isPending} onClick={() => cancelMutation.mutate(pendingJobID)}><Stop />Cancel</button>}
+          {jobActive && <button className="button button--quiet ai-cancel" type="button" disabled={cancelMutation.isPending} onClick={() => cancelMutation.mutate(pendingJobID)}><Stop />{t("cancel")}</button>}
           {error && <p className="form-error" role="alert">{error.message}</p>}
         </>}
       </div>}

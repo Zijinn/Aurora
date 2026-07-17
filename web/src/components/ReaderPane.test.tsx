@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { expect, it, vi } from "vitest"
 
 import type { EntryDetail, Tag } from "../api/types"
+import { useReaderStore } from "../store/reader"
 import { ReaderPane } from "./ReaderPane"
 
 const detail: EntryDetail = {
@@ -28,6 +29,7 @@ const tags: Tag[] = [
 ]
 
 it("shows and updates article tags", () => {
+  useReaderStore.setState({ locale: "en-US" })
   const onTagsChange = vi.fn()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(

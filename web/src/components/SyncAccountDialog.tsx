@@ -4,6 +4,7 @@ import { type FormEvent, useMemo, useState } from "react"
 
 import type { CreateSyncAccountInput } from "../api/client"
 import type { SyncProvider, SyncProviderID } from "../api/types"
+import { useTranslation } from "../lib/i18n"
 
 interface SyncAccountDialogProps {
   open: boolean
@@ -19,6 +20,7 @@ const defaultEndpoints: Partial<Record<SyncProviderID, string>> = {
 }
 
 export function SyncAccountDialog(props: SyncAccountDialogProps) {
+  const { t } = useTranslation()
   const fallbackProvider = props.providers[0]?.id ?? "freshrss"
   const [provider, setProvider] = useState<SyncProviderID>(fallbackProvider)
   const [name, setName] = useState("")
@@ -67,57 +69,57 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content className="dialog-content" aria-describedby={undefined}>
           <div className="dialog-header">
-            <Dialog.Title>Add sync account</Dialog.Title>
-            <Dialog.Close asChild><button className="icon-button" type="button" aria-label="Close" title="Close"><X /></button></Dialog.Close>
+            <Dialog.Title>{t("addSyncAccount")}</Dialog.Title>
+            <Dialog.Close asChild><button className="icon-button" type="button" aria-label={t("close")} title={t("close")}><X /></button></Dialog.Close>
           </div>
           <form className="dialog-form" onSubmit={submit}>
-            <label className="field-label" htmlFor="sync-provider">Provider</label>
+            <label className="field-label" htmlFor="sync-provider">{t("provider")}</label>
             <select id="sync-provider" className="select-input" value={provider} onChange={(event) => changeProvider(event.target.value as SyncProviderID)}>
               {props.providers.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
             </select>
-            <label className="field-label" htmlFor="sync-name">Account name</label>
+            <label className="field-label" htmlFor="sync-name">{t("accountName")}</label>
             <input id="sync-name" className="text-input" value={name} placeholder={providerName} maxLength={120} onChange={(event) => setName(event.target.value)} />
-            <label className="field-label" htmlFor="sync-endpoint">Server URL</label>
+            <label className="field-label" htmlFor="sync-endpoint">{t("serverURL")}</label>
             <input id="sync-endpoint" className="text-input" type="url" inputMode="url" autoComplete="url" placeholder="https://reader.example.com" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
             {usesAPIKey ? (
               <>
-                <label className="field-label" htmlFor="sync-api-key">API key</label>
+                <label className="field-label" htmlFor="sync-api-key">{t("apiKey")}</label>
                 <input id="sync-api-key" className="text-input" type="password" autoComplete="off" value={apiKey} onChange={(event) => setAPIKey(event.target.value)} />
               </>
             ) : usesBasicAuth ? (
               <>
-                <label className="field-label" htmlFor="sync-username">Username</label>
+                <label className="field-label" htmlFor="sync-username">{t("username")}</label>
                 <input id="sync-username" className="text-input" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} />
-                <label className="field-label" htmlFor="sync-password">Password</label>
+                <label className="field-label" htmlFor="sync-password">{t("password")}</label>
                 <input id="sync-password" className="text-input" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
               </>
             ) : (
               <>
-                <label className="field-label" htmlFor="sync-token">Access token</label>
+                <label className="field-label" htmlFor="sync-token">{t("accessToken")}</label>
                 <input id="sync-token" className="text-input" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} />
-                <label className="field-label" htmlFor="sync-username">Username</label>
+                <label className="field-label" htmlFor="sync-username">{t("username")}</label>
                 <input id="sync-username" className="text-input" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} />
-                <label className="field-label" htmlFor="sync-password">Password</label>
+                <label className="field-label" htmlFor="sync-password">{t("password")}</label>
                 <input id="sync-password" className="text-input" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
               </>
             )}
-            <label className="field-label" htmlFor="sync-interval">Sync interval</label>
+            <label className="field-label" htmlFor="sync-interval">{t("syncInterval")}</label>
             <select id="sync-interval" className="select-input" value={interval} onChange={(event) => setInterval(Number(event.target.value))}>
-              <option value={15}>15 minutes</option>
-              <option value={30}>30 minutes</option>
-              <option value={60}>1 hour</option>
-              <option value={180}>3 hours</option>
-              <option value={720}>12 hours</option>
-              <option value={1440}>1 day</option>
+              <option value={15}>{t("minutes15")}</option>
+              <option value={30}>{t("minutes30")}</option>
+              <option value={60}>{t("hour1")}</option>
+              <option value={180}>{t("hours3")}</option>
+              <option value={720}>{t("hours12")}</option>
+              <option value={1440}>{t("day1")}</option>
             </select>
             <label className="checkbox-row" htmlFor="sync-private-network">
               <input id="sync-private-network" type="checkbox" checked={allowPrivate} onChange={(event) => setAllowPrivate(event.target.checked)} />
-              <span>Allow private network endpoint</span>
+              <span>{t("allowPrivateEndpoint")}</span>
             </label>
             {props.error && <p className="form-error" role="alert">{props.error.message}</p>}
             <div className="dialog-actions dialog-actions--end">
               <button className="button button--primary" type="submit" disabled={props.pending || !endpoint.trim() || !credentialsReady}>
-                {props.pending ? <CircleNotch className="spin" /> : <CloudArrowDown />}Add account
+                {props.pending ? <CircleNotch className="spin" /> : <CloudArrowDown />}{t("addAccount")}
               </button>
             </div>
           </form>

@@ -4,6 +4,7 @@ import { type FormEvent, useMemo, useState } from "react"
 
 import type { CreateAIProfileInput } from "../api/client"
 import type { AIProvider, AIProviderID } from "../api/types"
+import { useTranslation } from "../lib/i18n"
 
 interface AIProfileDialogProps {
   open: boolean
@@ -20,6 +21,7 @@ const defaults: Record<AIProviderID, { endpoint: string; model: string }> = {
 }
 
 export function AIProfileDialog(props: AIProfileDialogProps) {
+  const { t } = useTranslation()
   const [provider, setProvider] = useState<AIProviderID>("openai_compatible")
   const [name, setName] = useState("")
   const [endpoint, setEndpoint] = useState(defaults.openai_compatible.endpoint)
@@ -60,30 +62,30 @@ export function AIProfileDialog(props: AIProfileDialogProps) {
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content className="dialog-content" aria-describedby={undefined}>
           <div className="dialog-header">
-            <Dialog.Title>Add AI provider</Dialog.Title>
-            <Dialog.Close asChild><button className="icon-button" type="button" aria-label="Close" title="Close"><X /></button></Dialog.Close>
+            <Dialog.Title>{t("addAIProvider")}</Dialog.Title>
+            <Dialog.Close asChild><button className="icon-button" type="button" aria-label={t("close")} title={t("close")}><X /></button></Dialog.Close>
           </div>
           <form className="dialog-form" onSubmit={submit}>
-            <label className="field-label" htmlFor="ai-provider">Provider</label>
+            <label className="field-label" htmlFor="ai-provider">{t("provider")}</label>
             <select id="ai-provider" className="select-input" value={provider} onChange={(event) => changeProvider(event.target.value as AIProviderID)}>
               {props.providers.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
             </select>
-            <label className="field-label" htmlFor="ai-name">Profile name</label>
+            <label className="field-label" htmlFor="ai-name">{t("profileName")}</label>
             <input id="ai-name" className="text-input" value={name} placeholder={providerName} maxLength={120} onChange={(event) => setName(event.target.value)} />
-            <label className="field-label" htmlFor="ai-endpoint">Server URL</label>
+            <label className="field-label" htmlFor="ai-endpoint">{t("serverURL")}</label>
             <input id="ai-endpoint" className="text-input" type="url" inputMode="url" autoComplete="url" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
-            <label className="field-label" htmlFor="ai-model">Model</label>
+            <label className="field-label" htmlFor="ai-model">{t("model")}</label>
             <input id="ai-model" className="text-input" value={model} maxLength={200} onChange={(event) => setModel(event.target.value)} />
-            {provider === "openai_compatible" && <><label className="field-label" htmlFor="ai-api-key">API key</label><input id="ai-api-key" className="text-input" type="password" autoComplete="off" value={apiKey} onChange={(event) => setAPIKey(event.target.value)} /></>}
-            <label className="field-label" htmlFor="ai-temperature">Temperature</label>
+            {provider === "openai_compatible" && <><label className="field-label" htmlFor="ai-api-key">{t("apiKey")}</label><input id="ai-api-key" className="text-input" type="password" autoComplete="off" value={apiKey} onChange={(event) => setAPIKey(event.target.value)} /></>}
+            <label className="field-label" htmlFor="ai-temperature">{t("temperature")}</label>
             <input id="ai-temperature" className="range-input" type="range" min="0" max="2" step="0.1" value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} />
             <output className="range-output" htmlFor="ai-temperature">{temperature.toFixed(1)}</output>
-            <label className="checkbox-row" htmlFor="ai-private-network"><input id="ai-private-network" type="checkbox" checked={allowPrivate} onChange={(event) => setAllowPrivate(event.target.checked)} /><span>Allow private network endpoint</span></label>
-            <label className="checkbox-row privacy-confirmation" htmlFor="ai-privacy"><input id="ai-privacy" type="checkbox" checked={privacyApproved} onChange={(event) => setPrivacyApproved(event.target.checked)} /><span>Article content may be sent to this provider</span></label>
-            <label className="checkbox-row" htmlFor="ai-default"><input id="ai-default" type="checkbox" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} /><span>Default AI provider</span></label>
+            <label className="checkbox-row" htmlFor="ai-private-network"><input id="ai-private-network" type="checkbox" checked={allowPrivate} onChange={(event) => setAllowPrivate(event.target.checked)} /><span>{t("allowPrivateEndpoint")}</span></label>
+            <label className="checkbox-row privacy-confirmation" htmlFor="ai-privacy"><input id="ai-privacy" type="checkbox" checked={privacyApproved} onChange={(event) => setPrivacyApproved(event.target.checked)} /><span>{t("articleMayBeSent")}</span></label>
+            <label className="checkbox-row" htmlFor="ai-default"><input id="ai-default" type="checkbox" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} /><span>{t("defaultAIProvider")}</span></label>
             {props.error && <p className="form-error" role="alert">{props.error.message}</p>}
             <div className="dialog-actions dialog-actions--end">
-              <button className="button button--primary" type="submit" disabled={props.pending || !endpoint.trim() || !model.trim() || (remote && !privacyApproved)}>{props.pending ? <CircleNotch className="spin" /> : <Brain />}Add provider</button>
+              <button className="button button--primary" type="submit" disabled={props.pending || !endpoint.trim() || !model.trim() || (remote && !privacyApproved)}>{props.pending ? <CircleNotch className="spin" /> : <Brain />}{t("addProvider")}</button>
             </div>
           </form>
         </Dialog.Content>

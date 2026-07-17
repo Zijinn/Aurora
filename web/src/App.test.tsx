@@ -12,6 +12,8 @@ beforeEach(() => {
     search: "",
     viewMode: "standard",
     mobileReaderOpen: false,
+    locale: "en-US",
+    paneLayout: { sidebarWidth: 256, timelineWidth: 416 },
   })
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
@@ -130,6 +132,28 @@ describe("Cairn reading experience", () => {
     expect(screen.getByLabelText("Tag name")).toBeInTheDocument()
     expect(screen.getByLabelText("Rule conditions JSON")).toBeInTheDocument()
     expect(screen.getByLabelText("Saved filter query JSON")).toBeInTheDocument()
+  })
+
+  it("switches the interface language and persists the choice", async () => {
+    renderApp()
+    fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
+    const language = screen.getByRole("combobox", { name: "Interface language" })
+    fireEvent.change(language, { target: { value: "zh-CN" } })
+    expect(useReaderStore.getState().locale).toBe("zh-CN")
+    expect(screen.getByRole("heading", { name: "偏好设置" })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }))
+    expect(screen.getByRole("heading", { name: "今天" })).toBeInTheDocument()
+    expect(localStorage.getItem("cairn-reader-preferences")).toContain("zh-CN")
+  })
+
+  it("exposes keyboard accessible pane resize separators", async () => {
+    renderApp()
+    const separators = await screen.findAllByRole("separator")
+    expect(separators).toHaveLength(2)
+    expect(separators[0]).toHaveAttribute("aria-orientation", "vertical")
+    expect(separators[0]).toHaveAttribute("aria-valuenow", "256")
+    fireEvent.keyDown(separators[0]!, { key: "ArrowLeft" })
+    expect(useReaderStore.getState().paneLayout.sidebarWidth).toBe(240)
   })
 
   it("uses saved filters and tags as timeline scopes", async () => {

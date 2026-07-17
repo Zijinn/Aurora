@@ -10,6 +10,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { useRef } from "react"
 
 import type { Entry, LibraryScope, ViewMode } from "../api/types"
+import { localizedScopeTitle, useTranslation, type Locale, type Translator } from "../lib/i18n"
 
 interface TimelinePaneProps {
   scope: LibraryScope
@@ -32,8 +33,9 @@ interface TimelinePaneProps {
 }
 
 export function TimelinePane(props: TimelinePaneProps) {
-	const scrollRef = useRef<HTMLDivElement>(null)
-	const selectedFeedID = props.scope.kind === "feed" ? props.scope.id : null
+  const { locale, t } = useTranslation()
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const selectedFeedID = props.scope.kind === "feed" ? props.scope.id : null
   const virtualizer = useVirtualizer({
     count: props.entries.length,
     getScrollElement: () => scrollRef.current,
@@ -51,18 +53,18 @@ export function TimelinePane(props: TimelinePaneProps) {
     <section className="timeline" aria-labelledby="timeline-title">
       <header className="pane-header">
         <div className="pane-header__titles">
-          <p className="pane-header__context">{scopeContext(props.scope)}</p>
-          <h1 id="timeline-title">{props.scope.title}</h1>
+          <p className="pane-header__context">{scopeContext(props.scope, t)}</p>
+          <h1 id="timeline-title">{localizedScopeTitle(props.scope, locale)}</h1>
         </div>
         <div className="pane-header__actions">
-		  {selectedFeedID && (
+          {selectedFeedID && (
             <button
               className="icon-button"
               type="button"
-              aria-label="Refresh feed"
-              title="Refresh feed"
+              aria-label={t("refreshFeed")}
+              title={t("refreshFeed")}
               disabled={props.refreshPending}
-			  onClick={() => props.onRefresh(selectedFeedID)}
+              onClick={() => props.onRefresh(selectedFeedID)}
             >
               {props.refreshPending ? <CircleNotch className="spin" /> : <ArrowsClockwise />}
             </button>
@@ -74,7 +76,7 @@ export function TimelinePane(props: TimelinePaneProps) {
             onClick={props.onMarkAllRead}
           >
             {props.markReadPending ? <CircleNotch className="spin" /> : <Article />}
-            <span>Mark all read</span>
+            <span>{t("markAllRead")}</span>
           </button>
         </div>
       </header>
@@ -83,16 +85,16 @@ export function TimelinePane(props: TimelinePaneProps) {
       ) : props.error ? (
         <div className="pane-state" role="alert">
           <WarningCircle aria-hidden="true" />
-          <h2>Timeline unavailable</h2>
+          <h2>{t("timelineUnavailable")}</h2>
           <p>{props.error.message}</p>
-          <button className="button button--secondary" type="button" onClick={props.onRetry}>Retry</button>
+          <button className="button button--secondary" type="button" onClick={props.onRetry}>{t("retry")}</button>
         </div>
       ) : props.entries.length === 0 ? (
         <div className="timeline__empty">
           <div className="empty-mark" aria-hidden="true"><span /><span /><span /></div>
-          <h2>{props.scope.kind === "unread" ? "You are caught up" : "Your reading trail starts here"}</h2>
-          <p>{props.scope.kind === "unread" ? "New unread articles will appear here." : "Add a feed or import an OPML file to build your library."}</p>
-          <button className="button button--primary" type="button" onClick={props.onAdd}><Plus />Add feed</button>
+          <h2>{props.scope.kind === "unread" ? t("caughtUp") : t("readingTrailStarts")}</h2>
+          <p>{props.scope.kind === "unread" ? t("unreadWillAppear") : t("addFeedOrImport")}</p>
+          <button className="button button--primary" type="button" onClick={props.onAdd}><Plus />{t("addFeed")}</button>
         </div>
       ) : (
         <div className="timeline-scroll" ref={scrollRef} onScroll={onScroll}>
@@ -112,6 +114,8 @@ export function TimelinePane(props: TimelinePaneProps) {
                     entry={entry}
                     selected={entry.id === props.selectedEntryID}
                     viewMode={props.viewMode}
+                    locale={locale}
+                    t={t}
                     onSelect={() => props.onSelect(entry.id)}
                     onToggleStar={() => props.onToggleStar(entry)}
                   />
@@ -119,7 +123,7 @@ export function TimelinePane(props: TimelinePaneProps) {
               )
             })}
           </div>
-          {props.isFetchingNext && <div className="timeline-loading-more"><CircleNotch className="spin" />Loading</div>}
+          {props.isFetchingNext && <div className="timeline-loading-more"><CircleNotch className="spin" />{t("loading")}</div>}
         </div>
       )}
     </section>
@@ -130,12 +134,16 @@ function TimelineEntry({
   entry,
   selected,
   viewMode,
+  locale,
+  t,
   onSelect,
   onToggleStar,
 }: {
   entry: Entry
   selected: boolean
   viewMode: ViewMode
+  locale: Locale
+  t: Translator
   onSelect: () => void
   onToggleStar: () => void
 }) {
@@ -147,17 +155,17 @@ function TimelineEntry({
       <button className="timeline-entry__main" type="button" aria-current={selected ? "true" : undefined} onClick={onSelect}>
         <div className="timeline-entry__meta">
           <span className="timeline-entry__feed"><span className="unread-dot" />{entry.feed_title}</span>
-          <time dateTime={entry.published_at}>{formatRelativeTime(entry.published_at)}</time>
+          <time dateTime={entry.published_at}>{formatRelativeTime(entry.published_at, locale)}</time>
         </div>
-        <h2>{entry.title || "Untitled"}</h2>
+        <h2>{entry.title || t("untitled")}</h2>
         {viewMode !== "compact" && entry.summary && <p>{entry.summary}</p>}
         {entry.author && <span className="timeline-entry__author">{entry.author}</span>}
       </button>
       <button
         className={entry.state.is_starred ? "entry-star entry-star--active" : "entry-star"}
         type="button"
-        aria-label={entry.state.is_starred ? "Remove star" : "Star article"}
-        title={entry.state.is_starred ? "Remove star" : "Star article"}
+        aria-label={entry.state.is_starred ? t("removeStar") : t("starArticle")}
+        title={entry.state.is_starred ? t("removeStar") : t("starArticle")}
         onClick={onToggleStar}
       >
         <Star weight={entry.state.is_starred ? "fill" : "regular"} />
@@ -167,26 +175,27 @@ function TimelineEntry({
 }
 
 function TimelineSkeleton() {
-  return <div className="timeline-skeleton" aria-label="Loading articles">{Array.from({ length: 7 }, (_, index) => <div className="skeleton-row" key={index}><span /><span /><span /></div>)}</div>
+  const { t } = useTranslation()
+  return <div className="timeline-skeleton" aria-label={t("loadingArticles")}>{Array.from({ length: 7 }, (_, index) => <div className="skeleton-row" key={index}><span /><span /><span /></div>)}</div>
 }
 
-function scopeContext(scope: LibraryScope) {
+function scopeContext(scope: LibraryScope, t: Translator) {
   switch (scope.kind) {
-    case "feed": return "Feed"
-    case "folder": return "Folder"
-    case "today": return "Library"
-    default: return "Smart view"
+    case "feed": return t("feed")
+    case "folder": return t("folder")
+    case "today": return t("library")
+    default: return t("smartView")
   }
 }
 
-function formatRelativeTime(value: string) {
+function formatRelativeTime(value: string, locale: Locale) {
   const date = new Date(value)
   const deltaMinutes = Math.round((date.getTime() - Date.now()) / 60_000)
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
   if (Math.abs(deltaMinutes) < 60) return formatter.format(deltaMinutes, "minute")
   const deltaHours = Math.round(deltaMinutes / 60)
   if (Math.abs(deltaHours) < 24) return formatter.format(deltaHours, "hour")
   const deltaDays = Math.round(deltaHours / 24)
   if (Math.abs(deltaDays) < 7) return formatter.format(deltaDays, "day")
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date)
+  return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(date)
 }

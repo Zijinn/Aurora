@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react"
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import {
   addFeed,
@@ -45,9 +45,10 @@ import {
   updateSyncAccount,
 } from "../api/client"
 import type { Entry, EntryState } from "../api/types"
+import { useTranslation } from "../lib/i18n"
 import { keyboardChord } from "../lib/shortcuts"
 import { enqueueStateMutation, flushMutationOutbox } from "../offline/database"
-import { useReaderStore } from "../store/reader"
+import { useReaderStore, type PaneLayout } from "../store/reader"
 import { AddFeedDialog } from "./AddFeedDialog"
 import { AIProfileDialog } from "./AIProfileDialog"
 import { PreferencesDialog } from "./PreferencesDialog"
@@ -60,6 +61,13 @@ import { CommandPalette } from "./CommandPalette"
 import { PairDeviceDialog } from "./PairDeviceDialog"
 import { SyncAccountDialog } from "./SyncAccountDialog"
 import { LibraryOrganizationDialog } from "./LibraryOrganizationDialog"
+import { PaneDivider } from "./PaneDivider"
+
+const DESKTOP_BREAKPOINT = 900
+const SIDEBAR_MIN = 210
+const SIDEBAR_MAX = 360
+const TIMELINE_MIN = 300
+const TIMELINE_MAX = 560
 
 export function AppShell() {
   const queryClient = useQueryClient()
@@ -73,6 +81,9 @@ export function AppShell() {
   const setSearch = useReaderStore((state) => state.setSearch)
   const closeMobileReader = useReaderStore((state) => state.closeMobileReader)
   const shortcuts = useReaderStore((state) => state.shortcuts)
+  const paneLayout = useReaderStore((state) => state.paneLayout)
+  const setPaneLayout = useReaderStore((state) => state.setPaneLayout)
+  const { locale, t } = useTranslation()
   const deferredSearch = useDeferredValue(search)
   const [addOpen, setAddOpen] = useState(false)
   const [preferencesOpen, setPreferencesOpen] = useState(false)
@@ -81,7 +92,59 @@ export function AppShell() {
   const [aiProfileOpen, setAIProfileOpen] = useState(false)
   const [organizationOpen, setOrganizationOpen] = useState(false)
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false)
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const online = useOnlineState()
+  const shellRef = useRef<HTMLElement>(null)
+  const dragStartLayout = useRef<PaneLayout>(paneLayout)
+  const dragLayout = useRef<PaneLayout>(paneLayout)
+
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
+
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth)
+    window.addEventListener("resize", update)
+    return () => window.removeEventListener("resize", update)
+  }, [])
+
+  const constrainedPaneLayout = useMemo(() => constrainPaneLayout(paneLayout, viewportWidth), [paneLayout, viewportWidth])
+  useEffect(() => {
+    if (constrainedPaneLayout.sidebarWidth !== paneLayout.sidebarWidth || constrainedPaneLayout.timelineWidth !== paneLayout.timelineWidth) {
+      setPaneLayout(constrainedPaneLayout)
+    }
+  }, [constrainedPaneLayout, paneLayout, setPaneLayout])
+
+  const applyPaneLayout = useCallback((next: PaneLayout) => {
+    shellRef.current?.style.setProperty("--sidebar-width", `${next.sidebarWidth}px`)
+    shellRef.current?.style.setProperty("--timeline-width", `${next.timelineWidth}px`)
+  }, [])
+  const startPaneResize = useCallback(() => {
+    dragStartLayout.current = constrainedPaneLayout
+    dragLayout.current = constrainedPaneLayout
+  }, [constrainedPaneLayout])
+  const resizePane = useCallback((edge: "sidebar" | "timeline", delta: number) => {
+    const base = dragStartLayout.current
+    const readerMinimum = minimumReaderWidth(viewportWidth)
+    if (edge === "sidebar") {
+      const max = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, viewportWidth - base.timelineWidth - readerMinimum))
+      dragLayout.current = { ...base, sidebarWidth: Math.round(clamp(base.sidebarWidth + delta, SIDEBAR_MIN, max)) }
+    } else {
+      const max = Math.max(TIMELINE_MIN, Math.min(TIMELINE_MAX, viewportWidth - base.sidebarWidth - readerMinimum))
+      dragLayout.current = { ...base, timelineWidth: Math.round(clamp(base.timelineWidth + delta, TIMELINE_MIN, max)) }
+    }
+    applyPaneLayout(dragLayout.current)
+  }, [applyPaneLayout, viewportWidth])
+  const finishPaneResize = useCallback(() => {
+    setPaneLayout(dragLayout.current)
+  }, [setPaneLayout])
+  const readerMinimum = minimumReaderWidth(viewportWidth)
+  const sidebarMax = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, viewportWidth - constrainedPaneLayout.timelineWidth - readerMinimum))
+  const timelineMax = Math.max(TIMELINE_MIN, Math.min(TIMELINE_MAX, viewportWidth - constrainedPaneLayout.sidebarWidth - readerMinimum))
+  const shellStyle = {
+    "--sidebar-width": `${constrainedPaneLayout.sidebarWidth}px`,
+    "--timeline-width": `${constrainedPaneLayout.timelineWidth}px`,
+  } as CSSProperties
 
   const status = useQuery({
     queryKey: ["server-status"],
@@ -392,8 +455,8 @@ export function AppShell() {
 
   return (
     <>
-    <a className="skip-link" href="#main-content">Skip to content</a>
-    <main id="main-content" tabIndex={-1} className={mobileReaderOpen ? "app-shell app-shell--reader-open" : "app-shell"}>
+    <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
+    <main ref={shellRef} id="main-content" tabIndex={-1} style={shellStyle} className={mobileReaderOpen ? "app-shell app-shell--reader-open" : "app-shell"}>
       <Sidebar
         scope={scope}
         search={search}
@@ -443,6 +506,26 @@ export function AppShell() {
         onFetchReadability={(entryID) => readabilityMutation.mutate(entryID)}
         onConfigureAI={() => setAIProfileOpen(true)}
       />
+      <PaneDivider
+        edge="sidebar"
+        value={constrainedPaneLayout.sidebarWidth}
+        min={SIDEBAR_MIN}
+        max={sidebarMax}
+        label={t("resizeSidebar")}
+        onStart={startPaneResize}
+        onDelta={(delta) => resizePane("sidebar", delta)}
+        onEnd={finishPaneResize}
+      />
+      <PaneDivider
+        edge="timeline"
+        value={constrainedPaneLayout.timelineWidth}
+        min={TIMELINE_MIN}
+        max={timelineMax}
+        label={t("resizeTimeline")}
+        onStart={startPaneResize}
+        onDelta={(delta) => resizePane("timeline", delta)}
+        onEnd={finishPaneResize}
+      />
       <MobileNav scope={scope} onScopeChange={setScope} onLibrary={() => setMobileLibraryOpen(true)} onPreferences={() => setPreferencesOpen(true)} />
       <MobileLibraryDialog
         open={mobileLibraryOpen}
@@ -454,7 +537,7 @@ export function AppShell() {
         onOpenChange={setMobileLibraryOpen}
         onScopeChange={setScope}
       />
-      {!online && <div className="offline-banner">Offline mode</div>}
+      {!online && <div className="offline-banner">{t("offlineMode")}</div>}
       <AddFeedDialog
         open={addOpen}
         folders={folders.data?.items ?? []}
@@ -492,7 +575,7 @@ export function AppShell() {
         onToggleSyncAccount={(accountID, enabled) => toggleSyncMutation.mutate({ accountID, enabled })}
         onRunSyncAccount={(accountID) => runSyncMutation.mutate(accountID)}
         onDeleteSyncAccount={(accountID) => {
-          if (window.confirm("Delete this sync account?")) deleteSyncMutation.mutate(accountID)
+          if (window.confirm(t("deleteSyncConfirmation"))) deleteSyncMutation.mutate(accountID)
         }}
         onAddAIProfile={() => {
           setPreferencesOpen(false)
@@ -501,7 +584,7 @@ export function AppShell() {
         onToggleAIProfile={(profileID, enabled) => toggleAIProfileMutation.mutate({ profileID, enabled })}
         onDefaultAIProfile={(profileID) => defaultAIProfileMutation.mutate(profileID)}
         onDeleteAIProfile={(profileID) => {
-          if (window.confirm("Delete this AI provider?")) deleteAIProfileMutation.mutate(profileID)
+          if (window.confirm(t("deleteAIConfirmation"))) deleteAIProfileMutation.mutate(profileID)
         }}
       />
       <CommandPalette
@@ -547,24 +630,46 @@ export function AppShell() {
         onOpenChange={setOrganizationOpen}
         onCreateFolder={(input) => createFolderMutation.mutate(input)}
         onDeleteFolder={(folderID) => {
-          if (window.confirm("Delete this folder and unassign its subscriptions?")) deleteFolderMutation.mutate(folderID)
+          if (window.confirm(t("deleteFolderConfirmation"))) deleteFolderMutation.mutate(folderID)
         }}
         onCreateTag={(input) => createTagMutation.mutate(input)}
         onDeleteTag={(tagID) => {
-          if (window.confirm("Delete this tag?")) deleteTagMutation.mutate(tagID)
+          if (window.confirm(t("deleteTagConfirmation"))) deleteTagMutation.mutate(tagID)
         }}
         onCreateRule={(input) => createRuleMutation.mutate(input)}
         onDeleteRule={(ruleID) => {
-          if (window.confirm("Delete this automation rule?")) deleteRuleMutation.mutate(ruleID)
+          if (window.confirm(t("deleteRuleConfirmation"))) deleteRuleMutation.mutate(ruleID)
         }}
         onCreateSavedFilter={(input) => createSavedFilterMutation.mutate(input)}
         onDeleteSavedFilter={(filterID) => {
-          if (window.confirm("Delete this saved filter?")) deleteSavedFilterMutation.mutate(filterID)
+          if (window.confirm(t("deleteFilterConfirmation"))) deleteSavedFilterMutation.mutate(filterID)
         }}
       />
     </main>
     </>
   )
+}
+
+function minimumReaderWidth(viewportWidth: number) {
+  return viewportWidth <= 1100 ? 360 : 390
+}
+
+function constrainPaneLayout(layout: PaneLayout, viewportWidth: number): PaneLayout {
+  if (viewportWidth <= DESKTOP_BREAKPOINT) return layout
+  let sidebarWidth = clamp(layout.sidebarWidth, SIDEBAR_MIN, SIDEBAR_MAX)
+  let timelineWidth = clamp(layout.timelineWidth, TIMELINE_MIN, TIMELINE_MAX)
+  let overflow = sidebarWidth + timelineWidth + minimumReaderWidth(viewportWidth) - viewportWidth
+  if (overflow > 0) {
+    const timelineReduction = Math.min(overflow, timelineWidth - TIMELINE_MIN)
+    timelineWidth -= timelineReduction
+    overflow -= timelineReduction
+  }
+  if (overflow > 0) sidebarWidth -= Math.min(overflow, sidebarWidth - SIDEBAR_MIN)
+  return { sidebarWidth: Math.round(sidebarWidth), timelineWidth: Math.round(timelineWidth) }
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
 }
 
 function useOnlineState() {

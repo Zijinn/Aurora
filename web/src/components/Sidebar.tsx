@@ -14,6 +14,7 @@ import {
 import type { UseQueryResult } from "@tanstack/react-query"
 
 import type { Folder, LibraryScope, SavedFilter, ServerStatus, Subscription, Tag } from "../api/types"
+import { localizedScopeTitle, useTranslation } from "../lib/i18n"
 import { Brand } from "./Brand"
 
 interface SidebarProps {
@@ -37,28 +38,29 @@ const primaryScopes: Array<{ scope: LibraryScope; icon: typeof House }> = [
 ]
 
 export function Sidebar(props: SidebarProps) {
+  const { locale, t } = useTranslation()
   const unreadTotal = props.subscriptions.reduce((total, item) => total + item.unread_count, 0)
   return (
-    <aside className="sidebar" aria-label="Primary navigation">
+    <aside className="sidebar" aria-label={t("primaryNavigation")}>
       <div className="sidebar__header">
         <Brand />
-        <button className="icon-button" type="button" aria-label="Add feed" title="Add feed" onClick={props.onAdd}>
+        <button className="icon-button" type="button" aria-label={t("addFeed")} title={t("addFeed")} onClick={props.onAdd}>
           <Plus />
         </button>
       </div>
       <label className="search-box" htmlFor="library-search">
         <MagnifyingGlass aria-hidden="true" />
-        <span className="sr-only">Search library</span>
+        <span className="sr-only">{t("searchLibrary")}</span>
         <input
           id="library-search"
           type="search"
           value={props.search}
-          placeholder="Search"
+          placeholder={t("search")}
           onChange={(event) => props.onSearchChange(event.target.value)}
         />
         <kbd>/</kbd>
       </label>
-      <nav className="nav-list" aria-label="Library views">
+      <nav className="nav-list" aria-label={t("libraryViews")}>
         {primaryScopes.map(({ scope, icon: Icon }) => {
           const active = props.scope.kind === scope.kind
           return (
@@ -70,7 +72,7 @@ export function Sidebar(props: SidebarProps) {
               onClick={() => props.onScopeChange(scope)}
             >
               <Icon aria-hidden="true" weight={active ? "fill" : "regular"} />
-              <span>{scope.title}</span>
+              <span>{localizedScopeTitle(scope, locale)}</span>
               {scope.kind === "unread" && <span className="nav-item__count">{unreadTotal}</span>}
             </button>
           )
@@ -78,15 +80,15 @@ export function Sidebar(props: SidebarProps) {
       </nav>
       <section className="subscription-section" aria-labelledby="subscriptions-title">
         <div className="section-heading">
-          <h2 id="subscriptions-title">Subscriptions</h2>
-          <button className="icon-button icon-button--small" type="button" aria-label="Add feed" title="Add feed" onClick={props.onAdd}>
+          <h2 id="subscriptions-title">{t("subscriptions")}</h2>
+          <button className="icon-button icon-button--small" type="button" aria-label={t("addFeed")} title={t("addFeed")} onClick={props.onAdd}>
             <Plus />
           </button>
         </div>
         <div className="subscription-scroll">
           {props.savedFilters.length > 0 && (
             <div className="library-group">
-              <h3>Filters</h3>
+              <h3>{t("filters")}</h3>
               {props.savedFilters.map((filter) => {
                 const active = props.scope.kind === "filter" && props.scope.id === filter.id
                 return <button className={active ? "folder-row folder-row--active" : "folder-row"} type="button" aria-current={active ? "page" : undefined} key={filter.id} onClick={() => props.onScopeChange({ kind: "filter", id: filter.id, title: filter.name, query: filter.query })}><Funnel aria-hidden="true" /><span>{filter.name}</span></button>
@@ -95,7 +97,7 @@ export function Sidebar(props: SidebarProps) {
           )}
           {props.tags.length > 0 && (
             <div className="library-group">
-              <h3>Tags</h3>
+              <h3>{t("tags")}</h3>
               {props.tags.map((tag) => {
                 const active = props.scope.kind === "tag" && props.scope.id === tag.id
                 return <button className={active ? "folder-row folder-row--active" : "folder-row"} type="button" aria-current={active ? "page" : undefined} key={tag.id} onClick={() => props.onScopeChange({ kind: "tag", id: tag.id, title: tag.name })}><span className="sidebar-tag-mark" style={tag.color ? { backgroundColor: tag.color } : undefined}><TagIcon aria-hidden="true" /></span><span>{tag.name}</span></button>
@@ -103,7 +105,7 @@ export function Sidebar(props: SidebarProps) {
             </div>
           )}
           <div className="library-group">
-            <h3>Library</h3>
+            <h3>{t("library")}</h3>
           <button
             className={props.scope.kind === "all" ? "folder-row folder-row--active" : "folder-row"}
             type="button"
@@ -111,7 +113,7 @@ export function Sidebar(props: SidebarProps) {
             onClick={() => props.onScopeChange({ kind: "all", title: "All feeds" })}
           >
             <CaretRight aria-hidden="true" />
-            <span>All feeds</span>
+            <span>{t("allFeeds")}</span>
             <span className="folder-row__count">{unreadTotal}</span>
           </button>
           {props.folders.map((folder) => {
@@ -176,9 +178,9 @@ export function Sidebar(props: SidebarProps) {
           ) : (
             <span className="server-state__indicator" />
           )}
-          <span>{props.status.isPending ? "Connecting" : props.status.isError ? "Server offline" : "Library ready"}</span>
+          <span>{props.status.isPending ? t("connecting") : props.status.isError ? t("serverOffline") : t("libraryReady")}</span>
         </div>
-        <button className="icon-button" type="button" aria-label="Preferences" title="Preferences" onClick={props.onPreferences}>
+        <button className="icon-button" type="button" aria-label={t("preferences")} title={t("preferences")} onClick={props.onPreferences}>
           <GearSix />
         </button>
       </div>
