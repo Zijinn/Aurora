@@ -1,12 +1,10 @@
 import {
-  CaretRight,
+  Books,
   CircleNotch,
   Funnel,
   FolderSimple,
-  GearSix,
-  House,
-  MagnifyingGlass,
   Plus,
+  Sparkle,
   Star,
   Tag as TagIcon,
   Tray,
@@ -19,22 +17,19 @@ import { Brand } from "./Brand"
 
 interface SidebarProps {
   scope: LibraryScope
-  search: string
   status: UseQueryResult<ServerStatus, Error>
   subscriptions: Subscription[]
   folders: Folder[]
   tags: Tag[]
   savedFilters: SavedFilter[]
   onScopeChange: (scope: LibraryScope) => void
-  onSearchChange: (value: string) => void
   onAdd: () => void
-  onPreferences: () => void
 }
 
-const primaryScopes: Array<{ scope: LibraryScope; icon: typeof House }> = [
-  { scope: { kind: "today", title: "Today" }, icon: House },
+const workspaceScopes: Array<{ scope: LibraryScope; icon: typeof Sparkle }> = [
+  { scope: { kind: "today", title: "Today" }, icon: Sparkle },
+  { scope: { kind: "all", title: "All feeds" }, icon: Books },
   { scope: { kind: "unread", title: "Unread" }, icon: Tray },
-  { scope: { kind: "saved", title: "Saved" }, icon: Star },
 ]
 
 export function Sidebar(props: SidebarProps) {
@@ -44,24 +39,10 @@ export function Sidebar(props: SidebarProps) {
     <aside className="sidebar" aria-label={t("primaryNavigation")}>
       <div className="sidebar__header">
         <Brand />
-        <button className="icon-button" type="button" aria-label={t("addFeed")} title={t("addFeed")} onClick={props.onAdd}>
-          <Plus />
-        </button>
       </div>
-      <label className="search-box" htmlFor="library-search">
-        <MagnifyingGlass aria-hidden="true" />
-        <span className="sr-only">{t("searchLibrary")}</span>
-        <input
-          id="library-search"
-          type="search"
-          value={props.search}
-          placeholder={t("search")}
-          onChange={(event) => props.onSearchChange(event.target.value)}
-        />
-        <kbd>/</kbd>
-      </label>
       <nav className="nav-list" aria-label={t("libraryViews")}>
-        {primaryScopes.map(({ scope, icon: Icon }) => {
+        <p className="sidebar-section-label">{t("workspace")}</p>
+        {workspaceScopes.map(({ scope, icon: Icon }) => {
           const active = props.scope.kind === scope.kind
           return (
             <button
@@ -73,14 +54,24 @@ export function Sidebar(props: SidebarProps) {
             >
               <Icon aria-hidden="true" weight={active ? "fill" : "regular"} />
               <span>{localizedScopeTitle(scope, locale)}</span>
-              {scope.kind === "unread" && <span className="nav-item__count">{unreadTotal}</span>}
+              {(scope.kind === "all" || scope.kind === "unread") && <span className="nav-item__count">{unreadTotal}</span>}
             </button>
           )
         })}
+        <p className="sidebar-section-label sidebar-section-label--spaced">{t("saved")}</p>
+        <button
+          className={props.scope.kind === "saved" ? "nav-item nav-item--active" : "nav-item"}
+          type="button"
+          aria-current={props.scope.kind === "saved" ? "page" : undefined}
+          onClick={() => props.onScopeChange({ kind: "saved", title: "Saved" })}
+        >
+          <Star aria-hidden="true" weight={props.scope.kind === "saved" ? "fill" : "regular"} />
+          <span>{t("saved")}</span>
+        </button>
       </nav>
       <section className="subscription-section" aria-labelledby="subscriptions-title">
         <div className="section-heading">
-          <h2 id="subscriptions-title">{t("subscriptions")}</h2>
+          <h2 id="subscriptions-title">{t("spaces")}</h2>
           <button className="icon-button icon-button--small" type="button" aria-label={t("addFeed")} title={t("addFeed")} onClick={props.onAdd}>
             <Plus />
           </button>
@@ -105,17 +96,7 @@ export function Sidebar(props: SidebarProps) {
             </div>
           )}
           <div className="library-group">
-            <h3>{t("library")}</h3>
-          <button
-            className={props.scope.kind === "all" ? "folder-row folder-row--active" : "folder-row"}
-            type="button"
-            aria-current={props.scope.kind === "all" ? "page" : undefined}
-            onClick={() => props.onScopeChange({ kind: "all", title: "All feeds" })}
-          >
-            <CaretRight aria-hidden="true" />
-            <span>{t("allFeeds")}</span>
-            <span className="folder-row__count">{unreadTotal}</span>
-          </button>
+            <h3>{t("folders")}</h3>
           {props.folders.map((folder) => {
             const active = props.scope.kind === "folder" && props.scope.id === folder.id
             const unread = props.subscriptions
@@ -136,6 +117,7 @@ export function Sidebar(props: SidebarProps) {
             )
           })}
           <div className="feed-list">
+            <h3>{t("subscriptions")}</h3>
             {props.subscriptions.map((subscription) => {
               const active = props.scope.kind === "feed" && props.scope.id === subscription.feed_id
               return (
@@ -169,8 +151,15 @@ export function Sidebar(props: SidebarProps) {
           </div>
         </div>
       </section>
+      <button className="sidebar-add button button--secondary" type="button" onClick={props.onAdd}>
+        <Plus />
+        <span>{t("addFeed")}</span>
+        <kbd>⌘ N</kbd>
+      </button>
       <div className="sidebar__footer">
+        <span className="sidebar-profile-mark" aria-hidden="true">A</span>
         <div className="server-state" role="status">
+          <strong>Aurora</strong>
           {props.status.isPending ? (
             <CircleNotch className="spin" aria-hidden="true" />
           ) : props.status.isError ? (
@@ -180,9 +169,6 @@ export function Sidebar(props: SidebarProps) {
           )}
           <span>{props.status.isPending ? t("connecting") : props.status.isError ? t("serverOffline") : t("libraryReady")}</span>
         </div>
-        <button className="icon-button" type="button" aria-label={t("preferences")} title={t("preferences")} onClick={props.onPreferences}>
-          <GearSix />
-        </button>
       </div>
     </aside>
   )

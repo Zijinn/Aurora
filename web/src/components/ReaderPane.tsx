@@ -85,12 +85,18 @@ export function ReaderPane(props: ReaderPaneProps) {
       </div>
       <div className="reader-scroll">
         <header className="article-header">
-          <p className="article-header__source">{entry.feed_title}</p>
-          <h1>{entry.title || t("untitled")}</h1>
-          <div className="article-header__meta">
-            {entry.author && <span>{entry.author}</span>}
-            <time dateTime={entry.published_at}>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.published_at))}</time>
+          <div className="article-header__source-row">
+            <span className="article-header__source-mark" aria-hidden="true">{entry.feed_title.slice(0, 1).toUpperCase()}</span>
+            <div>
+              <p className="article-header__source">{entry.feed_title}</p>
+              <div className="article-header__meta">
+                {entry.author && <span>{entry.author}</span>}
+                <time dateTime={entry.published_at}>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.published_at))}</time>
+              </div>
+            </div>
           </div>
+          <h1>{entry.title || t("untitled")}</h1>
+          {entry.summary && <p className="article-header__summary">{entry.summary}</p>}
         </header>
         <AIWorkbench key={entry.id} entryID={entry.id} profiles={props.aiProfiles} onConfigure={props.onConfigureAI} />
         {safeHTML ? <div className="article-content" dangerouslySetInnerHTML={{ __html: safeHTML }} /> : <div className="article-content"><p>{entry.summary ?? t("noArticleContent")}</p></div>}

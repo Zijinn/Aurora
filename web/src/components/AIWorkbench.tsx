@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Brain, ChatCircle, CircleNotch, ListBullets, Stop, TextAlignLeft, Translate } from "@phosphor-icons/react"
+import { Brain, ChatCircle, CircleNotch, ListBullets, Sparkle, Stop, TextAlignLeft, Translate, X } from "@phosphor-icons/react"
 import { type FormEvent, useEffect, useState } from "react"
 
 import { cancelJob, getAIChat, getJob, listAIResults, runAIOperation, startAIChat } from "../api/client"
@@ -101,8 +101,12 @@ export function AIWorkbench(props: AIWorkbenchProps) {
 
   return (
     <section className={open ? "ai-workbench ai-workbench--open" : "ai-workbench"} aria-label={t("aiAssistant")} aria-busy={jobActive}>
-      <button className="ai-workbench__toggle" type="button" aria-expanded={open} aria-controls="ai-workbench-panel" onClick={() => setOpen((value) => !value)}><Brain /><span>AI</span></button>
+      <button className="ai-workbench__toggle" type="button" aria-expanded={open} aria-controls="ai-workbench-panel" onClick={() => setOpen((value) => !value)}><Sparkle weight="fill" /><span>AI</span></button>
       {open && <div className="ai-workbench__body" id="ai-workbench-panel">
+        <div className="ai-workbench__header">
+          <span className="ai-workbench__identity"><i><Sparkle weight="fill" /></i><span><strong>Aurora Insight</strong><small>{t("privateToArticle")}</small></span></span>
+          <button className="icon-button" type="button" aria-label={t("close")} title={t("close")} onClick={() => setOpen(false)}><X /></button>
+        </div>
         {!activeProfile ? <button className="button button--secondary" type="button" onClick={props.onConfigure}><Brain />{t("configureAI")}</button> : <>
           <div className="ai-workbench__controls">
             <select className="select-input ai-profile-select" aria-label={t("aiProvider")} value={activeProfileID} onChange={(event) => setProfileID(event.target.value)}>

@@ -21,7 +21,7 @@ export interface PaneLayout {
   timelineWidth: number
 }
 
-export const defaultPaneLayout: PaneLayout = { sidebarWidth: 246, timelineWidth: 424 }
+export const defaultPaneLayout: PaneLayout = { sidebarWidth: 232, timelineWidth: 424 }
 
 interface ReaderStore {
   scope: LibraryScope
@@ -61,7 +61,7 @@ export const useReaderStore = create<ReaderStore>()(
       selectEntry: (selectedEntryID) => set({ selectedEntryID, mobileReaderOpen: selectedEntryID !== null }),
       setSearch: (search) => set({ search, selectedEntryID: null }),
       setViewMode: (viewMode) => set({ viewMode }),
-      closeMobileReader: () => set({ mobileReaderOpen: false }),
+      closeMobileReader: () => set({ selectedEntryID: null, mobileReaderOpen: false }),
       setLocale: (locale) => set({ locale }),
       setTheme: (theme) => set({ theme }),
       setPaneLayout: (paneLayout) => set({ paneLayout }),

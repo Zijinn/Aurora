@@ -62,6 +62,7 @@ import { PairDeviceDialog } from "./PairDeviceDialog"
 import { SyncAccountDialog } from "./SyncAccountDialog"
 import { LibraryOrganizationDialog } from "./LibraryOrganizationDialog"
 import { PaneDivider } from "./PaneDivider"
+import { WorkspaceHeader } from "./WorkspaceHeader"
 
 const DESKTOP_BREAKPOINT = 900
 const SIDEBAR_MIN = 210
@@ -82,6 +83,7 @@ export function AppShell() {
   const closeMobileReader = useReaderStore((state) => state.closeMobileReader)
   const shortcuts = useReaderStore((state) => state.shortcuts)
   const theme = useReaderStore((state) => state.theme)
+  const setTheme = useReaderStore((state) => state.setTheme)
   const paneLayout = useReaderStore((state) => state.paneLayout)
   const setPaneLayout = useReaderStore((state) => state.setPaneLayout)
   const { locale, t } = useTranslation()
@@ -470,36 +472,47 @@ export function AppShell() {
     <main ref={shellRef} id="main-content" tabIndex={-1} style={shellStyle} className={mobileReaderOpen ? "app-shell app-shell--reader-open" : "app-shell"}>
       <Sidebar
         scope={scope}
-        search={search}
         status={status}
         subscriptions={subscriptions.data?.items ?? []}
         folders={folders.data?.items ?? []}
         tags={tags.data?.items ?? []}
         savedFilters={savedFilters.data?.items ?? []}
         onScopeChange={setScope}
-        onSearchChange={setSearch}
         onAdd={() => setAddOpen(true)}
-        onPreferences={() => setPreferencesOpen(true)}
       />
-      <TimelinePane
-        scope={scope}
-        entries={entries}
-        selectedEntryID={selectedEntryID}
-        viewMode={viewMode}
-        isLoading={entriesQuery.isPending}
-        isFetchingNext={entriesQuery.isFetchingNextPage}
-        hasNextPage={entriesQuery.hasNextPage}
-        error={entriesQuery.error}
-        markReadPending={markReadMutation.isPending}
-        refreshPending={refreshMutation.isPending}
-        onSelect={selectEntry}
-        onAdd={() => setAddOpen(true)}
-        onRetry={() => void entriesQuery.refetch()}
-        onLoadMore={() => void entriesQuery.fetchNextPage()}
-        onMarkAllRead={() => markReadMutation.mutate()}
-        onRefresh={(feedID) => refreshMutation.mutate(feedID)}
-        onToggleStar={(entry) => mutateState(entry, { is_starred: !entry.state.is_starred })}
-      />
+      <section className="workspace">
+        <WorkspaceHeader
+          scope={scope}
+          search={search}
+          searchShortcut={shortcuts.search}
+          theme={theme}
+          onSearchChange={setSearch}
+          onThemeChange={setTheme}
+          onPreferences={() => setPreferencesOpen(true)}
+          onAdd={() => setAddOpen(true)}
+        />
+        <TimelinePane
+          scope={scope}
+          entries={entries}
+          subscriptions={subscriptions.data?.items ?? []}
+          selectedEntryID={selectedEntryID}
+          viewMode={viewMode}
+          isLoading={entriesQuery.isPending}
+          isFetchingNext={entriesQuery.isFetchingNextPage}
+          hasNextPage={entriesQuery.hasNextPage}
+          error={entriesQuery.error}
+          markReadPending={markReadMutation.isPending}
+          refreshPending={refreshMutation.isPending}
+          onScopeChange={setScope}
+          onSelect={selectEntry}
+          onAdd={() => setAddOpen(true)}
+          onRetry={() => void entriesQuery.refetch()}
+          onLoadMore={() => void entriesQuery.fetchNextPage()}
+          onMarkAllRead={() => markReadMutation.mutate()}
+          onRefresh={(feedID) => refreshMutation.mutate(feedID)}
+          onToggleStar={(entry) => mutateState(entry, { is_starred: !entry.state.is_starred })}
+        />
+      </section>
       <ReaderPane
         key={selectedEntryID ?? "empty-reader"}
         summary={selectedEntry}
@@ -537,7 +550,7 @@ export function AppShell() {
         onDelta={(delta) => resizePane("timeline", delta)}
         onEnd={finishPaneResize}
       />
-      <MobileNav scope={scope} onScopeChange={setScope} onLibrary={() => setMobileLibraryOpen(true)} onPreferences={() => setPreferencesOpen(true)} />
+      <MobileNav scope={scope} onScopeChange={setScope} onLibrary={() => setMobileLibraryOpen(true)} />
       <MobileLibraryDialog
         open={mobileLibraryOpen}
         scope={scope}
