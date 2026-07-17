@@ -10,7 +10,8 @@ test -f build/windows/info.json
 
 ruby -ryaml -rjson -rrexml/document -e '
   workflow = YAML.load_file(".github/workflows/release.yml")
-  abort "release workflow has no jobs" unless workflow["jobs"].is_a?(Hash) && workflow["jobs"].keys.sort == ["license-inventory", "macos-universal", "windows-x64"]
+  expected_jobs = ["license-inventory", "macos-universal", "publish-release", "windows-x64"]
+  abort "release workflow has unexpected jobs" unless workflow["jobs"].is_a?(Hash) && workflow["jobs"].keys.sort == expected_jobs
   YAML.load_file("api/openapi.yaml")
   JSON.parse(File.read("build/windows/info.json"))
   REXML::Document.new(File.read("build/darwin/Info.plist"))

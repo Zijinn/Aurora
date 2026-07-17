@@ -208,7 +208,9 @@ jobs:
         run: |
           wails3 generate webview2bootstrapper -dir build/windows
           $out = "$pwd\dist\Cairn-$($env:VERSION)-windows-x64-setup.exe"
-          makensis "/DVERSION=$($env:VERSION)" "/DAPP_EXE=$pwd\dist\Cairn.exe" "/DAPP_ICON=$pwd\build\windows\Cairn.ico" "/DLICENSE_FILE=$pwd\LICENSE" "/DWEBVIEW2_BOOTSTRAPPER=$pwd\build\windows\MicrosoftEdgeWebview2Setup.exe" "/DWEB_ASSETS=$pwd\web\dist" "/DOUT_FILE=$out" build/windows/installer.nsi
+          $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $makensis)) { throw "makensis.exe not found at $makensis" }
+          & $makensis "/DVERSION=$($env:VERSION)" "/DAPP_EXE=$pwd\dist\Cairn.exe" "/DAPP_ICON=$pwd\build\windows\Cairn.ico" "/DLICENSE_FILE=$pwd\LICENSE" "/DWEBVIEW2_BOOTSTRAPPER=$pwd\build\windows\MicrosoftEdgeWebview2Setup.exe" "/DWEB_ASSETS=$pwd\web\dist" "/DOUT_FILE=$out" build/windows/installer.nsi
       - name: Sign installer
         if: ${{ env.WINDOWS_CERTIFICATE != '' }}
         shell: pwsh
@@ -225,3 +227,29 @@ jobs:
           path: |
             dist/Cairn-${{ env.VERSION }}-windows-x64-setup.exe
             dist/Cairn-${{ env.VERSION }}-windows-x64-setup.exe.sha256
+
+  publish-release:
+    if: ${{ github.ref_type == 'tag' }}
+    needs:
+      - license-inventory
+      - macos-universal
+      - windows-x64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Cairn-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Cairn ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --verify-tag
