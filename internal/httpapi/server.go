@@ -308,7 +308,12 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https:; media-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+		// WKWebView loads the embedded frontend through the wails:// scheme. A
+		// browser-oriented 'self' CSP blocks those module resources before they
+		// reach this server, so retain CSP for HTTP/PWA clients only.
+		if r.Header.Get("X-Wails-Window-ID") == "" {
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https:; media-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

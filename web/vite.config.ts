@@ -7,6 +7,21 @@ import { VitePWA } from "vite-plugin-pwa"
 export default defineConfig({
   plugins: [
     react(),
+    {
+      name: "cairn-desktop-compatible-entry",
+      apply: "build",
+      transformIndexHtml: {
+        order: "post",
+        handler(html) {
+          // WKWebView does not request Vite's module entry over the wails://
+          // scheme. The bundled entry has no external ESM imports, so load it
+          // as a deferred classic script in production builds.
+          return html
+            .replace(/<script type="module" crossorigin([^>]*)>/g, "<script defer$1>")
+            .replace(/<link rel="stylesheet" crossorigin([^>]*)>/g, '<link rel="stylesheet"$1>')
+        },
+      },
+    },
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["icons/cairn-192.png", "icons/cairn-512.png"],
@@ -14,8 +29,8 @@ export default defineConfig({
         name: "Cairn",
         short_name: "Cairn",
         description: "A private reading home for the open web.",
-        theme_color: "#f4f3ef",
-        background_color: "#f4f3ef",
+        theme_color: "#f5f5f6",
+        background_color: "#ffffff",
         display: "standalone",
         orientation: "any",
         start_url: "/",

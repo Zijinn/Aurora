@@ -73,7 +73,7 @@ func main() {
 		MinWidth:         920,
 		MinHeight:        620,
 		URL:              "/",
-		BackgroundColour: application.NewRGB(244, 243, 239),
+		BackgroundColour: application.NewRGB(255, 255, 255),
 	})
 	window.Center()
 

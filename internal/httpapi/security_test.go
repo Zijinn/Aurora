@@ -79,3 +79,38 @@ func TestOriginValidationRejectsUntrustedWebsites(t *testing.T) {
 		t.Fatalf("expected allowed preflight, got %d %+v", allowed.Code, allowed.Header())
 	}
 }
+
+func TestSecurityHeadersKeepCSPForWebClients(t *testing.T) {
+	handler := (&Server{}).securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if response.Header().Get("Content-Security-Policy") == "" {
+		t.Fatal("expected web requests to retain the content security policy")
+	}
+	if response.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("expected content type protection to remain enabled")
+	}
+}
+
+func TestSecurityHeadersAllowWailsResources(t *testing.T) {
+	handler := (&Server{}).securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("X-Wails-Window-ID", "main")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if csp := response.Header().Get("Content-Security-Policy"); csp != "" {
+		t.Fatalf("expected Wails requests to omit CSP, got %q", csp)
+	}
+	if response.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatal("expected non-CSP security headers to remain enabled")
+	}
+	if response.Header().Get("Permissions-Policy") == "" {
+		t.Fatal("expected permissions policy to remain enabled")
+	}
+}

@@ -145,7 +145,18 @@ export function Sidebar(props: SidebarProps) {
                   onClick={() => props.onScopeChange({ kind: "feed", id: subscription.feed_id, title: subscription.title })}
                 >
                   <span className="feed-row__mark" aria-hidden="true">
-                    {subscription.title.slice(0, 1).toUpperCase()}
+                    <span>{subscription.title.slice(0, 1).toUpperCase()}</span>
+                    {subscription.icon_url && (
+                      <img
+                        src={subscription.icon_url}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(event) => {
+                          event.currentTarget.hidden = true
+                        }}
+                      />
+                    )}
                   </span>
                   <span className="feed-row__title">{subscription.title}</span>
                   <span className="feed-row__count">{subscription.unread_count}</span>
