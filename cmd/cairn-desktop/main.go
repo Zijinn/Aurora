@@ -74,7 +74,7 @@ func main() {
 		MinHeight:        620,
 		URL:              "/",
 		Frameless:        runtime.GOOS == "windows",
-		BackgroundColour: application.NewRGB(244, 244, 242),
+		BackgroundColour: application.NewRGB(255, 255, 255),
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBarHidden,
 		},
@@ -94,13 +94,13 @@ func main() {
 					TitleTextColour: application.NewRGBPtr(154, 157, 165),
 				},
 				LightModeActive: &application.WindowTheme{
-					BorderColour:    application.NewRGBPtr(211, 212, 210),
-					TitleBarColour:  application.NewRGBPtr(244, 244, 242),
+					BorderColour:    application.NewRGBPtr(218, 221, 226),
+					TitleBarColour:  application.NewRGBPtr(255, 255, 255),
 					TitleTextColour: application.NewRGBPtr(24, 25, 28),
 				},
 				LightModeInactive: &application.WindowTheme{
-					BorderColour:    application.NewRGBPtr(225, 225, 222),
-					TitleBarColour:  application.NewRGBPtr(244, 244, 242),
+					BorderColour:    application.NewRGBPtr(232, 234, 238),
+					TitleBarColour:  application.NewRGBPtr(255, 255, 255),
 					TitleTextColour: application.NewRGBPtr(104, 107, 114),
 				},
 			},
