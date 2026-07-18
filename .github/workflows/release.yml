@@ -6,7 +6,7 @@ on:
       version:
         description: Semantic version without a leading v
         required: true
-        default: 0.1.8
+        default: 0.1.9
   push:
     tags:
       - "v*.*.*"
@@ -78,7 +78,7 @@ jobs:
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version must be x.y.z"; exit 1; }
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - run: pnpm --dir web install --frozen-lockfile
-      - run: pnpm --dir web build
+      - run: pnpm --dir web build:desktop
       - name: Install Wails build tools
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.117
       - name: Build universal application
@@ -171,7 +171,7 @@ jobs:
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be x.y.z" }
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
       - run: pnpm --dir web install --frozen-lockfile
-      - run: pnpm --dir web build
+      - run: pnpm --dir web build:desktop
       - name: Install packaging tools
         shell: pwsh
         run: |

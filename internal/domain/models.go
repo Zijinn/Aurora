@@ -35,6 +35,8 @@ type Subscription struct {
 	FolderID               *string   `json:"folder_id"`
 	Title                  string    `json:"title"`
 	IconURL                *string   `json:"icon_url"`
+	FeedURL                string    `json:"feed_url"`
+	SiteURL                *string   `json:"site_url"`
 	UnreadCount            int       `json:"unread_count"`
 	ViewMode               string    `json:"view_mode"`
 	RefreshPolicy          string    `json:"refresh_policy"`

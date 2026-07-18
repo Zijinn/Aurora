@@ -5,7 +5,7 @@ Native installers are built only on GitHub-hosted runners. The development works
 ## Before tagging
 
 - Run `go test ./... -count=1`, `go test -race ./...`, and `go vet ./...`.
-- Run `pnpm --dir web typecheck`, `pnpm --dir web lint`, `pnpm --dir web test -- --run`, and `pnpm --dir web build`.
+- Run `pnpm --dir web typecheck`, `pnpm --dir web lint`, `pnpm --dir web test -- --run`, `pnpm --dir web build`, and `pnpm --dir web build:desktop`.
 - Run `bash scripts/check-release-config.sh` and review the OpenAPI route coverage test.
 - Perform browser checks at 1440x900, 820x1180, and 390x844. Record no console errors, no horizontal overflow, and a working mobile reader back transition.
 - Export a backup from the release candidate and restore it into a fresh database. Keep the database and `master.key` together; encrypted sync and AI credentials cannot be recovered from the JSON backup with a different key.

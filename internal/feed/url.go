@@ -66,7 +66,7 @@ func NormalizeURL(raw string) (string, error) {
 
 func TransformRSSHubURL(raw, base string) (string, error) {
 	value := strings.TrimSpace(raw)
-	if !strings.HasPrefix(strings.ToLower(value), "rsshub://") {
+	if !strings.HasPrefix(strings.ToLower(value), "rsshub:") {
 		return NormalizeURL(value)
 	}
 	if strings.TrimSpace(base) == "" {
@@ -76,13 +76,26 @@ func TransformRSSHubURL(raw, base string) (string, error) {
 	if err != nil || baseURL.Hostname() == "" || (baseURL.Scheme != "http" && baseURL.Scheme != "https") {
 		return "", fmt.Errorf("invalid RSSHub base URL")
 	}
-	route := value[len("rsshub://"):]
+	route := value[len("rsshub:"):]
 	route = strings.TrimLeft(route, "/")
 	if route == "" {
 		return "", fmt.Errorf("%w: RSSHub route is empty", ErrInvalidURL)
 	}
-	baseURL.Path = strings.TrimRight(baseURL.Path, "/") + "/" + route
+	routePath := route
+	routeQuery := ""
+	if queryIndex := strings.IndexByte(routePath, '?'); queryIndex >= 0 {
+		routeQuery = routePath[queryIndex+1:]
+		routePath = routePath[:queryIndex]
+	}
+	routePath = strings.Trim(routePath, "/")
+	if routePath == "" {
+		return "", fmt.Errorf("%w: RSSHub route is empty", ErrInvalidURL)
+	}
+	baseURL.Path = strings.TrimRight(baseURL.Path, "/") + "/" + routePath
 	baseURL.RawQuery = ""
+	if routeQuery != "" {
+		baseURL.RawQuery = routeQuery
+	}
 	baseURL.Fragment = ""
 	return NormalizeURL(baseURL.String())
 }

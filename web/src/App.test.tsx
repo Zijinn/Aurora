@@ -8,12 +8,14 @@ import { useReaderStore } from "./store/reader"
 beforeEach(() => {
   useReaderStore.setState({
     scope: { kind: "today", title: "Today" },
+    readerReturnScope: null,
     selectedEntryID: null,
     search: "",
     viewMode: "standard",
     mobileReaderOpen: false,
     locale: "en-US",
     paneLayout: { sidebarWidth: 246, timelineWidth: 424 },
+    openFolders: {},
     readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
     annotations: [],
     theme: "system",
@@ -125,9 +127,19 @@ describe("Aurora reading experience", () => {
     renderApp()
     const addButtons = await screen.findAllByRole("button", { name: "Add feed" })
     fireEvent.click(addButtons[0]!)
-    expect(screen.getByRole("dialog")).toBeInTheDocument()
-    expect(screen.getByRole("heading", { name: "Add subscription" })).toBeInTheDocument()
-    expect(screen.getByLabelText("Feed or website URL")).toBeInTheDocument()
+    expect(await screen.findByRole("dialog")).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "Add subscription" })).toBeInTheDocument()
+    expect(await screen.findByLabelText("Feed or website URL")).toBeInTheDocument()
+    expect(
+      screen.getByText("Supports rsshub://github/trending/daily and direct RSSHub HTTPS URLs."),
+    ).toBeInTheDocument()
+  })
+
+  it("opens a focused folder manager from the sidebar", async () => {
+    renderApp()
+    fireEvent.click(await screen.findByRole("button", { name: "Add folder" }))
+    expect(await screen.findByRole("heading", { name: "Manage folders" })).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "Tags" })).not.toBeInTheDocument()
   })
 
   it("opens the command palette with the platform shortcut", async () => {
@@ -140,7 +152,8 @@ describe("Aurora reading experience", () => {
   it("rejects conflicting shortcut assignments before saving", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
-    const nextLabel = screen.getByText("Next article")
+    await screen.findByRole("dialog")
+    const nextLabel = await screen.findByText("Next article")
     const nextButton = nextLabel.parentElement?.querySelector("button")
     expect(nextButton).not.toBeNull()
     fireEvent.keyDown(nextButton!, { key: "k" })
@@ -151,13 +164,14 @@ describe("Aurora reading experience", () => {
   it("opens the external sync account workflow", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
-    fireEvent.click(screen.getByRole("button", { name: "Sync" }))
+    await screen.findByRole("dialog")
+    fireEvent.click(await screen.findByRole("button", { name: "Sync" }))
     const syncSection = screen
       .getByRole("heading", { name: "Reader service sync" })
       .closest("section")
     expect(syncSection).not.toBeNull()
     fireEvent.click(within(syncSection!).getByRole("button", { name: "Add" }))
-    expect(screen.getByRole("heading", { name: "Add sync account" })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "Add sync account" })).toBeInTheDocument()
     await screen.findByRole("option", { name: "FreshRSS" })
     expect(screen.getByRole("combobox", { name: "Provider" })).toHaveValue("freshrss")
     expect(screen.getByLabelText("Allow private network endpoint")).toBeInTheDocument()
@@ -166,9 +180,10 @@ describe("Aurora reading experience", () => {
   it("configures iCloud Drive without making it exclusive with WebDAV", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
-    fireEvent.click(screen.getByRole("button", { name: "Sync" }))
-    expect(screen.getByRole("button", { name: /WebDAV/ })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: /iCloud Drive/ }))
+    await screen.findByRole("dialog")
+    fireEvent.click(await screen.findByRole("button", { name: "Sync" }))
+    expect(await screen.findByRole("button", { name: /WebDAV/ })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole("button", { name: /iCloud Drive/ }))
     const provider = await screen.findByRole("combobox", { name: "Provider" })
     expect(provider).toHaveValue("icloud")
     expect(screen.getByLabelText("iCloud file path")).toHaveValue("")
@@ -178,12 +193,13 @@ describe("Aurora reading experience", () => {
   it("requires privacy confirmation before configuring a remote AI provider", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
-    fireEvent.click(screen.getByRole("button", { name: "AI & language" }))
+    await screen.findByRole("dialog")
+    fireEvent.click(await screen.findByRole("button", { name: "AI & language" }))
     const aiSection = screen.getByRole("heading", { name: "AI providers" }).closest("section")
     expect(aiSection).not.toBeNull()
     fireEvent.click(within(aiSection!).getByRole("button", { name: "Add" }))
 
-    expect(screen.getByRole("heading", { name: "Add AI provider" })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "Add AI provider" })).toBeInTheDocument()
     await screen.findByRole("option", { name: "OpenAI compatible" })
     expect(screen.getByRole("combobox", { name: "Provider" })).toHaveValue("openai_compatible")
     const submit = screen.getByRole("button", { name: "Add provider" })
@@ -195,8 +211,9 @@ describe("Aurora reading experience", () => {
   it("opens the library organization workflow", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
-    fireEvent.click(screen.getByRole("button", { name: "Library" }))
-    fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+    await screen.findByRole("dialog")
+    fireEvent.click(await screen.findByRole("button", { name: "Library" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Manage" }))
     expect(await screen.findByRole("heading", { name: "Library organization" })).toBeInTheDocument()
     expect(screen.getByLabelText("Folder name")).toBeInTheDocument()
     expect(screen.getByLabelText("Tag name")).toBeInTheDocument()
@@ -279,6 +296,20 @@ describe("Aurora reading experience", () => {
     expect(shell).toHaveClass("app-shell--reader-open")
     expect(workspaceBody).toContainElement(document.querySelector(".timeline"))
     expect(workspaceBody).toContainElement(document.querySelector(".reader"))
+  })
+
+  it("keeps the active library scope when closing an article", () => {
+    renderApp()
+    act(() => {
+      useReaderStore.getState().setScope({ kind: "folder", id: "folder-design", title: "Design" })
+      useReaderStore.getState().selectEntry("entry-1")
+    })
+    act(() => useReaderStore.getState().closeMobileReader())
+    expect(useReaderStore.getState().scope).toEqual({
+      kind: "folder",
+      id: "folder-design",
+      title: "Design",
+    })
   })
 
   it("exposes keyboard accessible pane resize separators", async () => {

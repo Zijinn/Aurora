@@ -260,7 +260,7 @@ func DeleteSubscription(ctx context.Context, db *sql.DB, profileID, feedID strin
 func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]domain.Subscription, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT s.id, s.profile_id, s.feed_id, s.folder_id,
-			COALESCE(s.title_override, f.title), f.icon_url,
+			COALESCE(s.title_override, f.title), f.icon_url, f.url, f.site_url,
 			COUNT(CASE WHEN e.id IS NOT NULL AND COALESCE(es.is_read, 0) = 0 THEN 1 END),
 			s.view_mode, s.refresh_policy, s.refresh_interval_minutes,
 			s.hide_from_timeline, s.created_at, s.updated_at
@@ -279,12 +279,13 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 	items := make([]domain.Subscription, 0)
 	for rows.Next() {
 		var item domain.Subscription
-		var folderID, iconURL sql.NullString
+		var folderID, iconURL, siteURL sql.NullString
+		var feedURL string
 		var hidden int
 		var createdAt, updatedAt string
 		if err := rows.Scan(
 			&item.ID, &item.ProfileID, &item.FeedID, &folderID,
-			&item.Title, &iconURL, &item.UnreadCount,
+			&item.Title, &iconURL, &feedURL, &siteURL, &item.UnreadCount,
 			&item.ViewMode, &item.RefreshPolicy, &item.RefreshIntervalMinutes,
 			&hidden, &createdAt, &updatedAt,
 		); err != nil {
@@ -292,6 +293,8 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 		}
 		item.FolderID = stringPointer(folderID)
 		item.IconURL = stringPointer(iconURL)
+		item.FeedURL = feedURL
+		item.SiteURL = stringPointer(siteURL)
 		item.HideFromTimeline = hidden == 1
 		item.CreatedAt = parseTime(createdAt)
 		item.UpdatedAt = parseTime(updatedAt)

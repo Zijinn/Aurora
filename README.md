@@ -62,6 +62,12 @@ pnpm --dir web build
 pnpm desktop:dev
 ```
 
+Desktop release assets use the Wails-compatible classic-script build:
+
+```bash
+pnpm --dir web build:desktop
+```
+
 The REST contract is documented in [api/openapi.yaml](api/openapi.yaml). Architecture and security decisions are in [docs](docs).
 
 ## Data And Security

@@ -20,4 +20,11 @@ func TestTransformRSSHubURL(t *testing.T) {
 	if got != "https://rsshub.example/base/github/trending/daily" {
 		t.Fatalf("unexpected RSSHub URL %q", got)
 	}
+	got, err = TransformRSSHubURL("rsshub:/github/trending/daily?limit=10&include=go", "https://rsshub.example/base")
+	if err != nil {
+		t.Fatalf("transform RSSHub route with query: %v", err)
+	}
+	if got != "https://rsshub.example/base/github/trending/daily?include=go&limit=10" {
+		t.Fatalf("unexpected RSSHub query URL %q", got)
+	}
 }

@@ -5,7 +5,8 @@ import type { Locale } from "../lib/i18n"
 import type { LibraryScope, ViewMode } from "../api/types"
 import type { ReaderAnnotation } from "../lib/annotations"
 
-export type ShortcutAction = "palette" | "search" | "next" | "previous" | "toggleStar" | "toggleRead"
+export type ShortcutAction =
+  "palette" | "search" | "next" | "previous" | "toggleStar" | "toggleRead"
 export type ThemeMode = "system" | "light" | "dark"
 
 export const defaultShortcuts: Record<ShortcutAction, string> = {
@@ -40,6 +41,7 @@ export const defaultPaneLayout: PaneLayout = { sidebarWidth: 232, timelineWidth:
 
 interface ReaderStore {
   scope: LibraryScope
+  readerReturnScope: LibraryScope | null
   selectedEntryID: string | null
   search: string
   viewMode: ViewMode
@@ -47,6 +49,7 @@ interface ReaderStore {
   locale: Locale
   theme: ThemeMode
   paneLayout: PaneLayout
+  openFolders: Record<string, boolean>
   readerAppearance: ReaderAppearance
   annotations: ReaderAnnotation[]
   shortcuts: Record<ShortcutAction, string>
@@ -58,6 +61,7 @@ interface ReaderStore {
   setLocale: (locale: Locale) => void
   setTheme: (theme: ThemeMode) => void
   setPaneLayout: (paneLayout: PaneLayout) => void
+  toggleFolder: (folderID: string) => void
   setReaderAppearance: (appearance: Partial<ReaderAppearance>) => void
   addAnnotation: (annotation: ReaderAnnotation) => void
   removeAnnotation: (annotationID: string) => void
@@ -69,6 +73,7 @@ export const useReaderStore = create<ReaderStore>()(
   persist(
     (set) => ({
       scope: { kind: "today", title: "Today" },
+      readerReturnScope: null,
       selectedEntryID: null,
       search: "",
       viewMode: "standard",
@@ -76,17 +81,34 @@ export const useReaderStore = create<ReaderStore>()(
       locale: "zh-CN",
       theme: "system",
       paneLayout: defaultPaneLayout,
+      openFolders: {},
       readerAppearance: defaultReaderAppearance,
       annotations: [],
       shortcuts: defaultShortcuts,
-      setScope: (scope) => set({ scope, selectedEntryID: null, mobileReaderOpen: false }),
-      selectEntry: (selectedEntryID) => set({ selectedEntryID, mobileReaderOpen: selectedEntryID !== null }),
-      setSearch: (search) => set({ search, selectedEntryID: null }),
+      setScope: (scope) =>
+        set({ scope, readerReturnScope: null, selectedEntryID: null, mobileReaderOpen: false }),
+      selectEntry: (selectedEntryID) =>
+        set((state) => ({
+          selectedEntryID,
+          readerReturnScope: selectedEntryID === null ? null : state.scope,
+          mobileReaderOpen: selectedEntryID !== null,
+        })),
+      setSearch: (search) => set({ search, readerReturnScope: null, selectedEntryID: null }),
       setViewMode: (viewMode) => set({ viewMode }),
-      closeMobileReader: () => set({ selectedEntryID: null, mobileReaderOpen: false }),
+      closeMobileReader: () =>
+        set((state) => ({
+          selectedEntryID: null,
+          mobileReaderOpen: false,
+          scope: state.readerReturnScope ?? state.scope,
+          readerReturnScope: null,
+        })),
       setLocale: (locale) => set({ locale }),
       setTheme: (theme) => set({ theme }),
       setPaneLayout: (paneLayout) => set({ paneLayout }),
+      toggleFolder: (folderID) =>
+        set((state) => ({
+          openFolders: { ...state.openFolders, [folderID]: !(state.openFolders[folderID] ?? true) },
+        })),
       setReaderAppearance: (appearance) =>
         set((state) => ({ readerAppearance: { ...state.readerAppearance, ...appearance } })),
       addAnnotation: (annotation) =>
@@ -95,7 +117,8 @@ export const useReaderStore = create<ReaderStore>()(
         set((state) => ({
           annotations: state.annotations.filter((annotation) => annotation.id !== annotationID),
         })),
-      setShortcut: (action, shortcut) => set((state) => ({ shortcuts: { ...state.shortcuts, [action]: shortcut } })),
+      setShortcut: (action, shortcut) =>
+        set((state) => ({ shortcuts: { ...state.shortcuts, [action]: shortcut } })),
       resetShortcuts: () => set({ shortcuts: defaultShortcuts }),
     }),
     {
@@ -106,6 +129,7 @@ export const useReaderStore = create<ReaderStore>()(
         locale: state.locale,
         theme: state.theme,
         paneLayout: state.paneLayout,
+        openFolders: state.openFolders,
         readerAppearance: state.readerAppearance,
         annotations: state.annotations,
       }),

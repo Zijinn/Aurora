@@ -1251,7 +1251,7 @@ components:
           type: boolean
     Subscription:
       type: object
-      required: [id, feed_id, title, view_mode, hide_from_timeline]
+      required: [id, feed_id, title, feed_url, view_mode, hide_from_timeline]
       properties:
         id:
           type: string
@@ -1265,6 +1265,12 @@ components:
         title:
           type: string
         icon_url:
+          type: [string, "null"]
+          format: uri
+        feed_url:
+          type: string
+          format: uri
+        site_url:
           type: [string, "null"]
           format: uri
         unread_count:

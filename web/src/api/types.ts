@@ -146,6 +146,8 @@ export interface Subscription {
   folder_id: string | null
   title: string
   icon_url: string | null
+  feed_url: string
+  site_url: string | null
   unread_count: number
   view_mode: ViewMode
   refresh_policy: "inherit" | "fixed" | "intelligent" | "never"
