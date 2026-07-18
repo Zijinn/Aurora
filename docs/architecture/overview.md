@@ -64,11 +64,14 @@ schedule/manual request
   -> response limits and charset decode
   -> format parse
   -> normalize content and identifiers
+  -> deduplicate by GUID, tracking-free canonical URL, content hash, and stable identity hash
   -> transactionally upsert feed and entries
   -> emit job and entry events
 ```
 
 Feed errors are classified as temporary, permanent, authentication, rate-limit, parse, or policy errors. Retry behavior depends on the class.
+
+RSS is pull-based by default: the scheduler polls due feeds every minute, while each feed defaults to a 30-minute next check. A subscription can select a fixed interval or disable automatic refresh; a manual refresh always queues an immediate conditional request. ETag and Last-Modified validators avoid downloading unchanged bodies, and failures use exponential backoff. Push delivery such as WebSub can be added later for providers that advertise it, but it cannot be assumed for arbitrary RSSHub routes.
 
 ## API rules
 

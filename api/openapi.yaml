@@ -1243,6 +1243,9 @@ components:
         view_mode:
           type: string
           enum: [compact, standard, card, magazine, image]
+        refresh_policy:
+          type: string
+          enum: [inherit, fixed, intelligent, never]
         refresh_interval_minutes:
           type: integer
           minimum: 0
@@ -1279,6 +1282,13 @@ components:
         view_mode:
           type: string
           enum: [compact, standard, card, magazine, image]
+        refresh_policy:
+          type: string
+          enum: [inherit, fixed, intelligent, never]
+        refresh_interval_minutes:
+          type: integer
+          minimum: 0
+          maximum: 10080
         hide_from_timeline:
           type: boolean
     Folder:

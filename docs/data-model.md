@@ -95,6 +95,7 @@ Contains compact fields needed for timeline queries.
 - `published_at`
 - `discovered_at`
 - `content_hash`
+- `identity_hash`
 - `lead_image_url`
 - `audio_url`
 - `video_url`
@@ -106,7 +107,10 @@ Deduplication keys are evaluated in this order:
 
 1. `(feed_id, guid)` when GUID is present;
 2. `(feed_id, canonical_url)` when the canonical URL is present;
-3. `(feed_id, content_hash)` as a fallback.
+3. `(feed_id, content_hash)` for exact content matches;
+4. `(feed_id, identity_hash)` for feeds whose items do not expose a stable GUID or URL.
+
+URLs are normalized before comparison. Known campaign parameters such as `utm_*`, `fbclid`, and `gclid` are removed, while functional feed parameters are preserved. The identity hash is derived from normalized title, author, publication time, and a short body prefix, so a later edit at the end of an article does not create a second article without making same-day articles with identical titles indistinguishable.
 
 ### entry_contents
 

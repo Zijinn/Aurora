@@ -56,12 +56,30 @@ func NormalizeURL(raw string) (string, error) {
 	}
 
 	query := parsed.Query()
+	for key := range query {
+		if isTrackingQueryKey(key) {
+			delete(query, key)
+		}
+	}
 	for key, values := range query {
 		sort.Strings(values)
 		query[key] = values
 	}
 	parsed.RawQuery = query.Encode()
 	return parsed.String(), nil
+}
+
+func isTrackingQueryKey(key string) bool {
+	lower := strings.ToLower(strings.TrimSpace(key))
+	if strings.HasPrefix(lower, "utm_") {
+		return true
+	}
+	switch lower {
+	case "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "mc_cid", "mc_eid", "_ga", "igshid", "oly_anon_id", "oly_enc_id":
+		return true
+	default:
+		return false
+	}
 }
 
 func TransformRSSHubURL(raw, base string) (string, error) {

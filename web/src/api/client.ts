@@ -445,7 +445,13 @@ export function fetchReadability(entryID: string): Promise<Job> {
 
 export function updateFeed(
   feedID: string,
-  patch: { folder_id?: string | null; title_override?: string | null; view_mode?: ViewMode },
+  patch: {
+    folder_id?: string | null
+    title_override?: string | null
+    view_mode?: ViewMode
+    refresh_policy?: Subscription["refresh_policy"]
+    refresh_interval_minutes?: number
+  },
 ): Promise<Subscription> {
   return request<Subscription>(`/api/v1/feeds/${encodeURIComponent(feedID)}`, {
     method: "PATCH",

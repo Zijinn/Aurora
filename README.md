@@ -9,6 +9,7 @@ Aurora is a local-first personal RSS reader for macOS, Windows, iPad, and the we
 - Folo-inspired flat information architecture with resizable library, timeline, and reader panes
 - Responsive iPad PWA and mobile REST interface using the same library as the desktop app
 - RSS, Atom, JSON Feed, feed discovery, RSSHub URLs, OPML, full-text extraction, and FTS5 search
+- Conditional HTTP refresh with ETag/Last-Modified validators, configurable polling policies, exponential failure backoff, and multi-key article deduplication
 - Folders, tags, saved filters, automation rules, read later, starred items, and configurable shortcuts
 - OpenAI-compatible and Ollama BYOK profiles with title translation, article summaries, key points, and article chat
 - FreshRSS, Google Reader compatible services, Miniflux, Fever, Feedbin, and Nextcloud News adapters

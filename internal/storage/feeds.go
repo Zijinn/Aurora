@@ -131,6 +131,9 @@ func SaveNewFeed(
 	if err != nil {
 		return domain.Feed{}, fmt.Errorf("upsert subscription: %w", err)
 	}
+	if err := rescheduleFeed(ctx, tx, feedID, now); err != nil {
+		return domain.Feed{}, err
+	}
 
 	if _, err := upsertEntries(ctx, tx, profileID, feedID, parsed.Entries, now); err != nil {
 		return domain.Feed{}, err
@@ -157,7 +160,10 @@ func SaveFeedRefresh(
 	defer tx.Rollback()
 
 	now := time.Now().UTC()
-	nextCheck := now.Add(30 * time.Minute)
+	nextCheck, err := nextFeedCheck(ctx, tx, feedID, now)
+	if err != nil {
+		return 0, err
+	}
 	result, err := tx.ExecContext(ctx, `
 		UPDATE feeds SET
 			site_url = ?, title = ?, description = ?, icon_url = ?, format = ?,
@@ -188,10 +194,14 @@ func SaveFeedRefresh(
 
 func MarkFeedNotModified(ctx context.Context, db *sql.DB, feedID string) error {
 	now := time.Now().UTC()
+	nextCheck, err := nextFeedCheck(ctx, db, feedID, now)
+	if err != nil {
+		return err
+	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE feeds SET last_checked_at = ?, last_success_at = ?, next_check_at = ?,
 			failure_count = 0, last_error_code = NULL, last_error_message = NULL, updated_at = ?
-		WHERE id = ?`, formatTime(now), formatTime(now), formatTime(now.Add(30*time.Minute)), formatTime(now), feedID)
+		WHERE id = ?`, formatTime(now), formatTime(now), formatTime(nextCheck), formatTime(now), feedID)
 	if err != nil {
 		return fmt.Errorf("mark feed not modified: %w", err)
 	}
@@ -306,11 +316,15 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 func UpdateSubscription(ctx context.Context, db *sql.DB, profileID, feedID string, patch domain.SubscriptionPatch) (domain.Subscription, error) {
 	now := time.Now().UTC()
 	setFolder, setTitle := 0, 0
+	setRefreshPolicy := 0
 	if patch.SetFolderID {
 		setFolder = 1
 	}
 	if patch.SetTitleOverride {
 		setTitle = 1
+	}
+	if patch.RefreshPolicy != nil {
+		setRefreshPolicy = 1
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE subscriptions SET
@@ -318,13 +332,14 @@ func UpdateSubscription(ctx context.Context, db *sql.DB, profileID, feedID strin
 			title_override = CASE WHEN ? = 1 THEN ? ELSE title_override END,
 			view_mode = COALESCE(?, view_mode),
 			refresh_interval_minutes = COALESCE(?, refresh_interval_minutes),
-			refresh_policy = CASE WHEN ? IS NULL THEN refresh_policy
+			refresh_policy = CASE WHEN ? = 1 THEN ?
+				WHEN ? IS NULL THEN refresh_policy
 				WHEN ? > 0 THEN 'fixed' ELSE 'inherit' END,
 			hide_from_timeline = COALESCE(?, hide_from_timeline),
 			updated_at = ?
 		WHERE profile_id = ? AND feed_id = ?`,
 		setFolder, nullable(patch.FolderID), setTitle, nullable(patch.TitleOverride),
-		nullable(patch.ViewMode), nullableInt(patch.RefreshIntervalMinutes), nullableInt(patch.RefreshIntervalMinutes), nullableInt(patch.RefreshIntervalMinutes),
+		nullable(patch.ViewMode), nullableInt(patch.RefreshIntervalMinutes), setRefreshPolicy, nullable(patch.RefreshPolicy), nullableInt(patch.RefreshIntervalMinutes), nullableInt(patch.RefreshIntervalMinutes),
 		nullableBool(patch.HideFromTimeline), formatTime(now), profileID, feedID,
 	)
 	if err != nil {
@@ -333,6 +348,9 @@ func UpdateSubscription(ctx context.Context, db *sql.DB, profileID, feedID strin
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
 		return domain.Subscription{}, ErrNotFound
+	}
+	if err := rescheduleFeed(ctx, db, feedID, now); err != nil {
+		return domain.Subscription{}, err
 	}
 	items, err := ListSubscriptions(ctx, db, profileID)
 	if err != nil {
@@ -369,6 +387,51 @@ func ListDueFeeds(ctx context.Context, db *sql.DB, limit int) ([]domain.Feed, er
 	return items, rows.Err()
 }
 
+type feedQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+const (
+	defaultFeedRefreshInterval = 30 * time.Minute
+	neverFeedRefreshInterval   = 365 * 24 * time.Hour
+)
+
+func nextFeedCheck(ctx context.Context, queryer feedQueryer, feedID string, now time.Time) (time.Time, error) {
+	var total, neverCount, fixedMinutes sql.NullInt64
+	if err := queryer.QueryRowContext(ctx, `
+		SELECT COUNT(*),
+			COALESCE(SUM(CASE WHEN refresh_policy = 'never' THEN 1 ELSE 0 END), 0),
+			COALESCE(MIN(CASE WHEN refresh_policy = 'fixed' AND refresh_interval_minutes > 0
+				THEN refresh_interval_minutes END), 0)
+		FROM subscriptions WHERE feed_id = ?`, feedID).Scan(&total, &neverCount, &fixedMinutes); err != nil {
+		return time.Time{}, fmt.Errorf("read feed refresh policy: %w", err)
+	}
+	if total.Valid && total.Int64 > 0 && neverCount.Valid && neverCount.Int64 == total.Int64 {
+		return now.Add(neverFeedRefreshInterval), nil
+	}
+	if fixedMinutes.Valid && fixedMinutes.Int64 > 0 {
+		return now.Add(time.Duration(fixedMinutes.Int64) * time.Minute), nil
+	}
+	return now.Add(defaultFeedRefreshInterval), nil
+}
+
+func rescheduleFeed(ctx context.Context, queryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, feedID string, now time.Time) error {
+	nextCheck, err := nextFeedCheck(ctx, queryer, feedID, now)
+	if err != nil {
+		return err
+	}
+	if _, err := queryer.ExecContext(ctx,
+		"UPDATE feeds SET next_check_at = ?, updated_at = ? WHERE id = ?",
+		formatTime(nextCheck), formatTime(now), feedID,
+	); err != nil {
+		return fmt.Errorf("schedule feed refresh: %w", err)
+	}
+	return nil
+}
+
 func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, entries []domain.ParsedEntry, now time.Time) (int, error) {
 	inserted := 0
 	for _, entry := range entries {
@@ -381,12 +444,12 @@ func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, en
 			_, err = tx.ExecContext(ctx, `
 				INSERT INTO entries (
 					id, feed_id, guid, canonical_url, title, author, summary,
-					published_at, discovered_at, content_hash, lead_image_url,
+					published_at, discovered_at, content_hash, identity_hash, lead_image_url,
 					audio_url, video_url, language, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				entryID, feedID, nullable(entry.GUID), nullable(entry.CanonicalURL), entry.Title,
 				nullable(entry.Author), nullable(entry.Summary), formatTime(entry.PublishedAt), formatTime(now),
-				entry.ContentHash, nullable(entry.LeadImageURL), nullable(entry.AudioURL), nullable(entry.VideoURL),
+				entry.ContentHash, nullable(&entry.IdentityHash), nullable(entry.LeadImageURL), nullable(entry.AudioURL), nullable(entry.VideoURL),
 				nullable(entry.Language), formatTime(now), formatTime(now),
 			)
 			if err != nil {
@@ -402,10 +465,10 @@ func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, en
 		} else {
 			_, err = tx.ExecContext(ctx, `
 				UPDATE entries SET guid = ?, canonical_url = ?, title = ?, author = ?, summary = ?,
-					published_at = ?, content_hash = ?, lead_image_url = ?, audio_url = ?,
+					published_at = ?, content_hash = ?, identity_hash = ?, lead_image_url = ?, audio_url = ?,
 					video_url = ?, language = ?, updated_at = ? WHERE id = ?`,
 				nullable(entry.GUID), nullable(entry.CanonicalURL), entry.Title, nullable(entry.Author), nullable(entry.Summary),
-				formatTime(entry.PublishedAt), entry.ContentHash, nullable(entry.LeadImageURL), nullable(entry.AudioURL),
+				formatTime(entry.PublishedAt), entry.ContentHash, nullable(&entry.IdentityHash), nullable(entry.LeadImageURL), nullable(entry.AudioURL),
 				nullable(entry.VideoURL), nullable(entry.Language), formatTime(now), entryID,
 			)
 			if err != nil {
@@ -448,15 +511,18 @@ func findEntryID(ctx context.Context, tx *sql.Tx, feedID string, entry domain.Pa
 		WHERE feed_id = ? AND (
 			(? IS NOT NULL AND guid = ?) OR
 			(? IS NOT NULL AND canonical_url = ?) OR
-			content_hash = ?
+			content_hash = ? OR
+			(? IS NOT NULL AND identity_hash = ?)
 		)
-		ORDER BY CASE WHEN guid = ? THEN 0 WHEN canonical_url = ? THEN 1 ELSE 2 END
+		ORDER BY CASE WHEN guid = ? THEN 0 WHEN canonical_url = ? THEN 1
+			WHEN identity_hash = ? THEN 2 ELSE 3 END
 		LIMIT 1`,
 		feedID,
 		nullable(entry.GUID), nullable(entry.GUID),
 		nullable(entry.CanonicalURL), nullable(entry.CanonicalURL),
 		entry.ContentHash,
-		nullable(entry.GUID), nullable(entry.CanonicalURL),
+		nullable(&entry.IdentityHash), nullable(&entry.IdentityHash),
+		nullable(entry.GUID), nullable(entry.CanonicalURL), nullable(&entry.IdentityHash),
 	).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil

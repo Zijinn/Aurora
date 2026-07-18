@@ -83,10 +83,13 @@ func normalizeItem(parser *Parser, item *gofeed.Item, baseURL string, fallbackTi
 	sanitized, plainText, firstImage := parser.sanitize(content, valuePointer(canonicalURL))
 
 	publishedAt := fallbackTime
+	hasPublishedAt := false
 	if item.PublishedParsed != nil {
 		publishedAt = item.PublishedParsed.UTC()
+		hasPublishedAt = true
 	} else if item.UpdatedParsed != nil {
 		publishedAt = item.UpdatedParsed.UTC()
+		hasPublishedAt = true
 	}
 	author := ""
 	if item.Author != nil {
@@ -123,6 +126,11 @@ func normalizeItem(parser *Parser, item *gofeed.Item, baseURL string, fallbackTi
 		plainText,
 	}, "\x00")
 	digest := sha256.Sum256([]byte(hashInput))
+	var identityPublishedAt *time.Time
+	if hasPublishedAt {
+		identityPublishedAt = &publishedAt
+	}
+	identityHash := ComputeIdentityHash(title, author, identityPublishedAt, plainText)
 
 	return domain.ParsedEntry{
 		GUID:          stringValuePointer(strings.TrimSpace(item.GUID)),
@@ -132,6 +140,7 @@ func normalizeItem(parser *Parser, item *gofeed.Item, baseURL string, fallbackTi
 		Summary:       stringValuePointer(summary),
 		PublishedAt:   publishedAt,
 		ContentHash:   hex.EncodeToString(digest[:]),
+		IdentityHash:  identityHash,
 		SourceHTML:    content,
 		SanitizedHTML: sanitized,
 		PlainText:     plainText,
@@ -139,6 +148,21 @@ func normalizeItem(parser *Parser, item *gofeed.Item, baseURL string, fallbackTi
 		AudioURL:      audioURL,
 		VideoURL:      videoURL,
 	}
+}
+
+func ComputeIdentityHash(title, author string, publishedAt *time.Time, plainText string) string {
+	identityParts := []string{
+		strings.ToLower(collapseWhitespace(title)),
+		strings.ToLower(collapseWhitespace(author)),
+	}
+	if publishedAt != nil {
+		identityParts = append(identityParts, publishedAt.UTC().Format(time.RFC3339))
+	}
+	// A short body prefix reduces false matches for feeds without stable IDs while
+	// remaining stable when publishers append or edit the end of an article.
+	identityParts = append(identityParts, strings.ToLower(truncateText(plainText, 128)))
+	digest := sha256.Sum256([]byte(strings.Join(identityParts, "\x00")))
+	return hex.EncodeToString(digest[:])
 }
 
 func (p *Parser) sanitize(rawHTML, baseURL string) (string, string, *string) {

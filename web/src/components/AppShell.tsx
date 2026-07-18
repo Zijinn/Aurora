@@ -366,14 +366,22 @@ export function AppShell() {
       feedID,
       folderID,
       viewMode,
+      refreshPolicy,
+      refreshIntervalMinutes,
     }: {
       feedID: string
       folderID?: string | null
       viewMode?: import("../api/types").ViewMode
+      refreshPolicy?: import("../api/types").Subscription["refresh_policy"]
+      refreshIntervalMinutes?: number
     }) =>
       updateFeed(feedID, {
         ...(folderID !== undefined ? { folder_id: folderID } : {}),
         ...(viewMode !== undefined ? { view_mode: viewMode } : {}),
+        ...(refreshPolicy !== undefined ? { refresh_policy: refreshPolicy } : {}),
+        ...(refreshIntervalMinutes !== undefined
+          ? { refresh_interval_minutes: refreshIntervalMinutes }
+          : {}),
       }),
     onSuccess: invalidateLibrary,
   })
@@ -634,6 +642,9 @@ export function AppShell() {
             if (window.confirm(t("unsubscribeConfirmation"))) feedDeleteMutation.mutate(feedID)
           }}
           onChangeFeedView={(feedID, viewMode) => feedUpdateMutation.mutate({ feedID, viewMode })}
+          onChangeFeedRefresh={(feedID, refreshPolicy, refreshIntervalMinutes) =>
+            feedUpdateMutation.mutate({ feedID, refreshPolicy, refreshIntervalMinutes })
+          }
         />
         <section className="workspace">
           <WorkspaceHeader

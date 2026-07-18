@@ -144,6 +144,7 @@ func (s *Server) updateFeed(w http.ResponseWriter, r *http.Request) {
 		FolderID               json.RawMessage `json:"folder_id"`
 		TitleOverride          json.RawMessage `json:"title_override"`
 		ViewMode               json.RawMessage `json:"view_mode"`
+		RefreshPolicy          json.RawMessage `json:"refresh_policy"`
 		RefreshIntervalMinutes json.RawMessage `json:"refresh_interval_minutes"`
 		HideFromTimeline       json.RawMessage `json:"hide_from_timeline"`
 	}
@@ -173,6 +174,18 @@ func (s *Server) updateFeed(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	refreshPolicy, err := optionalString(request.RefreshPolicy)
+	if err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_refresh_policy", "Invalid refresh policy", err.Error())
+		return
+	}
+	if refreshPolicy != nil {
+		valid := map[string]bool{"inherit": true, "fixed": true, "intelligent": true, "never": true}
+		if !valid[*refreshPolicy] {
+			writeProblem(w, r, http.StatusBadRequest, "invalid_refresh_policy", "Invalid refresh policy", "Choose inherit, fixed, intelligent, or never.")
+			return
+		}
+	}
 	refreshInterval, err := optionalInt(request.RefreshIntervalMinutes)
 	if err != nil || (refreshInterval != nil && (*refreshInterval < 0 || *refreshInterval > 10080)) {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_refresh_interval", "Invalid refresh interval", "Refresh interval must be from 0 to 10080 minutes.")
@@ -185,7 +198,7 @@ func (s *Server) updateFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, err := storage.UpdateSubscription(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("feedID"), domain.SubscriptionPatch{
 		SetFolderID: setFolder, FolderID: folderID, SetTitleOverride: setTitle, TitleOverride: titleOverride,
-		ViewMode: viewMode, RefreshIntervalMinutes: refreshInterval, HideFromTimeline: hideFromTimeline,
+		ViewMode: viewMode, RefreshPolicy: refreshPolicy, RefreshIntervalMinutes: refreshInterval, HideFromTimeline: hideFromTimeline,
 	})
 	if err != nil {
 		s.storageError(w, r, err)

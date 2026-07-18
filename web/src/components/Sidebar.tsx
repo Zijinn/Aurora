@@ -44,6 +44,11 @@ interface SidebarProps {
   onMoveFeed: (feedID: string, folderID: string | null) => void
   onDeleteFeed: (feedID: string) => void
   onChangeFeedView: (feedID: string, viewMode: ViewMode) => void
+  onChangeFeedRefresh: (
+    feedID: string,
+    policy: Subscription["refresh_policy"],
+    intervalMinutes: number,
+  ) => void
 }
 
 const workspaceScopes: Array<{ scope: LibraryScope; icon: typeof Sparkle }> = [
@@ -279,6 +284,9 @@ export function Sidebar(props: SidebarProps) {
           onCopyID={() => void navigator.clipboard?.writeText(contextMenu.subscription.feed_id)}
           onChangeView={(viewMode) =>
             props.onChangeFeedView(contextMenu.subscription.feed_id, viewMode)
+          }
+          onChangeRefresh={(policy, intervalMinutes) =>
+            props.onChangeFeedRefresh(contextMenu.subscription.feed_id, policy, intervalMinutes)
           }
         />
       )}

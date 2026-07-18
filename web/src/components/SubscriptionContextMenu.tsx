@@ -5,6 +5,7 @@ import {
   Check,
   CopySimple,
   FolderSimple,
+  Timer,
   Trash,
 } from "@phosphor-icons/react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
@@ -26,6 +27,7 @@ interface SubscriptionContextMenuProps {
   onOpenWebsite: () => void
   onCopyID: () => void
   onChangeView: (viewMode: ViewMode) => void
+  onChangeRefresh: (policy: Subscription["refresh_policy"], intervalMinutes: number) => void
 }
 
 const viewModes: Array<{ value: ViewMode; labelKey: string }> = [
@@ -41,6 +43,7 @@ export function SubscriptionContextMenu(props: SubscriptionContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const [viewOpen, setViewOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
+  const [refreshOpen, setRefreshOpen] = useState(false)
   const [position, setPosition] = useState(props.position)
 
   useEffect(() => {
@@ -105,6 +108,49 @@ export function SubscriptionContextMenu(props: SubscriptionContextMenuProps) {
         <ArrowsClockwise aria-hidden="true" />
         <span>{t("refreshFeed")}</span>
       </button>
+      <div className="subscription-context-menu__separator" />
+      <div className="subscription-context-menu__submenu">
+        <button
+          className="subscription-context-menu__item"
+          type="button"
+          role="menuitem"
+          aria-haspopup="menu"
+          aria-expanded={refreshOpen}
+          onPointerEnter={() => setRefreshOpen(true)}
+          onClick={() => setRefreshOpen((open) => !open)}
+        >
+          <Timer aria-hidden="true" />
+          <span>{t("refreshPolicy")}</span>
+          <CaretRight className="subscription-context-menu__caret" aria-hidden="true" />
+        </button>
+        {refreshOpen && (
+          <div className="subscription-context-menu__submenu-panel" role="menu">
+            {[
+              { policy: "inherit" as const, interval: 0, label: "refreshAutomatic" },
+              { policy: "fixed" as const, interval: 15, label: "refreshEvery15Minutes" },
+              { policy: "fixed" as const, interval: 30, label: "refreshEvery30Minutes" },
+              { policy: "fixed" as const, interval: 60, label: "refreshEveryHour" },
+              { policy: "never" as const, interval: 0, label: "refreshManualOnly" },
+            ].map((option) => {
+              const active =
+                props.subscription.refresh_policy === option.policy &&
+                (option.policy !== "fixed" || props.subscription.refresh_interval_minutes === option.interval)
+              return (
+                <button
+                  className="subscription-context-menu__item"
+                  type="button"
+                  role="menuitem"
+                  key={`${option.policy}-${option.interval}`}
+                  onClick={() => run(() => props.onChangeRefresh(option.policy, option.interval))}
+                >
+                  {active ? <Check aria-hidden="true" /> : <span className="subscription-context-menu__icon-spacer" />}
+                  <span>{t(option.label)}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
       <div className="subscription-context-menu__separator" />
       <div className="subscription-context-menu__submenu">
         <button

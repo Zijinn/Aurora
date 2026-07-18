@@ -52,6 +52,7 @@ type SubscriptionPatch struct {
 	SetTitleOverride       bool
 	TitleOverride          *string
 	ViewMode               *string
+	RefreshPolicy          *string
 	RefreshIntervalMinutes *int
 	HideFromTimeline       *bool
 }
@@ -131,6 +132,7 @@ type ParsedEntry struct {
 	Summary       *string
 	PublishedAt   time.Time
 	ContentHash   string
+	IdentityHash  string
 	SourceHTML    string
 	SanitizedHTML string
 	PlainText     string

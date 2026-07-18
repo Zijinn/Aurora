@@ -72,6 +72,77 @@ func TestFeedEntryDedupSearchAndMutationIdempotency(t *testing.T) {
 	}
 }
 
+func TestFeedEntryIdentityHashDeduplicatesEntriesWithoutStableGUIDOrURL(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	publishedAt := time.Date(2026, time.July, 18, 2, 0, 0, 0, time.UTC)
+	created, err := SaveNewFeed(ctx, db, domain.DefaultProfileID, "https://example.com/feed", "https://example.com/feed", domain.ParsedFeed{
+		Title: "Example", Format: "rss", Entries: []domain.ParsedEntry{{
+			Title: "An article without a GUID", PublishedAt: publishedAt,
+			ContentHash: "body-before", IdentityHash: "stable-identity",
+			SanitizedHTML: "<p>Before</p>", PlainText: "Before",
+		}},
+	}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inserted, err := SaveFeedRefresh(ctx, db, domain.DefaultProfileID, created.ID, domain.ParsedFeed{
+		Title: "Example", Format: "rss", Entries: []domain.ParsedEntry{{
+			Title: "An article without a GUID", PublishedAt: publishedAt,
+			ContentHash: "body-after", IdentityHash: "stable-identity",
+			SanitizedHTML: "<p>After</p>", PlainText: "After",
+		}},
+	}, nil, nil)
+	if err != nil || inserted != 0 {
+		t.Fatalf("expected identity-hash deduplication, inserted=%d err=%v", inserted, err)
+	}
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM entries WHERE feed_id = ?", created.ID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("expected one entry after refresh, count=%d err=%v", count, err)
+	}
+}
+
+func TestSubscriptionRefreshPolicyReschedulesFeed(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	created, err := SaveNewFeed(ctx, db, domain.DefaultProfileID, "https://example.com/feed", "https://example.com/feed", domain.ParsedFeed{Title: "Example", Format: "rss"}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fixed := "fixed"
+	interval := 90
+	if _, err := UpdateSubscription(ctx, db, domain.DefaultProfileID, created.ID, domain.SubscriptionPatch{RefreshPolicy: &fixed, RefreshIntervalMinutes: &interval}); err != nil {
+		t.Fatal(err)
+	}
+	feed, err := GetFeed(ctx, db, created.ID)
+	if err != nil || feed.NextCheckAt == nil {
+		t.Fatalf("read fixed refresh schedule: %+v, %v", feed, err)
+	}
+	if remaining := time.Until(*feed.NextCheckAt); remaining < 89*time.Minute || remaining > 91*time.Minute {
+		t.Fatalf("expected 90 minute schedule, got %s", remaining)
+	}
+
+	never := "never"
+	if _, err := UpdateSubscription(ctx, db, domain.DefaultProfileID, created.ID, domain.SubscriptionPatch{RefreshPolicy: &never}); err != nil {
+		t.Fatal(err)
+	}
+	feed, err = GetFeed(ctx, db, created.ID)
+	if err != nil || feed.NextCheckAt == nil || time.Until(*feed.NextCheckAt) < 364*24*time.Hour {
+		t.Fatalf("expected never policy to defer scheduler, feed=%+v err=%v", feed, err)
+	}
+}
+
 func TestEmptySubscriptionHasZeroUnreadAndFailureBackoffUsesRFC3339(t *testing.T) {
 	ctx := context.Background()
 	db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))

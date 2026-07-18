@@ -12,6 +12,16 @@ func TestNormalizeURL(t *testing.T) {
 	}
 }
 
+func TestNormalizeURLDropsTrackingParametersButKeepsFeedParameters(t *testing.T) {
+	got, err := NormalizeURL("https://example.com/article?id=42&utm_source=newsletter&fbclid=tracking")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "https://example.com/article?id=42" {
+		t.Fatalf("unexpected tracking-free URL %q", got)
+	}
+}
+
 func TestTransformRSSHubURL(t *testing.T) {
 	got, err := TransformRSSHubURL("rsshub://github/trending/daily", "https://rsshub.example/base")
 	if err != nil {
