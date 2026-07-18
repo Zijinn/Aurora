@@ -6,7 +6,7 @@ on:
       version:
         description: Semantic version without a leading v
         required: true
-        default: 0.1.11
+        default: 1.0.0
   push:
     tags:
       - "v*.*.*"

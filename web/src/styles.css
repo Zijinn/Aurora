@@ -4717,8 +4717,17 @@ button:disabled {
 .library-group h3,
 .feed-list h3 {
   color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 760;
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.35;
+}
+.section-heading h2,
+.library-group__heading h3,
+.feed-list h3 {
+  padding-left: 0;
+}
+.feed-list h3 {
+  margin-left: 10px;
 }
 .library-group {
   padding-bottom: 8px;
@@ -4750,7 +4759,8 @@ button:disabled {
   gap: 8px;
   margin: 4px 2px 8px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 580;
   background: color-mix(in srgb, var(--surface-raised) 28%, transparent);
   border: 1px dashed color-mix(in srgb, var(--border-strong) 72%, transparent);
   border-radius: 12px;
