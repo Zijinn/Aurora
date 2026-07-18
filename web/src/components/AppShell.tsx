@@ -49,6 +49,7 @@ import {
   refreshFeed,
   restoreBackup,
   revokeDevice,
+  runAIOperation,
   runSyncAccount,
   setEntryTags,
   updateEntryState,
@@ -121,6 +122,8 @@ export function AppShell() {
   const setTheme = useReaderStore((state) => state.setTheme)
   const paneLayout = useReaderStore((state) => state.paneLayout)
   const setPaneLayout = useReaderStore((state) => state.setPaneLayout)
+  const alwaysTranslateTitles = useReaderStore((state) => state.alwaysTranslateTitles)
+  const alwaysTranslateContent = useReaderStore((state) => state.alwaysTranslateContent)
   const { locale, t } = useTranslation()
   const deferredSearch = useDeferredValue(search)
   const [addOpen, setAddOpen] = useState(false)
@@ -138,6 +141,7 @@ export function AppShell() {
   const shellRef = useRef<HTMLElement>(null)
   const dragStartLayout = useRef<PaneLayout>(paneLayout)
   const dragLayout = useRef<PaneLayout>(paneLayout)
+  const automaticTranslationAttempts = useRef(new Set<string>())
   const closeSecondaryDialog = useCallback(
     (setOpen: (open: boolean) => void) => {
       setOpen(false)
@@ -321,6 +325,12 @@ export function AppShell() {
     [entriesQuery.data],
   )
   const selectedEntry = entries.find((entry) => entry.id === selectedEntryID) ?? null
+  const automaticAIProfile = useMemo(
+    () =>
+      aiProfiles.data?.items.find((profile) => profile.is_default && profile.enabled) ??
+      aiProfiles.data?.items.find((profile) => profile.enabled),
+    [aiProfiles.data?.items],
+  )
   const selectedFeedIconURL = selectedEntry
     ? subscriptions.data?.items.find((subscription) => subscription.feed_id === selectedEntry.feed_id)?.icon_url ?? null
     : null
@@ -329,6 +339,56 @@ export function AppShell() {
     queryFn: ({ signal }) => getEntry(selectedEntryID!, aiLanguage, signal),
     enabled: selectedEntryID !== null,
   })
+
+  useEffect(() => {
+    if (!alwaysTranslateTitles || !automaticAIProfile) return
+    const candidates = entries
+      .filter(
+        (entry) =>
+          !entry.ai_translated_title && shouldTranslateEntry(entry, locale),
+      )
+      .filter((entry) => {
+        const key = `${automaticAIProfile.id}:title_translation:${aiLanguage}:${entry.id}`
+        return !automaticTranslationAttempts.current.has(key)
+      })
+      .slice(0, 12)
+    if (candidates.length === 0) return
+    for (const entry of candidates) {
+      automaticTranslationAttempts.current.add(
+        `${automaticAIProfile.id}:title_translation:${aiLanguage}:${entry.id}`,
+      )
+    }
+    void Promise.allSettled(
+      candidates.map((entry) =>
+        runAIOperation(entry.id, "title_translation", automaticAIProfile.id, aiLanguage),
+      ),
+    )
+  }, [aiLanguage, alwaysTranslateTitles, automaticAIProfile, entries, locale])
+
+  useEffect(() => {
+    if (
+      !alwaysTranslateContent ||
+      !automaticAIProfile ||
+      !selectedEntry ||
+      !shouldTranslateEntry(selectedEntry, locale)
+    )
+      return
+    const key = `${automaticAIProfile.id}:translation:${aiLanguage}:${selectedEntry.id}`
+    if (automaticTranslationAttempts.current.has(key)) return
+    automaticTranslationAttempts.current.add(key)
+    void runAIOperation(
+      selectedEntry.id,
+      "translation",
+      automaticAIProfile.id,
+      aiLanguage,
+    )
+  }, [
+    aiLanguage,
+    alwaysTranslateContent,
+    automaticAIProfile,
+    locale,
+    selectedEntry,
+  ])
 
   const invalidateLibrary = useCallback(async () => {
     await Promise.all([
@@ -987,6 +1047,21 @@ function constrainPaneLayout(layout: PaneLayout, viewportWidth: number): PaneLay
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
+}
+
+function shouldTranslateEntry(entry: Entry, locale: "zh-CN" | "en-US") {
+  const language = entry.language?.trim().toLowerCase() ?? ""
+  const sample = `${entry.title} ${entry.summary ?? ""}`
+  if (locale === "zh-CN") {
+    if (language.startsWith("zh")) return false
+    if (language) return true
+    const cjkCount = (sample.match(/[\u3400-\u9fff]/g) ?? []).length
+    const latinCount = (sample.match(/[a-z]/gi) ?? []).length
+    return latinCount >= 4 && latinCount > cjkCount
+  }
+  if (language.startsWith("en")) return false
+  if (language) return true
+  return /[\u3400-\u9fff]/.test(sample)
 }
 
 function useOnlineState() {

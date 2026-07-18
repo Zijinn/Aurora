@@ -53,6 +53,8 @@ interface ReaderStore {
   readerAppearance: ReaderAppearance
   annotations: ReaderAnnotation[]
   shortcuts: Record<ShortcutAction, string>
+  alwaysTranslateTitles: boolean
+  alwaysTranslateContent: boolean
   setScope: (scope: LibraryScope) => void
   selectEntry: (entryID: string | null) => void
   setSearch: (search: string) => void
@@ -67,6 +69,8 @@ interface ReaderStore {
   removeAnnotation: (annotationID: string) => void
   setShortcut: (action: ShortcutAction, shortcut: string) => void
   resetShortcuts: () => void
+  setAlwaysTranslateTitles: (enabled: boolean) => void
+  setAlwaysTranslateContent: (enabled: boolean) => void
 }
 
 export const useReaderStore = create<ReaderStore>()(
@@ -85,6 +89,8 @@ export const useReaderStore = create<ReaderStore>()(
       readerAppearance: defaultReaderAppearance,
       annotations: [],
       shortcuts: defaultShortcuts,
+      alwaysTranslateTitles: false,
+      alwaysTranslateContent: false,
       setScope: (scope) =>
         set({ scope, readerReturnScope: null, selectedEntryID: null, mobileReaderOpen: false }),
       selectEntry: (selectedEntryID) =>
@@ -120,6 +126,8 @@ export const useReaderStore = create<ReaderStore>()(
       setShortcut: (action, shortcut) =>
         set((state) => ({ shortcuts: { ...state.shortcuts, [action]: shortcut } })),
       resetShortcuts: () => set({ shortcuts: defaultShortcuts }),
+      setAlwaysTranslateTitles: (alwaysTranslateTitles) => set({ alwaysTranslateTitles }),
+      setAlwaysTranslateContent: (alwaysTranslateContent) => set({ alwaysTranslateContent }),
     }),
     {
       name: "cairn-reader-preferences",
@@ -132,6 +140,8 @@ export const useReaderStore = create<ReaderStore>()(
         openFolders: state.openFolders,
         readerAppearance: state.readerAppearance,
         annotations: state.annotations,
+        alwaysTranslateTitles: state.alwaysTranslateTitles,
+        alwaysTranslateContent: state.alwaysTranslateContent,
       }),
     },
   ),

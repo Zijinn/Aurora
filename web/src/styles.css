@@ -3354,6 +3354,114 @@ button:disabled {
   }
 }
 
+.preference-section--automation {
+  padding-bottom: 10px;
+}
+.preference-switch-row {
+  position: relative;
+  display: grid;
+  min-height: 64px;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  cursor: pointer;
+}
+.preference-switch-row > span,
+.preference-switch-row strong,
+.preference-switch-row small {
+  display: block;
+  min-width: 0;
+}
+.preference-switch-row strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 680;
+}
+.preference-switch-row small {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.preference-switch-row input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.preference-switch-row > i {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--border-strong);
+  border-radius: 10px;
+  transition: background 180ms ease;
+}
+.preference-switch-row > i::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  content: "";
+  background: var(--surface-raised);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgb(18 25 42 / 0.18);
+  transition: transform 180ms ease;
+}
+.preference-switch-row input:checked + i {
+  background: var(--accent-fill);
+}
+.preference-switch-row input:checked + i::after {
+  transform: translateX(16px);
+}
+.preference-switch-row input:focus-visible + i {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.preference-switch-row input:disabled + i {
+  opacity: 0.45;
+}
+
+.article-translation-switch {
+  display: flex;
+  width: min(680px, calc(100% - 84px));
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px auto -28px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+.article-translation-switch > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 650;
+}
+.article-translation-switch svg {
+  width: 15px;
+  height: 15px;
+  color: var(--accent-strong);
+}
+.article-content--translation {
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .app-shell--reader-open .ai-workbench__quick {
+    top: auto;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: max(14px, env(safe-area-inset-bottom));
+  }
+  .article-translation-switch {
+    width: calc(100% - 44px);
+  }
+}
+
 /* Form rhythm: keep labels, controls, helper text, and actions on a shared baseline. */
 .dialog-form {
   grid-template-columns: minmax(0, 1fr);
@@ -4926,5 +5034,44 @@ button:disabled {
     flex: 1;
     padding: 0 9px;
     font-size: 11px;
+  }
+}
+
+/* Final chrome pass: use tonal separation instead of hard vertical rules. */
+.sidebar {
+  border-right-color: transparent;
+  box-shadow: none;
+}
+.sidebar::before {
+  border-right: 0;
+}
+.app-shell--reader-open .timeline {
+  background: color-mix(in srgb, var(--surface-muted) 32%, var(--canvas));
+}
+.app-shell--reader-open .reader {
+  border-left-color: color-mix(in srgb, var(--border) 34%, transparent);
+}
+.pane-divider::after {
+  top: 64px;
+  bottom: 16px;
+  background: transparent;
+}
+.pane-divider:hover::after,
+.pane-divider:focus-visible::after,
+.pane-divider:active::after {
+  width: 2px;
+  background: color-mix(in srgb, var(--accent) 46%, transparent);
+  border-radius: 2px;
+}
+.app-shell--reader-open .ai-workbench__quick {
+  top: max(72px, calc(env(safe-area-inset-top) + 62px));
+  right: max(22px, env(safe-area-inset-right));
+  bottom: auto;
+}
+@media (max-width: 900px) {
+  .app-shell--reader-open .ai-workbench__quick {
+    top: auto;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: max(14px, env(safe-area-inset-bottom));
   }
 }

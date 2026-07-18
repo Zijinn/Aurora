@@ -119,6 +119,10 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
   const shortcuts = useReaderStore((state) => state.shortcuts)
   const setShortcut = useReaderStore((state) => state.setShortcut)
   const resetShortcuts = useReaderStore((state) => state.resetShortcuts)
+  const alwaysTranslateTitles = useReaderStore((state) => state.alwaysTranslateTitles)
+  const alwaysTranslateContent = useReaderStore((state) => state.alwaysTranslateContent)
+  const setAlwaysTranslateTitles = useReaderStore((state) => state.setAlwaysTranslateTitles)
+  const setAlwaysTranslateContent = useReaderStore((state) => state.setAlwaysTranslateContent)
   const [activeTab, setActiveTab] = useState<PreferenceTab>("interface")
   const [conflict, setConflict] = useState("")
   const restoreInput = useRef<HTMLInputElement>(null)
@@ -310,7 +314,46 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                 )}
 
                 {activeTab === "ai" && (
-                  <section className="preference-section preference-section--flush">
+                  <>
+                    <section className="preference-section preference-section--automation">
+                      <div className="preference-heading preference-heading--intro">
+                        <div>
+                          <h2>{t("automaticTranslation")}</h2>
+                          <p>
+                            {props.aiProfiles.some((profile) => profile.enabled)
+                              ? t("aiProviderDescription")
+                              : t("automaticTranslationNeedsProvider")}
+                          </p>
+                        </div>
+                      </div>
+                      <label className="preference-switch-row">
+                        <span>
+                          <strong>{t("alwaysTranslateTitles")}</strong>
+                          <small>{t("alwaysTranslateTitlesDescription")}</small>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={alwaysTranslateTitles}
+                          disabled={!props.aiProfiles.some((profile) => profile.enabled)}
+                          onChange={(event) => setAlwaysTranslateTitles(event.target.checked)}
+                        />
+                        <i aria-hidden="true" />
+                      </label>
+                      <label className="preference-switch-row">
+                        <span>
+                          <strong>{t("alwaysTranslateContent")}</strong>
+                          <small>{t("alwaysTranslateContentDescription")}</small>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={alwaysTranslateContent}
+                          disabled={!props.aiProfiles.some((profile) => profile.enabled)}
+                          onChange={(event) => setAlwaysTranslateContent(event.target.checked)}
+                        />
+                        <i aria-hidden="true" />
+                      </label>
+                    </section>
+                    <section className="preference-section preference-section--flush">
                     <div className="preference-heading preference-heading--intro">
                       <div>
                         <h2>{t("aiProviders")}</h2>
@@ -394,7 +437,8 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                         {t("tokensUsed")}
                       </p>
                     )}
-                  </section>
+                    </section>
+                  </>
                 )}
 
                 {activeTab === "sync" && (

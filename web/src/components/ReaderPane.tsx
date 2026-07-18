@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query"
 import {
   ArrowLeft,
   ArrowSquareOut,
@@ -33,6 +34,7 @@ import {
 } from "react"
 
 import type { AIProfile, Entry, EntryDetail, EntryState, Tag } from "../api/types"
+import { listAIResults } from "../api/client"
 import {
   applyAnnotations,
   serializeSelection,
@@ -77,13 +79,24 @@ export function ReaderPane(props: ReaderPaneProps) {
   const [noteDraft, setNoteDraft] = useState("")
   const [sourceLeadImageFailed, setSourceLeadImageFailed] = useState(false)
   const [sourceIconFailed, setSourceIconFailed] = useState(false)
+  const [showOriginalContent, setShowOriginalContent] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const readerAppearance = useReaderStore((state) => state.readerAppearance)
   const setReaderAppearance = useReaderStore((state) => state.setReaderAppearance)
   const annotations = useReaderStore((state) => state.annotations)
   const addAnnotation = useReaderStore((state) => state.addAnnotation)
   const removeAnnotation = useReaderStore((state) => state.removeAnnotation)
+  const alwaysTranslateContent = useReaderStore((state) => state.alwaysTranslateContent)
   const entry = props.detail ?? props.summary
+  const translationLanguage = locale === "zh-CN" ? "Chinese" : "English"
+  const aiResults = useQuery({
+    queryKey: ["ai-results", entry?.id],
+    queryFn: ({ signal }) => listAIResults(entry!.id, signal),
+    enabled: Boolean(entry && alwaysTranslateContent && props.aiProfiles.length > 0),
+  })
+  const translatedContent = aiResults.data?.items.find(
+    (result) => result.operation === "translation" && result.language === translationLanguage,
+  )?.result_text
   const sourceImage =
     entry?.lead_image_url && !sourceLeadImageFailed
       ? { url: entry.lead_image_url, kind: "lead" as const }
@@ -523,7 +536,26 @@ export function ReaderPane(props: ReaderPaneProps) {
           profiles={props.aiProfiles}
           onConfigure={props.onConfigureAI}
         />
-        {safeHTML ? (
+        {alwaysTranslateContent && translatedContent && (
+          <div className="article-translation-switch" role="status">
+            <span>
+              <Translate />
+              {t("translatedContent")}
+            </span>
+            <button
+              className="button button--quiet"
+              type="button"
+              onClick={() => setShowOriginalContent((current) => !current)}
+            >
+              {showOriginalContent ? t("showTranslation") : t("showOriginal")}
+            </button>
+          </div>
+        )}
+        {alwaysTranslateContent && translatedContent && !showOriginalContent ? (
+          <div ref={contentRef} className="article-content article-content--translation">
+            {translatedContent}
+          </div>
+        ) : safeHTML ? (
           <div
             ref={contentRef}
             className="article-content"

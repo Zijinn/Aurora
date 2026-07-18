@@ -1,5 +1,7 @@
 # Aurora
 
+[简体中文](README.zh-CN.md) · English
+
 Aurora is a local-first personal RSS reader for macOS, Windows, iPad, and the web. It combines a quiet three-pane reading workflow with a Go service that owns feed fetching, SQLite storage, scheduling, synchronization, AI tasks, and a versioned REST API.
 
 ![Aurora icon](web/assets/brand/aurora-product-icon.png)
@@ -12,9 +14,16 @@ Aurora is a local-first personal RSS reader for macOS, Windows, iPad, and the we
 - Conditional HTTP refresh with ETag/Last-Modified validators, configurable polling policies, exponential failure backoff, and multi-key article deduplication
 - Folders, tags, saved filters, automation rules, read later, starred items, and configurable shortcuts
 - OpenAI-compatible and Ollama BYOK profiles with title translation, article summaries, key points, and article chat
+- Optional bilingual foreign-title display and automatic article translation when opened
 - FreshRSS, Google Reader compatible services, Miniflux, Fever, Feedbin, and Nextcloud News adapters
 - Concurrent WebDAV and iCloud Drive library synchronization with conflict detection and explicit recovery choices
 - Chinese and English interfaces, light and dark themes, and five timeline views
+
+## Screenshots
+
+![Aurora reader](docs/images/aurora-reader-en.png)
+
+![Automatic translation settings](docs/images/aurora-settings-en.png)
 
 ## Install
 
