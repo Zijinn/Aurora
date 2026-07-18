@@ -8,7 +8,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { useRef } from "react"
+import { useMemo, useRef, useState } from "react"
 
 import type { Entry, LibraryScope, Subscription, ViewMode } from "../api/types"
 import { localizedScopeTitle, useTranslation, type Locale, type Translator } from "../lib/i18n"
@@ -38,6 +38,10 @@ interface TimelinePaneProps {
 export function TimelinePane(props: TimelinePaneProps) {
   const { locale, t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const subscriptionIcons = useMemo(
+    () => new Map(props.subscriptions.map((subscription) => [subscription.feed_id, subscription.icon_url] as const)),
+    [props.subscriptions],
+  )
   const selectedFeedID = props.scope.kind === "feed" ? props.scope.id : null
   const virtualizer = useVirtualizer({
     count: props.entries.length,
@@ -174,6 +178,7 @@ export function TimelinePane(props: TimelinePaneProps) {
                       index={virtualItem.index}
                       selected={entry.id === props.selectedEntryID}
                       viewMode={props.viewMode}
+                      feedIconURL={subscriptionIcons.get(entry.feed_id) ?? null}
                       locale={locale}
                       t={t}
                       onSelect={() => props.onSelect(entry.id)}
@@ -201,6 +206,7 @@ function TimelineEntry({
   index,
   selected,
   viewMode,
+  feedIconURL,
   locale,
   t,
   onSelect,
@@ -210,6 +216,7 @@ function TimelineEntry({
   index: number
   selected: boolean
   viewMode: ViewMode
+  feedIconURL: string | null
   locale: Locale
   t: Translator
   onSelect: () => void
@@ -222,12 +229,7 @@ function TimelineEntry({
       <span className="timeline-entry__index" aria-hidden="true">
         {String(index + 1).padStart(2, "0")}
       </span>
-      <span className="timeline-entry__image" aria-hidden="true">
-        <span>{entry.feed_title.slice(0, 1).toUpperCase()}</span>
-        {entry.lead_image_url && (
-          <img src={entry.lead_image_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
-        )}
-      </span>
+      <TimelineEntryImage entry={entry} feedIconURL={feedIconURL} />
       <button
         className="timeline-entry__main"
         type="button"
@@ -270,6 +272,36 @@ function TimelineEntry({
         <Star weight={entry.state.is_starred ? "fill" : "regular"} />
       </button>
     </article>
+  )
+}
+
+function TimelineEntryImage({ entry, feedIconURL }: { entry: Entry; feedIconURL: string | null }) {
+  const [leadImageFailed, setLeadImageFailed] = useState(false)
+  const [feedIconFailed, setFeedIconFailed] = useState(false)
+  const source =
+    entry.lead_image_url && !leadImageFailed
+      ? { url: entry.lead_image_url, kind: "lead" as const }
+      : feedIconURL && !feedIconFailed
+        ? { url: feedIconURL, kind: "icon" as const }
+        : null
+
+  return (
+    <span className="timeline-entry__image" aria-hidden="true">
+      {source ? (
+        <img
+          src={source.url}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => {
+            if (source.kind === "lead") setLeadImageFailed(true)
+            else setFeedIconFailed(true)
+          }}
+        />
+      ) : (
+        <span>{entry.feed_title.slice(0, 1).toUpperCase()}</span>
+      )}
+    </span>
   )
 }
 

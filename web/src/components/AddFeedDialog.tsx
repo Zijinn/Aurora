@@ -3,6 +3,7 @@ import { CircleNotch, Plus, UploadSimple, X } from "@phosphor-icons/react"
 import { type FormEvent, useRef, useState } from "react"
 
 import type { Folder } from "../api/types"
+import { APIError } from "../api/client"
 import { useTranslation } from "../lib/i18n"
 
 interface AddFeedDialogProps {
@@ -30,6 +31,9 @@ export function AddFeedDialog(props: AddFeedDialogProps) {
     if (file) props.onImport(file)
     if (fileInput.current) fileInput.current.value = ""
   }
+  const errorMessage = props.error instanceof APIError && props.error.code === "invalid_opml"
+    ? t("invalidOPML")
+    : props.error?.message
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
@@ -80,9 +84,9 @@ export function AddFeedDialog(props: AddFeedDialogProps) {
                 </option>
               ))}
             </select>
-            {props.error && (
+            {errorMessage && (
               <p className="form-error" role="alert">
-                {props.error.message}
+                {errorMessage}
               </p>
             )}
             <div className="dialog-actions">

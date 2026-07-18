@@ -17,8 +17,6 @@ import (
 	"github.com/Zijinn/Aurora/internal/storage"
 )
 
-const maxRequestBody = 5 << 20
-
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/feeds", s.listFeeds)
 	mux.HandleFunc("POST /api/v1/feeds", s.createFeed)
@@ -376,9 +374,12 @@ func (s *Server) fetchReadability(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) importOPML(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody+1))
-	if err != nil || len(body) == 0 || len(body) > maxRequestBody {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_opml", "Invalid OPML", "Provide an OPML document no larger than 5 MiB.")
+	// OPML documents are user exports and can legitimately exceed the request
+	// limit used by small JSON mutations. Keep this endpoint independent so
+	// large libraries can be imported without an arbitrary size ceiling.
+	body, err := io.ReadAll(r.Body)
+	if err != nil || len(body) == 0 {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_opml", "Invalid OPML", "Provide a non-empty OPML document.")
 		return
 	}
 	queued, err := s.jobs.Enqueue(r.Context(), "opml.import", map[string]string{"data": string(body)})
@@ -470,8 +471,7 @@ func (s *Server) exportBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
-	const maxBackupSize = 100 << 20
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBackupSize))
+	decoder := json.NewDecoder(r.Body)
 	var document storage.BackupDocument
 	if err := decoder.Decode(&document); err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_backup", "Invalid backup", err.Error())
@@ -486,7 +486,7 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return err

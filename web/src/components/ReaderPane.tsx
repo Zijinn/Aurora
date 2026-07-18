@@ -57,6 +57,7 @@ interface ReaderPaneProps {
   readabilityPending: boolean
   aiProfiles: AIProfile[]
   tags: Tag[]
+  feedIconURL?: string | null
   onBack: () => void
   onRetry: () => void
   onStateChange: (entry: Entry, patch: Partial<EntryState>) => void
@@ -74,6 +75,8 @@ export function ReaderPane(props: ReaderPaneProps) {
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null)
   const [noteEditorOpen, setNoteEditorOpen] = useState(false)
   const [noteDraft, setNoteDraft] = useState("")
+  const [sourceLeadImageFailed, setSourceLeadImageFailed] = useState(false)
+  const [sourceIconFailed, setSourceIconFailed] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const readerAppearance = useReaderStore((state) => state.readerAppearance)
   const setReaderAppearance = useReaderStore((state) => state.setReaderAppearance)
@@ -81,6 +84,12 @@ export function ReaderPane(props: ReaderPaneProps) {
   const addAnnotation = useReaderStore((state) => state.addAnnotation)
   const removeAnnotation = useReaderStore((state) => state.removeAnnotation)
   const entry = props.detail ?? props.summary
+  const sourceImage =
+    entry?.lead_image_url && !sourceLeadImageFailed
+      ? { url: entry.lead_image_url, kind: "lead" as const }
+      : props.feedIconURL && !sourceIconFailed
+        ? { url: props.feedIconURL, kind: "icon" as const }
+        : null
   const entryAnnotations = useMemo(
     () => annotations.filter((annotation) => annotation.entryID === entry?.id),
     [annotations, entry?.id],
@@ -455,7 +464,20 @@ export function ReaderPane(props: ReaderPaneProps) {
         <header className="article-header">
           <div className="article-header__source-row">
             <span className="article-header__source-mark" aria-hidden="true">
-              {entry.feed_title.slice(0, 1).toUpperCase()}
+              {sourceImage ? (
+                <img
+                  src={sourceImage.url}
+                  alt=""
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  onError={() => {
+                    if (sourceImage.kind === "lead") setSourceLeadImageFailed(true)
+                    else setSourceIconFailed(true)
+                  }}
+                />
+              ) : (
+                entry.feed_title.slice(0, 1).toUpperCase()
+              )}
             </span>
             <div>
               <p className="article-header__source">{entry.feed_title}</p>

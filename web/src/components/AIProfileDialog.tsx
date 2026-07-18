@@ -78,8 +78,10 @@ export function AIProfileDialog(props: AIProfileDialogProps) {
             <input id="ai-model" className="text-input" value={model} maxLength={200} onChange={(event) => setModel(event.target.value)} />
             {provider === "openai_compatible" && <><label className="field-label" htmlFor="ai-api-key">{t("apiKey")}</label><input id="ai-api-key" className="text-input" type="password" autoComplete="off" value={apiKey} onChange={(event) => setAPIKey(event.target.value)} /></>}
             <label className="field-label" htmlFor="ai-temperature">{t("temperature")}</label>
-            <input id="ai-temperature" className="range-input" type="range" min="0" max="2" step="0.1" value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} />
-            <output className="range-output" htmlFor="ai-temperature">{temperature.toFixed(1)}</output>
+            <div className="range-row">
+              <input id="ai-temperature" className="range-input" type="range" min="0" max="2" step="0.1" value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} />
+              <output className="range-output" htmlFor="ai-temperature">{temperature.toFixed(1)}</output>
+            </div>
             <label className="checkbox-row" htmlFor="ai-private-network"><input id="ai-private-network" type="checkbox" checked={allowPrivate} onChange={(event) => setAllowPrivate(event.target.checked)} /><span>{t("allowPrivateEndpoint")}</span></label>
             <label className="checkbox-row privacy-confirmation" htmlFor="ai-privacy"><input id="ai-privacy" type="checkbox" checked={privacyApproved} onChange={(event) => setPrivacyApproved(event.target.checked)} /><span>{t("articleMayBeSent")}</span></label>
             <label className="checkbox-row" htmlFor="ai-default"><input id="ai-default" type="checkbox" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} /><span>{t("defaultAIProvider")}</span></label>

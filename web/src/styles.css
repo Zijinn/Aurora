@@ -2841,6 +2841,12 @@ button:disabled {
   font-weight: 750;
   background: var(--accent-soft);
   border-radius: 6px;
+  overflow: hidden;
+}
+.article-header__source-mark > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .article-header__source-row > div {
   min-width: 0;
@@ -3346,6 +3352,76 @@ button:disabled {
   .organization-form .button {
     justify-self: stretch;
   }
+}
+
+/* Form rhythm: keep labels, controls, helper text, and actions on a shared baseline. */
+.dialog-form {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 0;
+}
+.dialog-form > .field-label {
+  display: block;
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+.dialog-form > .field-label:not(:first-child) {
+  margin-top: 18px;
+}
+.dialog-form > .text-input,
+.dialog-form > .select-input {
+  box-sizing: border-box;
+  min-width: 0;
+  line-height: 1.25;
+}
+.dialog-form > .field-hint {
+  margin: 7px 0 0;
+  line-height: 1.45;
+}
+.dialog-form > .form-error {
+  display: flex;
+  align-items: flex-start;
+  box-sizing: border-box;
+  margin-top: 16px;
+  line-height: 1.45;
+}
+.dialog-actions {
+  align-items: center;
+  margin-top: 24px;
+}
+.range-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 28px;
+}
+.range-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.range-output {
+  min-width: 2.5ch;
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.checkbox-row {
+  align-items: flex-start;
+  min-height: 24px;
+  margin-top: 16px;
+  line-height: 1.45;
+}
+.checkbox-row input {
+  flex: 0 0 16px;
+  margin: 1px 0 0;
+}
+.privacy-confirmation {
+  box-sizing: border-box;
+  align-items: flex-start;
+  padding: 10px 12px;
+  margin-top: 16px;
 }
 
 /* Apple-style glass is reserved for chrome and floating functional layers. */

@@ -131,12 +131,23 @@ export function AppShell() {
   const [aiProfileOpen, setAIProfileOpen] = useState(false)
   const [organizationOpen, setOrganizationOpen] = useState(false)
   const [organizationMode, setOrganizationMode] = useState<"all" | "folders">("all")
+  const [dialogReturnTarget, setDialogReturnTarget] = useState<"preferences" | null>(null)
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const online = useOnlineState()
   const shellRef = useRef<HTMLElement>(null)
   const dragStartLayout = useRef<PaneLayout>(paneLayout)
   const dragLayout = useRef<PaneLayout>(paneLayout)
+  const closeSecondaryDialog = useCallback(
+    (setOpen: (open: boolean) => void) => {
+      setOpen(false)
+      if (dialogReturnTarget === "preferences") {
+        setDialogReturnTarget(null)
+        setPreferencesOpen(true)
+      }
+    },
+    [dialogReturnTarget],
+  )
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -310,6 +321,9 @@ export function AppShell() {
     [entriesQuery.data],
   )
   const selectedEntry = entries.find((entry) => entry.id === selectedEntryID) ?? null
+  const selectedFeedIconURL = selectedEntry
+    ? subscriptions.data?.items.find((subscription) => subscription.feed_id === selectedEntry.feed_id)?.icon_url ?? null
+    : null
   const entryDetail = useQuery({
     queryKey: ["entry", selectedEntryID, aiLanguage],
     queryFn: ({ signal }) => getEntry(selectedEntryID!, aiLanguage, signal),
@@ -438,7 +452,7 @@ export function AppShell() {
   const createSyncMutation = useMutation({
     mutationFn: createSyncAccount,
     onSuccess: async () => {
-      setSyncAccountOpen(false)
+      closeSecondaryDialog(setSyncAccountOpen)
       await queryClient.invalidateQueries({ queryKey: ["sync-accounts"] })
     },
   })
@@ -496,7 +510,7 @@ export function AppShell() {
   const createAIProfileMutation = useMutation({
     mutationFn: createAIProfile,
     onSuccess: async () => {
-      setAIProfileOpen(false)
+      closeSecondaryDialog(setAIProfileOpen)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ai-profiles"] }),
         queryClient.invalidateQueries({ queryKey: ["ai-usage"] }),
@@ -695,6 +709,7 @@ export function AppShell() {
                   readabilityPending={readabilityMutation.isPending}
                   aiProfiles={aiProfiles.data?.items ?? []}
                   tags={tags.data?.items ?? []}
+                  feedIconURL={selectedFeedIconURL}
                   onBack={closeMobileReader}
                   onRetry={() => void entryDetail.refetch()}
                   onStateChange={mutateState}
@@ -781,16 +796,21 @@ export function AppShell() {
               aiUsage={aiUsage.data}
               pairingCode={pairingCodeMutation.data}
               pairingCodePending={pairingCodeMutation.isPending}
-              onOpenChange={setPreferencesOpen}
+              onOpenChange={(open) => {
+                setPreferencesOpen(open)
+                if (!open) setDialogReturnTarget(null)
+              }}
               onRestore={(file) => restoreMutation.mutate(file)}
               onCreatePairingCode={() => pairingCodeMutation.mutate()}
               onRevokeDevice={(deviceID) => revokeDeviceMutation.mutate(deviceID)}
               onAddSyncAccount={(provider) => {
+                setDialogReturnTarget("preferences")
                 setPreferencesOpen(false)
                 setSyncAccountProvider(provider)
                 setSyncAccountOpen(true)
               }}
               onOrganizeLibrary={() => {
+                setDialogReturnTarget("preferences")
                 setPreferencesOpen(false)
                 setOrganizationMode("all")
                 setOrganizationOpen(true)
@@ -804,6 +824,7 @@ export function AppShell() {
                   deleteSyncMutation.mutate(accountID)
               }}
               onAddAIProfile={() => {
+                setDialogReturnTarget("preferences")
                 setPreferencesOpen(false)
                 setAIProfileOpen(true)
               }}
@@ -853,7 +874,10 @@ export function AppShell() {
               initialProvider={syncAccountProvider}
               pending={createSyncMutation.isPending}
               error={createSyncMutation.error}
-              onOpenChange={setSyncAccountOpen}
+              onOpenChange={(open) => {
+                if (open) setSyncAccountOpen(true)
+                else closeSecondaryDialog(setSyncAccountOpen)
+              }}
               onCreate={(input) => createSyncMutation.mutate(input)}
             />
           </Suspense>
@@ -865,7 +889,10 @@ export function AppShell() {
               providers={aiProviders.data?.items ?? []}
               pending={createAIProfileMutation.isPending}
               error={createAIProfileMutation.error}
-              onOpenChange={setAIProfileOpen}
+              onOpenChange={(open) => {
+                if (open) setAIProfileOpen(true)
+                else closeSecondaryDialog(setAIProfileOpen)
+              }}
               onCreate={(input) => createAIProfileMutation.mutate(input)}
             />
           </Suspense>
@@ -899,7 +926,10 @@ export function AppShell() {
                 createSavedFilterMutation.error ??
                 deleteSavedFilterMutation.error
               }
-              onOpenChange={setOrganizationOpen}
+              onOpenChange={(open) => {
+                if (open) setOrganizationOpen(true)
+                else closeSecondaryDialog(setOrganizationOpen)
+              }}
               onCreateFolder={(input) => createFolderMutation.mutate(input)}
               onDeleteFolder={(folderID) => {
                 if (window.confirm(t("deleteFolderConfirmation")))
