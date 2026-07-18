@@ -99,9 +99,12 @@ export function Sidebar(props: SidebarProps) {
             </button>
           )
         })}
-        <p className="sidebar-section-label sidebar-section-label--spaced">{t("saved")}</p>
         <button
-          className={props.scope.kind === "saved" ? "nav-item nav-item--active" : "nav-item"}
+          className={
+            props.scope.kind === "saved"
+              ? "nav-item nav-item--saved nav-item--active"
+              : "nav-item nav-item--saved"
+          }
           type="button"
           aria-current={props.scope.kind === "saved" ? "page" : undefined}
           onClick={() => props.onScopeChange({ kind: "saved", title: "Saved" })}
@@ -199,6 +202,12 @@ export function Sidebar(props: SidebarProps) {
               onToggleFolder={toggleFolder}
               onScopeChange={props.onScopeChange}
             />
+            {props.folders.length === 0 && props.subscriptions.length === 0 && (
+              <div className="sidebar-library-empty">
+                <Tray aria-hidden="true" />
+                <span>{t("noSubscriptions")}</span>
+              </div>
+            )}
             <div className="feed-list">
               <h3>{t("subscriptions")}</h3>
               {props.subscriptions.map((subscription) => {
@@ -248,11 +257,7 @@ export function Sidebar(props: SidebarProps) {
         <kbd>⌘ N</kbd>
       </button>
       <div className="sidebar__footer">
-        <span className="sidebar-profile-mark" aria-hidden="true">
-          A
-        </span>
         <div className="server-state" role="status">
-          <strong>Aurora</strong>
           {props.status.isPending ? (
             <CircleNotch className="spin" aria-hidden="true" />
           ) : props.status.isError ? (

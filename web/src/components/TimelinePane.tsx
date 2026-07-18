@@ -76,12 +76,17 @@ export function TimelinePane(props: TimelinePaneProps) {
         </div>
       </header>
       <div className="timeline-filterbar">
-        <div className="timeline-filterbar__scopes" aria-label={t("articleFilters")}>
+        <div
+          className="timeline-filterbar__scopes"
+          role="group"
+          aria-label={t("articleFilters")}
+        >
           <button
             className={
               props.scope.kind === "all" ? "filter-chip filter-chip--active" : "filter-chip"
             }
             type="button"
+            aria-pressed={props.scope.kind === "all"}
             onClick={() => props.onScopeChange({ kind: "all", title: "All feeds" })}
           >
             {t("all")}
@@ -91,6 +96,7 @@ export function TimelinePane(props: TimelinePaneProps) {
               props.scope.kind === "unread" ? "filter-chip filter-chip--active" : "filter-chip"
             }
             type="button"
+            aria-pressed={props.scope.kind === "unread"}
             onClick={() => props.onScopeChange({ kind: "unread", title: "Unread" })}
           >
             {t("unread")}
@@ -100,6 +106,7 @@ export function TimelinePane(props: TimelinePaneProps) {
               props.scope.kind === "saved" ? "filter-chip filter-chip--active" : "filter-chip"
             }
             type="button"
+            aria-pressed={props.scope.kind === "saved"}
             onClick={() => props.onScopeChange({ kind: "saved", title: "Saved" })}
           >
             {t("saved")}
