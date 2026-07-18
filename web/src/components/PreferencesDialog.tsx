@@ -2,6 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog"
 import {
   ArrowCounterClockwise,
   ArrowsClockwise,
+  AppleLogo,
   Books,
   Brain,
   Check,
@@ -9,6 +10,7 @@ import {
   Cloud,
   CloudArrowDown,
   CloudArrowUp,
+  CaretRight,
   Devices,
   DownloadSimple,
   LinkSimple,
@@ -20,7 +22,15 @@ import {
 } from "@phosphor-icons/react"
 import { type KeyboardEvent, useRef, useState } from "react"
 
-import type { AIProfile, AIUsage, Device, ServerStatus, SyncAccount, ViewMode } from "../api/types"
+import type {
+  AIProfile,
+  AIUsage,
+  Device,
+  ServerStatus,
+  SyncAccount,
+  SyncProviderID,
+  ViewMode,
+} from "../api/types"
 import { useTranslation, type Locale, type Translator } from "../lib/i18n"
 import { displayShortcut, keyboardChord } from "../lib/shortcuts"
 import {
@@ -47,7 +57,7 @@ interface PreferencesDialogProps {
   onRestore: (file: File) => void
   onCreatePairingCode: () => void
   onRevokeDevice: (deviceID: string) => void
-  onAddSyncAccount: () => void
+  onAddSyncAccount: (provider?: SyncProviderID) => void
   onToggleSyncAccount: (accountID: string, enabled: boolean) => void
   onRunSyncAccount: (accountID: string, mode: "auto" | "push" | "pull") => void
   onDeleteSyncAccount: (accountID: string) => void
@@ -389,6 +399,11 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
 
                 {activeTab === "sync" && (
                   <>
+                    <CloudProviderGrid
+                      accounts={cloudAccounts}
+                      t={t}
+                      onSelect={props.onAddSyncAccount}
+                    />
                     <SyncAccountSection
                       title={t("libraryCloudSync")}
                       description={t("libraryCloudSyncDescription")}
@@ -411,7 +426,7 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                       locale={locale}
                       t={t}
                       pendingID={props.syncPendingID}
-                      onAdd={props.onAddSyncAccount}
+                      onAdd={() => props.onAddSyncAccount("freshrss")}
                       onToggle={props.onToggleSyncAccount}
                       onRun={(account) => props.onRunSyncAccount(account.id, "auto")}
                       onDelete={props.onDeleteSyncAccount}
@@ -671,6 +686,62 @@ function SyncAccountSection(props: {
           )
         })}
         {props.accounts.length === 0 && <p className="preference-empty">{props.empty}</p>}
+      </div>
+    </section>
+  )
+}
+
+function CloudProviderGrid(props: {
+  accounts: SyncAccount[]
+  t: Translator
+  onSelect: (provider: SyncProviderID) => void
+}) {
+  const providers: Array<{
+    id: "webdav" | "icloud"
+    name: string
+    description: string
+    icon: typeof CloudArrowUp
+  }> = [
+    {
+      id: "webdav",
+      name: "WebDAV",
+      description: props.t("webdavSyncDescription"),
+      icon: CloudArrowUp,
+    },
+    {
+      id: "icloud",
+      name: props.t("icloudDrive"),
+      description: props.t("icloudSyncDescription"),
+      icon: AppleLogo,
+    },
+  ]
+
+  return (
+    <section className="preference-section preference-section--flush sync-provider-section">
+      <div className="sync-provider-grid">
+        {providers.map((provider) => {
+          const accounts = props.accounts.filter((account) => account.provider === provider.id)
+          const connected = accounts.some((account) => account.enabled)
+          const Icon = provider.icon
+          return (
+            <button
+              className={`sync-provider-card sync-provider-card--${provider.id}`}
+              type="button"
+              key={provider.id}
+              onClick={() => props.onSelect(provider.id)}
+            >
+              <span className="sync-provider-card__icon">
+                <Icon />
+              </span>
+              <span className="sync-provider-card__copy">
+                <strong>{provider.name}</strong>
+                <small>{provider.description}</small>
+                <span>{connected ? props.t("connected") : props.t("notConfigured")}</span>
+              </span>
+              <CaretRight />
+            </button>
+          )
+        })}
       </div>
     </section>
   )

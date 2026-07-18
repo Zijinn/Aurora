@@ -9,6 +9,7 @@ import { useTranslation } from "../lib/i18n"
 interface SyncAccountDialogProps {
   open: boolean
   providers: SyncProvider[]
+  initialProvider?: SyncProviderID
   pending: boolean
   error: Error | null
   onOpenChange: (open: boolean) => void
@@ -21,10 +22,10 @@ const defaultEndpoints: Partial<Record<SyncProviderID, string>> = {
 
 export function SyncAccountDialog(props: SyncAccountDialogProps) {
   const { t } = useTranslation()
-  const fallbackProvider = props.providers[0]?.id ?? "freshrss"
+  const fallbackProvider = props.initialProvider ?? props.providers[0]?.id ?? "webdav"
   const [provider, setProvider] = useState<SyncProviderID>(fallbackProvider)
   const [name, setName] = useState("")
-  const [endpoint, setEndpoint] = useState("")
+  const [endpoint, setEndpoint] = useState(defaultEndpoints[fallbackProvider] ?? "")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [token, setToken] = useState("")

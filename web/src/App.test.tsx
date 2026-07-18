@@ -14,6 +14,8 @@ beforeEach(() => {
     mobileReaderOpen: false,
     locale: "en-US",
     paneLayout: { sidebarWidth: 246, timelineWidth: 424 },
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
     theme: "system",
   })
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
@@ -76,8 +78,6 @@ beforeEach(() => {
           items: [
             { id: "freshrss", name: "FreshRSS" },
             { id: "miniflux", name: "Miniflux" },
-            { id: "webdav", name: "WebDAV" },
-            { id: "icloud", name: "iCloud Drive" },
           ],
         }),
       )
@@ -167,16 +167,9 @@ describe("Aurora reading experience", () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
     fireEvent.click(screen.getByRole("button", { name: "Sync" }))
-    const cloudSection = screen
-      .getByRole("heading", { name: "Library cloud sync" })
-      .closest("section")
-		expect(cloudSection).not.toBeNull()
-		fireEvent.click(within(cloudSection!).getByRole("button", { name: "Add" }))
-		await screen.findByRole("option", { name: "iCloud Drive" })
-		const provider = screen.getByRole("combobox", { name: "Provider" })
-    fireEvent.change(provider, {
-      target: { value: "icloud" },
-    })
+    expect(screen.getByRole("button", { name: /WebDAV/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /iCloud Drive/ }))
+    const provider = await screen.findByRole("combobox", { name: "Provider" })
     expect(provider).toHaveValue("icloud")
     expect(screen.getByLabelText("iCloud file path")).toHaveValue("")
     expect(screen.getByRole("button", { name: "Add account" })).toBeEnabled()

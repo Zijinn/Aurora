@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render, screen } from "@testing-library/react"
-import { expect, it, vi } from "vitest"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { afterEach, expect, it, vi } from "vitest"
 
 import type { EntryDetail, Tag } from "../api/types"
 import { useReaderStore } from "../store/reader"
 import { ReaderPane } from "./ReaderPane"
+
+afterEach(() => cleanup())
 
 const detail: EntryDetail = {
   id: "entry-1",
@@ -46,7 +48,12 @@ const tags: Tag[] = [
 ]
 
 it("shows and updates article tags", () => {
-  useReaderStore.setState({ locale: "en-US", theme: "system" })
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
+  })
   const onTagsChange = vi.fn()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -77,7 +84,12 @@ it("shows and updates article tags", () => {
 })
 
 it("shows cached AI title translation and summary in the reading header", () => {
-  useReaderStore.setState({ locale: "en-US", theme: "system" })
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
+  })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
@@ -111,3 +123,114 @@ it("shows cached AI title translation and summary in the reading header", () => 
   expect(screen.getByText("AI summary")).toBeInTheDocument()
   expect(screen.getByText("这是缓存的 AI 摘要。")).toBeInTheDocument()
 })
+
+it("adjusts reading typography from the right-side inspector", () => {
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
+  })
+  renderReader()
+
+  fireEvent.click(screen.getByRole("button", { name: "Reading appearance" }))
+  fireEvent.click(screen.getByRole("button", { name: "Sans serif" }))
+  fireEvent.change(screen.getByRole("slider", { name: "Text size" }), {
+    target: { value: "22" },
+  })
+
+  expect(useReaderStore.getState().readerAppearance).toMatchObject({
+    fontFamily: "sans",
+    fontSize: 22,
+  })
+  expect(screen.getByRole("article", { name: "Reader" })).toHaveStyle({
+    "--reader-content-size": "22px",
+  })
+})
+
+it("restores saved highlights and notes for the current article", async () => {
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [
+      {
+        id: "annotation-1",
+        entryID: detail.id,
+        quote: "Article body",
+        prefix: "",
+        suffix: "",
+        style: "highlight",
+        note: "Return to this idea",
+        createdAt: "2026-07-18T00:00:00Z",
+      },
+    ],
+  })
+  renderReader()
+
+  await waitFor(() =>
+    expect(document.querySelector(".reader-annotation--highlight")).toHaveTextContent(
+      "Article body",
+    ),
+  )
+  expect(document.querySelector(".reader-annotation--highlight")).toHaveAttribute(
+    "title",
+    "Return to this idea",
+  )
+})
+
+it("creates a persistent highlight from selected article text", async () => {
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
+  })
+  renderReader()
+
+  const paragraph = screen.getByText("Article body")
+  const text = paragraph.firstChild
+  expect(text).not.toBeNull()
+  const range = document.createRange()
+  range.setStart(text!, 0)
+  range.setEnd(text!, 7)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+  fireEvent.pointerUp(paragraph)
+
+  fireEvent.click(await screen.findByRole("button", { name: "Highlight" }))
+  expect(useReaderStore.getState().annotations).toHaveLength(1)
+  expect(useReaderStore.getState().annotations[0]).toMatchObject({
+    entryID: detail.id,
+    quote: "Article",
+    style: "highlight",
+  })
+  await waitFor(() =>
+    expect(document.querySelector(".reader-annotation--highlight")).toHaveTextContent("Article"),
+  )
+})
+
+function renderReader() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <ReaderPane
+        summary={detail}
+        detail={detail}
+        isLoading={false}
+        error={null}
+        mutationPending={false}
+        readabilityPending={false}
+        aiProfiles={[]}
+        tags={[]}
+        onBack={vi.fn()}
+        onRetry={vi.fn()}
+        onStateChange={vi.fn()}
+        onTagsChange={vi.fn()}
+        onFetchReadability={vi.fn()}
+        onConfigureAI={vi.fn()}
+      />
+    </QueryClientProvider>,
+  )
+}

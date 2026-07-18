@@ -52,7 +52,7 @@ import {
   updateAIProfile,
   updateSyncAccount,
 } from "../api/client"
-import type { Entry, EntryState } from "../api/types"
+import type { Entry, EntryState, SyncProvider, SyncProviderID } from "../api/types"
 import { useTranslation } from "../lib/i18n"
 import { keyboardChord } from "../lib/shortcuts"
 import { enqueueStateMutation, flushMutationOutbox } from "../offline/database"
@@ -77,6 +77,10 @@ const SIDEBAR_MIN = 210
 const SIDEBAR_MAX = 360
 const TIMELINE_MIN = 300
 const TIMELINE_MAX = 560
+const BUILT_IN_CLOUD_PROVIDERS: SyncProvider[] = [
+  { id: "webdav", name: "WebDAV" },
+  { id: "icloud", name: "iCloud Drive" },
+]
 
 export function AppShell() {
   const queryClient = useQueryClient()
@@ -100,6 +104,7 @@ export function AppShell() {
   const [preferencesOpen, setPreferencesOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [syncAccountOpen, setSyncAccountOpen] = useState(false)
+  const [syncAccountProvider, setSyncAccountProvider] = useState<SyncProviderID>()
   const [aiProfileOpen, setAIProfileOpen] = useState(false)
   const [organizationOpen, setOrganizationOpen] = useState(false)
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false)
@@ -243,6 +248,12 @@ export function AppShell() {
     enabled: libraryEnabled,
     refetchInterval: 30_000,
   })
+  const availableSyncProviders = useMemo(() => {
+    const providers = new Map<SyncProviderID, SyncProvider>()
+    for (const provider of BUILT_IN_CLOUD_PROVIDERS) providers.set(provider.id, provider)
+    for (const provider of syncProviders.data?.items ?? []) providers.set(provider.id, provider)
+    return Array.from(providers.values())
+  }, [syncProviders.data?.items])
   const aiProviders = useQuery({
     queryKey: ["ai-providers"],
     queryFn: ({ signal }) => listAIProviders(signal),
@@ -690,8 +701,9 @@ export function AppShell() {
           onRestore={(file) => restoreMutation.mutate(file)}
           onCreatePairingCode={() => pairingCodeMutation.mutate()}
           onRevokeDevice={(deviceID) => revokeDeviceMutation.mutate(deviceID)}
-          onAddSyncAccount={() => {
+          onAddSyncAccount={(provider) => {
             setPreferencesOpen(false)
+            setSyncAccountProvider(provider)
             setSyncAccountOpen(true)
           }}
           onOrganizeLibrary={() => {
@@ -734,8 +746,10 @@ export function AppShell() {
           onPair={(code, name, platform) => pairMutation.mutate({ code, name, platform })}
         />
         <SyncAccountDialog
+          key={`${syncAccountProvider ?? "default"}-${syncAccountOpen ? "open" : "closed"}`}
           open={syncAccountOpen}
-          providers={syncProviders.data?.items ?? []}
+          providers={availableSyncProviders}
+          initialProvider={syncAccountProvider}
           pending={createSyncMutation.isPending}
           error={createSyncMutation.error}
           onOpenChange={setSyncAccountOpen}
