@@ -5075,3 +5075,27 @@ button:disabled {
     bottom: max(14px, env(safe-area-inset-bottom));
   }
 }
+
+/* Final brand lockup override. */
+.sidebar__header {
+  min-height: 52px;
+  padding-right: 8px;
+  padding-left: 8px;
+}
+.brand {
+  gap: 12px;
+  min-height: 46px;
+}
+.brand__mark {
+  width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+  background: var(--surface-raised);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 74%, transparent);
+  border-radius: 12px;
+  box-shadow: none;
+}
+.brand__name {
+  font-size: 21px;
+  font-weight: 760;
+}
