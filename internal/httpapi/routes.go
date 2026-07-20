@@ -13,6 +13,7 @@ import (
 
 	"github.com/Zijinn/Aurora/internal/domain"
 	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/opml"
 	"github.com/Zijinn/Aurora/internal/service"
 	"github.com/Zijinn/Aurora/internal/storage"
 )
@@ -97,7 +98,7 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusBadRequest, "url_required", "Feed URL required", "Provide an HTTP, HTTPS, or rsshub:// URL.")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), feedcore.DefaultFetchTimeout)
 	defer cancel()
 	created, err := s.feeds.AddFeed(ctx, service.AddFeedInput{
 		URL: request.URL, FolderID: request.FolderID, TitleOverride: request.TitleOverride,
@@ -118,7 +119,7 @@ func (s *Server) discoverFeeds(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", "A URL is required.")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), feedcore.DefaultFetchTimeout)
 	defer cancel()
 	items, err := s.feeds.Discover(ctx, request.URL)
 	if err != nil {
@@ -377,9 +378,13 @@ func (s *Server) importOPML(w http.ResponseWriter, r *http.Request) {
 	// OPML documents are user exports and can legitimately exceed the request
 	// limit used by small JSON mutations. Keep this endpoint independent so
 	// large libraries can be imported without an arbitrary size ceiling.
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, 16<<20))
 	if err != nil || len(body) == 0 {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_opml", "Invalid OPML", "Provide a non-empty OPML document.")
+		return
+	}
+	if _, err := opml.Parse(body); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_opml", "Invalid OPML", err.Error())
 		return
 	}
 	queued, err := s.jobs.Enqueue(r.Context(), "opml.import", map[string]string{"data": string(body)})

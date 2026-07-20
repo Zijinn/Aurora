@@ -497,9 +497,13 @@ function libraryScopeFilters(scope: LibraryScope): Record<string, string> {
 }
 
 export async function importOPML(file: File): Promise<Job> {
+	const headers = new Headers({ "Content-Type": "application/xml; charset=utf-8" })
+	const token = localStorage.getItem("cairn-device-token")
+	if (token) headers.set("Authorization", `Bearer ${token}`)
   const response = await fetch("/api/v1/imports/opml", {
     method: "POST",
-    headers: { "Content-Type": "text/xml" },
+    headers,
+    credentials: "same-origin",
     body: file,
   })
   if (!response.ok) {
@@ -510,9 +514,13 @@ export async function importOPML(file: File): Promise<Job> {
 }
 
 export async function restoreBackup(file: File): Promise<void> {
+	const headers = new Headers({ "Content-Type": "application/json" })
+	const token = localStorage.getItem("cairn-device-token")
+	if (token) headers.set("Authorization", `Bearer ${token}`)
   const response = await fetch("/api/v1/restore", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
+    credentials: "same-origin",
     body: file,
   })
   if (!response.ok) {

@@ -32,6 +32,8 @@ const (
 	maxAIArticleRunes   = 60000
 	maxChatMessageRunes = 4000
 	maxChatHistory      = 20
+	maxAcademicTags     = 5
+	maxAcademicTagRunes = 48
 )
 
 type AISettings struct {
@@ -207,6 +209,11 @@ func (s *AIService) PrepareOperation(ctx context.Context, entryID, profileID, op
 	}
 	inputHash := aiInputHash(record, operation, language, content)
 	if cached, err := storage.GetAIResult(ctx, s.db, domain.DefaultProfileID, entryID, operation, language, inputHash); err == nil {
+		if operation == "academic_tags" {
+			if err := s.applyAcademicTags(ctx, entryID, cached.ResultText); err != nil {
+				return nil, AIOperationPayload{}, err
+			}
+		}
 		return &cached, AIOperationPayload{}, nil
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		return nil, AIOperationPayload{}, err
@@ -228,6 +235,11 @@ func (s *AIService) RunOperation(ctx context.Context, jobID string, payload AIOp
 	}
 	inputHash := aiInputHash(record, payload.Operation, payload.Language, content)
 	if cached, err := storage.GetAIResult(ctx, s.db, domain.DefaultProfileID, payload.EntryID, payload.Operation, payload.Language, inputHash); err == nil {
+		if payload.Operation == "academic_tags" {
+			if err := s.applyAcademicTags(ctx, payload.EntryID, cached.ResultText); err != nil {
+				return domain.AIResult{}, err
+			}
+		}
 		return cached, nil
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		return domain.AIResult{}, err
@@ -246,6 +258,11 @@ func (s *AIService) RunOperation(ctx context.Context, jobID string, payload AIOp
 		_ = storage.MarkAIProfileFailure(context.Background(), s.db, record.Profile.ID, aiprovider.ErrorCode(err), err.Error())
 		return domain.AIResult{}, err
 	}
+	if payload.Operation == "academic_tags" {
+		if _, err := parseAcademicTags(response.Content); err != nil {
+			return domain.AIResult{}, err
+		}
+	}
 	usage := domain.AIUsage{InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens, TotalTokens: response.Usage.TotalTokens}
 	result, _, err := storage.SaveAIResultAndUsage(ctx, s.db, storage.SaveAIResultParams{
 		ProfileID: domain.DefaultProfileID, AIProfileID: record.Profile.ID, EntryID: payload.EntryID,
@@ -255,8 +272,21 @@ func (s *AIService) RunOperation(ctx context.Context, jobID string, payload AIOp
 	if err != nil {
 		return domain.AIResult{}, err
 	}
+	if payload.Operation == "academic_tags" {
+		if err := s.applyAcademicTags(ctx, payload.EntryID, result.ResultText); err != nil {
+			return domain.AIResult{}, err
+		}
+	}
 	_ = storage.MarkAIProfileSuccess(ctx, s.db, record.Profile.ID, time.Now().UTC())
 	return result, nil
+}
+
+func (s *AIService) applyAcademicTags(ctx context.Context, entryID, raw string) error {
+	tags, err := parseAcademicTags(raw)
+	if err != nil {
+		return err
+	}
+	return storage.AddEntryTagsByName(ctx, s.db, domain.DefaultProfileID, entryID, tags)
 }
 
 func (s *AIService) ListResults(ctx context.Context, entryID string) ([]domain.AIResult, error) {
@@ -437,9 +467,9 @@ func validateAIProfile(provider, name, endpoint, model string, settings AISettin
 func validateAIOperation(operation, language string) (string, string, error) {
 	operation = strings.ToLower(strings.TrimSpace(operation))
 	switch operation {
-	case "summary", "title_translation", "translation", "key_points":
+	case "summary", "title_translation", "translation", "key_points", "academic_tags":
 	default:
-		return "", "", errors.New("AI operation must be summary, title_translation, translation, or key_points")
+		return "", "", errors.New("AI operation must be summary, title_translation, translation, key_points, or academic_tags")
 	}
 	language = strings.TrimSpace(language)
 	if language == "" {
@@ -471,6 +501,8 @@ func operationMessages(operation, language string, content storage.AIEntryConten
 		instruction = "Translate the article into " + language + ". Preserve meaning, names, links, and technical terms."
 	case "key_points":
 		instruction = "Extract the article's key points as a concise bulleted list."
+	case "academic_tags":
+		instruction = "Based only on the article title, extract 3 to 5 concise academic tags covering discipline, topic, method, region, or data when present. Avoid generic labels such as article, research, paper, or study. Return only a valid JSON array of tag strings, with no Markdown or commentary."
 	}
 	if language != "auto" && operation != "translation" {
 		instruction += " Respond in " + language + "."
@@ -500,7 +532,7 @@ func articleEnvelope(content storage.AIEntryContent) string {
 }
 
 func operationEnvelope(operation string, content storage.AIEntryContent) string {
-	if operation == "title_translation" {
+	if operation == "title_translation" || operation == "academic_tags" {
 		return "<article-title>" + content.Title + "</article-title>"
 	}
 	return articleEnvelope(content)
@@ -508,7 +540,7 @@ func operationEnvelope(operation string, content storage.AIEntryContent) string 
 
 func aiInputHash(record storage.AIProfileRecord, operation, language string, content storage.AIEntryContent) string {
 	canonicalURL, articleContent := content.CanonicalURL, truncateRunes(content.Content, maxAIArticleRunes)
-	if operation == "title_translation" {
+	if operation == "title_translation" || operation == "academic_tags" {
 		canonicalURL, articleContent = "", ""
 	}
 	value := strings.Join([]string{record.Profile.ID, record.Profile.Provider, record.Profile.Endpoint,
@@ -516,6 +548,47 @@ func aiInputHash(record storage.AIProfileRecord, operation, language string, con
 		articleContent}, "\x00")
 	digest := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(digest[:])
+}
+
+func parseAcademicTags(raw string) ([]string, error) {
+	value := strings.TrimSpace(raw)
+	if strings.HasPrefix(value, "```") {
+		lines := strings.Split(value, "\n")
+		if len(lines) >= 3 && strings.HasPrefix(lines[0], "```") && strings.TrimSpace(lines[len(lines)-1]) == "```" {
+			value = strings.TrimSpace(strings.Join(lines[1:len(lines)-1], "\n"))
+		}
+	}
+	var tags []string
+	if err := json.Unmarshal([]byte(value), &tags); err != nil {
+		var object struct {
+			Tags []string `json:"tags"`
+		}
+		if objectErr := json.Unmarshal([]byte(value), &object); objectErr != nil {
+			return nil, errors.New("AI academic tags must be a JSON array of strings")
+		}
+		tags = object.Tags
+	}
+	cleaned := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, rawTag := range tags {
+		tag := strings.TrimSpace(strings.Trim(rawTag, "#\"'"))
+		key := strings.ToLower(tag)
+		if tag == "" || utf8.RuneCountInString(tag) > maxAcademicTagRunes {
+			continue
+		}
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		cleaned = append(cleaned, tag)
+		if len(cleaned) == maxAcademicTags {
+			break
+		}
+	}
+	if len(cleaned) == 0 {
+		return nil, errors.New("AI academic tags response did not contain usable tags")
+	}
+	return cleaned, nil
 }
 
 func aiAssociatedData(profileID string) []byte { return []byte("cairn:ai-profile:" + profileID) }

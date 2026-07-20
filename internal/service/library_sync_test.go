@@ -127,3 +127,13 @@ func TestLibrarySyncRequiresConflictChoice(t *testing.T) {
 		t.Fatalf("expected a two-sided conflict, got action=%q err=%v", action, err)
 	}
 }
+
+func TestWebDAVDirectoryEndpointGetsSnapshotFilename(t *testing.T) {
+	got, err := normalizeLibrarySyncEndpoint("webdav", "https://dav.example.test/Aurora/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "https://dav.example.test/Aurora/aurora-library.json" {
+		t.Fatalf("unexpected normalized endpoint: %q", got)
+	}
+}

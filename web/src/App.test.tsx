@@ -190,6 +190,19 @@ describe("Aurora reading experience", () => {
     expect(screen.getByRole("button", { name: "Add account" })).toBeEnabled()
   })
 
+  it("opens the cloud sync add button with a serializable WebDAV provider", async () => {
+    renderApp()
+    fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))
+    await screen.findByRole("dialog")
+    fireEvent.click(await screen.findByRole("button", { name: "Sync" }))
+    const cloudSection = screen
+      .getByRole("heading", { name: "Library cloud sync" })
+      .closest("section")
+    expect(cloudSection).not.toBeNull()
+    fireEvent.click(within(cloudSection!).getByRole("button", { name: "Add" }))
+    expect(await screen.findByRole("combobox", { name: "Provider" })).toHaveValue("webdav")
+  })
+
   it("requires privacy confirmation before configuring a remote AI provider", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))

@@ -86,7 +86,8 @@ export interface AIUsage {
   total_tokens: number
 }
 
-export type AIOperation = "summary" | "title_translation" | "translation" | "key_points"
+export type AIOperation =
+  "summary" | "title_translation" | "translation" | "key_points" | "academic_tags"
 
 export interface AIResult {
   id: string

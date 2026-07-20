@@ -148,6 +148,37 @@ func TestTitleTranslationSendsOnlyTheTitleAndUsesTitleCacheKey(t *testing.T) {
 	}
 }
 
+func TestAcademicTagsUseTitleOnlyAndParseStructuredOutput(t *testing.T) {
+	record := storage.AIProfileRecord{Profile: domain.AIProfile{
+		ID: "tag-profile", Provider: "ollama", Endpoint: "http://127.0.0.1:11434", Model: "qwen3:8b",
+	}}
+	first := storage.AIEntryContent{Title: "Digital trade and network centrality", CanonicalURL: "https://example.com/one", Content: "private body one"}
+	second := storage.AIEntryContent{Title: first.Title, CanonicalURL: "https://example.com/two", Content: "private body two"}
+	messages := operationMessages("academic_tags", "Chinese", first)
+	if len(messages) != 2 || !strings.Contains(messages[1].Content, first.Title) || strings.Contains(messages[1].Content, first.Content) || strings.Contains(messages[1].Content, first.CanonicalURL) {
+		t.Fatalf("academic tag envelope included more than the title: %+v", messages)
+	}
+	if firstHash, secondHash := aiInputHash(record, "academic_tags", "Chinese", first), aiInputHash(record, "academic_tags", "Chinese", second); firstHash != secondHash {
+		t.Fatalf("title-only tag cache key changed with article content: %s %s", firstHash, secondHash)
+	}
+	tags, err := parseAcademicTags("```json\n[\"Digital trade\", \"Network analysis\", \"digital trade\", \"China\", \"Panel data\", \"Extra\"]\n```")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Digital trade", "Network analysis", "China", "Panel data", "Extra"}
+	if len(tags) != len(want) {
+		t.Fatalf("unexpected tags: %#v", tags)
+	}
+	for index := range want {
+		if tags[index] != want[index] {
+			t.Fatalf("unexpected tags: %#v", tags)
+		}
+	}
+	if _, err := parseAcademicTags("not json"); err == nil {
+		t.Fatal("expected invalid academic tag response to fail")
+	}
+}
+
 func createAIServiceTestEntry(t *testing.T, db *sql.DB) string {
 	t.Helper()
 	entryURL := "https://example.com/ai-entry"

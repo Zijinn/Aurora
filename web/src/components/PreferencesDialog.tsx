@@ -26,7 +26,9 @@ import type {
   AIProfile,
   AIUsage,
   Device,
+  Folder,
   ServerStatus,
+  Subscription,
   SyncAccount,
   SyncProviderID,
   ViewMode,
@@ -51,6 +53,8 @@ interface PreferencesDialogProps {
   syncPendingID?: string
   aiProfiles: AIProfile[]
   aiUsage?: AIUsage
+  folders: Folder[]
+  subscriptions: Subscription[]
   pairingCode?: { code: string; expires_at: string }
   pairingCodePending: boolean
   onOpenChange: (open: boolean) => void
@@ -123,8 +127,15 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
   const alwaysTranslateContent = useReaderStore((state) => state.alwaysTranslateContent)
   const setAlwaysTranslateTitles = useReaderStore((state) => state.setAlwaysTranslateTitles)
   const setAlwaysTranslateContent = useReaderStore((state) => state.setAlwaysTranslateContent)
+  const autoAcademicTags = useReaderStore((state) => state.autoAcademicTags)
+  const autoAcademicTagFolderIDs = useReaderStore((state) => state.autoAcademicTagFolderIDs)
+  const autoAcademicTagFeedIDs = useReaderStore((state) => state.autoAcademicTagFeedIDs)
+  const setAutoAcademicTags = useReaderStore((state) => state.setAutoAcademicTags)
+  const setAutoAcademicTagFolderIDs = useReaderStore((state) => state.setAutoAcademicTagFolderIDs)
+  const setAutoAcademicTagFeedIDs = useReaderStore((state) => state.setAutoAcademicTagFeedIDs)
   const [activeTab, setActiveTab] = useState<PreferenceTab>("interface")
   const [conflict, setConflict] = useState("")
+  const [autoTagSearch, setAutoTagSearch] = useState("")
   const restoreInput = useRef<HTMLInputElement>(null)
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0]!
   const serviceAccounts = props.syncAccounts.filter(
@@ -134,6 +145,20 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
     (account) => account.provider === "webdav" || account.provider === "icloud",
   )
   const activeDevices = props.devices.filter((device) => !device.revoked_at)
+  const enabledAI = props.aiProfiles.some((profile) => profile.enabled)
+  const normalizedAutoTagSearch = autoTagSearch.trim().toLocaleLowerCase(locale)
+  const visibleAutoTagFolders = props.folders.filter(
+    (folder) =>
+      normalizedAutoTagSearch === "" ||
+      folder.name.toLocaleLowerCase(locale).includes(normalizedAutoTagSearch),
+  )
+  const visibleAutoTagSubscriptions = props.subscriptions.filter(
+    (subscription) =>
+      normalizedAutoTagSearch === "" ||
+      `${subscription.title} ${subscription.feed_url}`
+        .toLocaleLowerCase(locale)
+        .includes(normalizedAutoTagSearch),
+  )
 
   const captureShortcut = (action: ShortcutAction, event: KeyboardEvent<HTMLButtonElement>) => {
     event.preventDefault()
@@ -353,90 +378,246 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                         <i aria-hidden="true" />
                       </label>
                     </section>
-                    <section className="preference-section preference-section--flush">
-                    <div className="preference-heading preference-heading--intro">
-                      <div>
-                        <h2>{t("aiProviders")}</h2>
-                        <p>{t("aiProviderDescription")}</p>
-                      </div>
-                      <button
-                        className="button button--secondary"
-                        type="button"
-                        onClick={props.onAddAIProfile}
-                      >
-                        <Plus />
-                        {t("add")}
-                      </button>
-                    </div>
-                    <div className="sync-account-list">
-                      {props.aiProfiles.map((profile) => (
-                        <div className="sync-account-row" key={profile.id}>
-                          <label
-                            className="sync-account-toggle"
-                            title={profile.enabled ? t("disableProvider") : t("enableProvider")}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={profile.enabled}
-                              onChange={(event) =>
-                                props.onToggleAIProfile(profile.id, event.target.checked)
-                              }
-                            />
-                            <span className="sr-only">
-                              {t("enable")} {profile.name}
-                            </span>
-                          </label>
-                          <span className="sync-account-copy">
-                            <strong>
-                              <Brain />
-                              {profile.name}
-                            </strong>
-                            <small
-                              className={
-                                profile.last_error_message ? "sync-account-error" : undefined
-                              }
-                            >
-                              {profile.last_error_message ??
-                                `${profile.model}${profile.is_default ? ` · ${t("default")}` : ""}`}
-                            </small>
-                          </span>
-                          <span className="sync-account-actions">
-                            <button
-                              className={
-                                profile.is_default
-                                  ? "icon-button icon-button--active"
-                                  : "icon-button"
-                              }
-                              type="button"
-                              aria-label={`${t("useByDefault")} ${profile.name}`}
-                              title={t("makeDefault")}
-                              disabled={profile.is_default}
-                              onClick={() => props.onDefaultAIProfile(profile.id)}
-                            >
-                              <Check />
-                            </button>
-                            <button
-                              className="icon-button"
-                              type="button"
-                              aria-label={`${t("delete")} ${profile.name}`}
-                              title={t("deleteAIProvider")}
-                              onClick={() => props.onDeleteAIProfile(profile.id)}
-                            >
-                              <Trash />
-                            </button>
-                          </span>
+                    <section className="preference-section preference-section--auto-tags">
+                      <div className="preference-heading preference-heading--intro">
+                        <div>
+                          <h2>{t("automaticTags")}</h2>
+                          <p>{t("automaticTagsDescription")}</p>
                         </div>
-                      ))}
-                      {props.aiProfiles.length === 0 && (
-                        <p className="preference-empty">{t("noAIProviders")}</p>
+                        <label className="preference-switch preference-switch--inline">
+                          <input
+                            type="checkbox"
+                            checked={autoAcademicTags}
+                            disabled={!enabledAI}
+                            aria-label={t("automaticTags")}
+                            onChange={(event) => setAutoAcademicTags(event.target.checked)}
+                          />
+                          <i aria-hidden="true" />
+                        </label>
+                      </div>
+                      {autoAcademicTags && (
+                        <div className="auto-tag-settings">
+                          <label className="auto-tag-search">
+                            <span>{t("automaticTagScope")}</span>
+                            <input
+                              className="text-input"
+                              type="search"
+                              value={autoTagSearch}
+                              placeholder={t("searchFoldersAndSubscriptions")}
+                              onChange={(event) => setAutoTagSearch(event.target.value)}
+                            />
+                          </label>
+                          <p className="auto-tag-selection-summary">
+                            {t("automaticTagSelectionSummary")
+                              .replace("{folders}", String(autoAcademicTagFolderIDs.length))
+                              .replace("{feeds}", String(autoAcademicTagFeedIDs.length))}
+                          </p>
+                          <div className="auto-tag-scope-grid">
+                            <fieldset>
+                              <legend>{t("folders")}</legend>
+                              <div className="auto-tag-scope-actions">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setAutoAcademicTagFolderIDs(
+                                      Array.from(
+                                        new Set([
+                                          ...autoAcademicTagFolderIDs,
+                                          ...visibleAutoTagFolders.map((folder) => folder.id),
+                                        ]),
+                                      ),
+                                    )
+                                  }
+                                >
+                                  {t("selectAll")}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setAutoAcademicTagFolderIDs(
+                                      autoAcademicTagFolderIDs.filter(
+                                        (id) =>
+                                          !visibleAutoTagFolders.some((folder) => folder.id === id),
+                                      ),
+                                    )
+                                  }
+                                >
+                                  {t("clear")}
+                                </button>
+                              </div>
+                              <div className="auto-tag-scope-list">
+                                {visibleAutoTagFolders.map((folder) => (
+                                  <label key={folder.id}>
+                                    <input
+                                      type="checkbox"
+                                      checked={autoAcademicTagFolderIDs.includes(folder.id)}
+                                      onChange={() =>
+                                        setAutoAcademicTagFolderIDs(
+                                          toggleID(autoAcademicTagFolderIDs, folder.id),
+                                        )
+                                      }
+                                    />
+                                    <span>{folder.name}</span>
+                                  </label>
+                                ))}
+                                {visibleAutoTagFolders.length === 0 && (
+                                  <span className="preference-empty">{t("noFolders")}</span>
+                                )}
+                              </div>
+                            </fieldset>
+                            <fieldset>
+                              <legend>{t("subscriptions")}</legend>
+                              <div className="auto-tag-scope-actions">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setAutoAcademicTagFeedIDs(
+                                      Array.from(
+                                        new Set([
+                                          ...autoAcademicTagFeedIDs,
+                                          ...visibleAutoTagSubscriptions.map(
+                                            (subscription) => subscription.feed_id,
+                                          ),
+                                        ]),
+                                      ),
+                                    )
+                                  }
+                                >
+                                  {t("selectAll")}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setAutoAcademicTagFeedIDs(
+                                      autoAcademicTagFeedIDs.filter(
+                                        (id) =>
+                                          !visibleAutoTagSubscriptions.some(
+                                            (subscription) => subscription.feed_id === id,
+                                          ),
+                                      ),
+                                    )
+                                  }
+                                >
+                                  {t("clear")}
+                                </button>
+                              </div>
+                              <div className="auto-tag-scope-list">
+                                {visibleAutoTagSubscriptions.map((subscription) => (
+                                  <label key={subscription.id}>
+                                    <input
+                                      type="checkbox"
+                                      checked={autoAcademicTagFeedIDs.includes(
+                                        subscription.feed_id,
+                                      )}
+                                      onChange={() =>
+                                        setAutoAcademicTagFeedIDs(
+                                          toggleID(autoAcademicTagFeedIDs, subscription.feed_id),
+                                        )
+                                      }
+                                    />
+                                    <span>
+                                      <strong>{subscription.title}</strong>
+                                      <small>{subscription.feed_url}</small>
+                                    </span>
+                                  </label>
+                                ))}
+                                {visibleAutoTagSubscriptions.length === 0 && (
+                                  <span className="preference-empty">{t("noSubscriptions")}</span>
+                                )}
+                              </div>
+                            </fieldset>
+                          </div>
+                          {autoAcademicTagFolderIDs.length === 0 &&
+                            autoAcademicTagFeedIDs.length === 0 && (
+                              <p className="field-hint">{t("automaticTagScopeRequired")}</p>
+                            )}
+                        </div>
                       )}
-                    </div>
-                    {props.aiUsage && (
-                      <p className="ai-usage">
-                        {new Intl.NumberFormat(locale).format(props.aiUsage.total_tokens)}{" "}
-                        {t("tokensUsed")}
-                      </p>
-                    )}
+                    </section>
+                    <section className="preference-section preference-section--flush">
+                      <div className="preference-heading preference-heading--intro">
+                        <div>
+                          <h2>{t("aiProviders")}</h2>
+                          <p>{t("aiProviderDescription")}</p>
+                        </div>
+                        <button
+                          className="button button--secondary"
+                          type="button"
+                          onClick={props.onAddAIProfile}
+                        >
+                          <Plus />
+                          {t("add")}
+                        </button>
+                      </div>
+                      <div className="sync-account-list">
+                        {props.aiProfiles.map((profile) => (
+                          <div className="sync-account-row" key={profile.id}>
+                            <label
+                              className="sync-account-toggle"
+                              title={profile.enabled ? t("disableProvider") : t("enableProvider")}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={profile.enabled}
+                                onChange={(event) =>
+                                  props.onToggleAIProfile(profile.id, event.target.checked)
+                                }
+                              />
+                              <span className="sr-only">
+                                {t("enable")} {profile.name}
+                              </span>
+                            </label>
+                            <span className="sync-account-copy">
+                              <strong>
+                                <Brain />
+                                {profile.name}
+                              </strong>
+                              <small
+                                className={
+                                  profile.last_error_message ? "sync-account-error" : undefined
+                                }
+                              >
+                                {profile.last_error_message ??
+                                  `${profile.model}${profile.is_default ? ` · ${t("default")}` : ""}`}
+                              </small>
+                            </span>
+                            <span className="sync-account-actions">
+                              <button
+                                className={
+                                  profile.is_default
+                                    ? "icon-button icon-button--active"
+                                    : "icon-button"
+                                }
+                                type="button"
+                                aria-label={`${t("useByDefault")} ${profile.name}`}
+                                title={t("makeDefault")}
+                                disabled={profile.is_default}
+                                onClick={() => props.onDefaultAIProfile(profile.id)}
+                              >
+                                <Check />
+                              </button>
+                              <button
+                                className="icon-button"
+                                type="button"
+                                aria-label={`${t("delete")} ${profile.name}`}
+                                title={t("deleteAIProvider")}
+                                onClick={() => props.onDeleteAIProfile(profile.id)}
+                              >
+                                <Trash />
+                              </button>
+                            </span>
+                          </div>
+                        ))}
+                        {props.aiProfiles.length === 0 && (
+                          <p className="preference-empty">{t("noAIProviders")}</p>
+                        )}
+                      </div>
+                      {props.aiUsage && (
+                        <p className="ai-usage">
+                          {new Intl.NumberFormat(locale).format(props.aiUsage.total_tokens)}{" "}
+                          {t("tokensUsed")}
+                        </p>
+                      )}
                     </section>
                   </>
                 )}
@@ -456,7 +637,7 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                       locale={locale}
                       t={t}
                       pendingID={props.syncPendingID}
-                      onAdd={props.onAddSyncAccount}
+                      onAdd={() => props.onAddSyncAccount()}
                       onToggle={props.onToggleSyncAccount}
                       onRun={runCloudSync}
                       onDelete={props.onDeleteSyncAccount}
@@ -615,6 +796,10 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
       </Dialog.Portal>
     </Dialog.Root>
   )
+}
+
+function toggleID(values: string[], id: string) {
+  return values.includes(id) ? values.filter((value) => value !== id) : [...values, id]
 }
 
 function SyncAccountSection(props: {

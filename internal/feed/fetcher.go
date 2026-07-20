@@ -17,6 +17,7 @@ import (
 
 const (
 	DefaultMaxResponseBytes int64 = 10 << 20
+	DefaultFetchTimeout           = 300 * time.Second
 	defaultUserAgent              = "Aurora/0.1 (+https://github.com/Zijinn/Aurora)"
 )
 
@@ -60,7 +61,7 @@ type Fetcher struct {
 func NewFetcher() *Fetcher {
 	return &Fetcher{
 		Policy:           DefaultURLPolicy(),
-		Timeout:          30 * time.Second,
+		Timeout:          DefaultFetchTimeout,
 		MaxResponseBytes: DefaultMaxResponseBytes,
 		UserAgent:        defaultUserAgent,
 	}
@@ -81,12 +82,12 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL string, validators Validator
 	transport.DialContext = f.Policy.DialContext
 	transport.MaxIdleConns = 20
 	transport.MaxIdleConnsPerHost = 2
-	transport.ResponseHeaderTimeout = 15 * time.Second
+	transport.ResponseHeaderTimeout = DefaultFetchTimeout
 	defer transport.CloseIdleConnections()
 
 	timeout := f.Timeout
 	if timeout <= 0 {
-		timeout = 30 * time.Second
+		timeout = DefaultFetchTimeout
 	}
 	client := &http.Client{
 		Timeout:   timeout,

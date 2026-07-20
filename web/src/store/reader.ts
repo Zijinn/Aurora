@@ -55,6 +55,9 @@ interface ReaderStore {
   shortcuts: Record<ShortcutAction, string>
   alwaysTranslateTitles: boolean
   alwaysTranslateContent: boolean
+  autoAcademicTags: boolean
+  autoAcademicTagFolderIDs: string[]
+  autoAcademicTagFeedIDs: string[]
   setScope: (scope: LibraryScope) => void
   selectEntry: (entryID: string | null) => void
   setSearch: (search: string) => void
@@ -71,6 +74,9 @@ interface ReaderStore {
   resetShortcuts: () => void
   setAlwaysTranslateTitles: (enabled: boolean) => void
   setAlwaysTranslateContent: (enabled: boolean) => void
+  setAutoAcademicTags: (enabled: boolean) => void
+  setAutoAcademicTagFolderIDs: (folderIDs: string[]) => void
+  setAutoAcademicTagFeedIDs: (feedIDs: string[]) => void
 }
 
 export const useReaderStore = create<ReaderStore>()(
@@ -91,6 +97,9 @@ export const useReaderStore = create<ReaderStore>()(
       shortcuts: defaultShortcuts,
       alwaysTranslateTitles: false,
       alwaysTranslateContent: false,
+      autoAcademicTags: false,
+      autoAcademicTagFolderIDs: [],
+      autoAcademicTagFeedIDs: [],
       setScope: (scope) =>
         set({ scope, readerReturnScope: null, selectedEntryID: null, mobileReaderOpen: false }),
       selectEntry: (selectedEntryID) =>
@@ -128,6 +137,11 @@ export const useReaderStore = create<ReaderStore>()(
       resetShortcuts: () => set({ shortcuts: defaultShortcuts }),
       setAlwaysTranslateTitles: (alwaysTranslateTitles) => set({ alwaysTranslateTitles }),
       setAlwaysTranslateContent: (alwaysTranslateContent) => set({ alwaysTranslateContent }),
+      setAutoAcademicTags: (autoAcademicTags) => set({ autoAcademicTags }),
+      setAutoAcademicTagFolderIDs: (autoAcademicTagFolderIDs) =>
+        set({ autoAcademicTagFolderIDs: Array.from(new Set(autoAcademicTagFolderIDs)) }),
+      setAutoAcademicTagFeedIDs: (autoAcademicTagFeedIDs) =>
+        set({ autoAcademicTagFeedIDs: Array.from(new Set(autoAcademicTagFeedIDs)) }),
     }),
     {
       name: "cairn-reader-preferences",
@@ -142,6 +156,9 @@ export const useReaderStore = create<ReaderStore>()(
         annotations: state.annotations,
         alwaysTranslateTitles: state.alwaysTranslateTitles,
         alwaysTranslateContent: state.alwaysTranslateContent,
+        autoAcademicTags: state.autoAcademicTags,
+        autoAcademicTagFolderIDs: state.autoAcademicTagFolderIDs,
+        autoAcademicTagFeedIDs: state.autoAcademicTagFeedIDs,
       }),
     },
   ),

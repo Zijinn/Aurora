@@ -6,6 +6,7 @@ import {
   ListBullets,
   Sparkle,
   Stop,
+  Tag,
   TextAlignLeft,
   Translate,
   X,
@@ -33,6 +34,7 @@ const operations: Array<{ id: AIOperation; labelKey: string; icon: typeof Brain 
   { id: "summary", labelKey: "summary", icon: TextAlignLeft },
   { id: "translation", labelKey: "translate", icon: Translate },
   { id: "key_points", labelKey: "keyPoints", icon: ListBullets },
+  { id: "academic_tags", labelKey: "automaticTags", icon: Tag },
 ]
 
 export function AIWorkbench(props: AIWorkbenchProps) {
@@ -78,6 +80,9 @@ export function AIWorkbench(props: AIWorkbenchProps) {
         void queryClient.invalidateQueries({ queryKey: ["ai-results", props.entryID] })
         void queryClient.invalidateQueries({ queryKey: ["entries"] })
         void queryClient.invalidateQueries({ queryKey: ["entry", props.entryID] })
+        if (pendingOperation === "academic_tags") {
+          void queryClient.invalidateQueries({ queryKey: ["tags"] })
+        }
       } else if (sessionID) void queryClient.invalidateQueries({ queryKey: ["ai-chat", sessionID] })
       void queryClient.invalidateQueries({ queryKey: ["ai-usage"] })
     }
@@ -108,6 +113,11 @@ export function AIWorkbench(props: AIWorkbenchProps) {
       }
       setPendingJobID(response.job?.id ?? "")
       void queryClient.invalidateQueries({ queryKey: ["ai-results", props.entryID] })
+      if (variables.operation === "academic_tags") {
+        void queryClient.invalidateQueries({ queryKey: ["entries"] })
+        void queryClient.invalidateQueries({ queryKey: ["entry", props.entryID] })
+        void queryClient.invalidateQueries({ queryKey: ["tags"] })
+      }
     },
   })
   const chatMutation = useMutation({
@@ -184,6 +194,19 @@ export function AIWorkbench(props: AIWorkbenchProps) {
             <TextAlignLeft />
           )}
           {t("summarizeArticle")}
+        </button>
+        <button
+          className="button button--quiet"
+          type="button"
+          disabled={jobActive || operationMutation.isPending}
+          onClick={() => startOperation("academic_tags")}
+        >
+          {jobActive && pendingOperation === "academic_tags" ? (
+            <CircleNotch className="spin" />
+          ) : (
+            <Tag />
+          )}
+          {t("automaticTags")}
         </button>
         <button
           className="ai-workbench__toggle"
@@ -356,7 +379,7 @@ export function AIWorkbench(props: AIWorkbenchProps) {
                   </button>
                   {latestResult && (
                     <div className="ai-result" aria-live="polite">
-                      <p>{latestResult.result_text}</p>
+                      <p>{formatAIResult(latestResult)}</p>
                       <small>
                         {new Intl.NumberFormat(locale).format(latestResult.usage.total_tokens ?? 0)}{" "}
                         {t("tokens")}
@@ -387,4 +410,20 @@ export function AIWorkbench(props: AIWorkbenchProps) {
       )}
     </section>
   )
+}
+
+function formatAIResult(result: AIResult) {
+  if (result.operation !== "academic_tags") return result.result_text
+  try {
+    const value = JSON.parse(result.result_text) as unknown
+    const tags = Array.isArray(value)
+      ? value
+      : value && typeof value === "object" && Array.isArray((value as { tags?: unknown }).tags)
+        ? (value as { tags: unknown[] }).tags
+        : []
+    const names = tags.filter((tag): tag is string => typeof tag === "string")
+    return names.length > 0 ? names.join(" / ") : result.result_text
+  } catch {
+    return result.result_text
+  }
 }

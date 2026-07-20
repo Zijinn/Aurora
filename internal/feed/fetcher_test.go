@@ -7,7 +7,15 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestNewFetcherUsesFiveMinuteTimeout(t *testing.T) {
+	fetcher := NewFetcher()
+	if fetcher.Timeout != 300*time.Second {
+		t.Fatalf("unexpected fetch timeout: %s", fetcher.Timeout)
+	}
+}
 
 func TestFetcherUsesConditionalHeaders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

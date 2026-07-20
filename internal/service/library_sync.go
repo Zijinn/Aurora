@@ -247,8 +247,9 @@ func normalizeLibrarySyncEndpoint(provider, raw string) (string, error) {
 		if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return "", errors.New("WebDAV endpoint must be an HTTP or HTTPS file URL without embedded credentials")
 		}
-		if strings.HasSuffix(parsed.Path, "/") || parsed.Path == "" {
-			return "", errors.New("WebDAV endpoint must include the snapshot filename, for example aurora-library.json")
+		if parsed.Path == "" || strings.HasSuffix(parsed.Path, "/") {
+			parsed.Path = strings.TrimRight(parsed.Path, "/") + "/aurora-library.json"
+			endpoint = parsed.String()
 		}
 		return endpoint, nil
 	}

@@ -224,9 +224,7 @@ export function ReaderPane(props: ReaderPaneProps) {
   return (
     <article
       className={
-        appearanceOpen
-          ? "reader reader--article reader--inspector-open"
-          : "reader reader--article"
+        appearanceOpen ? "reader reader--article reader--inspector-open" : "reader reader--article"
       }
       aria-label={t("reader")}
       style={readerStyle}
@@ -242,6 +240,12 @@ export function ReaderPane(props: ReaderPaneProps) {
           <ArrowLeft />
         </button>
         <div className="reader-toolbar__spacer" />
+        <AIWorkbench
+          key={entry.id}
+          entryID={entry.id}
+          profiles={props.aiProfiles}
+          onConfigure={props.onConfigureAI}
+        />
         <button
           className={appearanceOpen ? "icon-button icon-button--active" : "icon-button"}
           type="button"
@@ -417,9 +421,7 @@ export function ReaderPane(props: ReaderPaneProps) {
                 step="1"
                 aria-label={t("fontSize")}
                 value={readerAppearance.fontSize}
-                onChange={(event) =>
-                  setReaderAppearance({ fontSize: Number(event.target.value) })
-                }
+                onChange={(event) => setReaderAppearance({ fontSize: Number(event.target.value) })}
               />
               <Plus />
             </span>
@@ -530,12 +532,6 @@ export function ReaderPane(props: ReaderPaneProps) {
             </div>
           )}
         </header>
-        <AIWorkbench
-          key={entry.id}
-          entryID={entry.id}
-          profiles={props.aiProfiles}
-          onConfigure={props.onConfigureAI}
-        />
         {alwaysTranslateContent && translatedContent && (
           <div className="article-translation-switch" role="status">
             <span>

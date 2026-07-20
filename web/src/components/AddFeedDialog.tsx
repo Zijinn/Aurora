@@ -31,9 +31,14 @@ export function AddFeedDialog(props: AddFeedDialogProps) {
     if (file) props.onImport(file)
     if (fileInput.current) fileInput.current.value = ""
   }
-  const errorMessage = props.error instanceof APIError && props.error.code === "invalid_opml"
-    ? t("invalidOPML")
-    : props.error?.message
+  const errorMessage =
+    props.error instanceof APIError && props.error.code === "invalid_opml"
+      ? t("invalidOPML")
+      : props.error instanceof APIError &&
+          props.error.code === "timeout" &&
+          url.trim().toLowerCase().startsWith("rsshub:")
+        ? t("rssHubTimeout")
+        : props.error?.message
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>

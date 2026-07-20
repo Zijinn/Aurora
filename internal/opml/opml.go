@@ -1,6 +1,7 @@
 package opml
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"strings"
@@ -40,6 +41,13 @@ type outline struct {
 }
 
 func Parse(data []byte) ([]Source, error) {
+	// Some desktop RSS tools prepend a UTF-8 BOM. encoding/xml does not
+	// consistently accept it when the document is sent as a raw upload.
+	data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return nil, fmt.Errorf("parse OPML: document is empty")
+	}
 	var parsed document
 	if err := xml.Unmarshal(data, &parsed); err != nil {
 		return nil, fmt.Errorf("parse OPML: %w", err)
@@ -72,6 +80,9 @@ func Parse(data []byte) ([]Source, error) {
 		}
 	}
 	flatten(parsed.Body.Outlines, nil)
+	if len(result) == 0 {
+		return nil, fmt.Errorf("parse OPML: no RSS subscriptions found")
+	}
 	return result, nil
 }
 

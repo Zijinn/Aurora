@@ -55,6 +55,7 @@ const workspaceScopes: Array<{ scope: LibraryScope; icon: typeof Sparkle }> = [
   { scope: { kind: "today", title: "Today" }, icon: Sparkle },
   { scope: { kind: "all", title: "All feeds" }, icon: Books },
   { scope: { kind: "unread", title: "Unread" }, icon: Tray },
+  { scope: { kind: "saved", title: "Saved" }, icon: Star },
 ]
 
 export function Sidebar(props: SidebarProps) {
@@ -79,7 +80,7 @@ export function Sidebar(props: SidebarProps) {
       <div className="sidebar__header">
         <Brand />
       </div>
-      <nav className="nav-list" aria-label={t("libraryViews")}>
+      <nav className="nav-list nav-list--compact" aria-label={t("libraryViews")}>
         <p className="sidebar-section-label">{t("workspace")}</p>
         {workspaceScopes.map(({ scope, icon: Icon }) => {
           const active = props.scope.kind === scope.kind
@@ -99,23 +100,10 @@ export function Sidebar(props: SidebarProps) {
             </button>
           )
         })}
-        <button
-          className={
-            props.scope.kind === "saved"
-              ? "nav-item nav-item--saved nav-item--active"
-              : "nav-item nav-item--saved"
-          }
-          type="button"
-          aria-current={props.scope.kind === "saved" ? "page" : undefined}
-          onClick={() => props.onScopeChange({ kind: "saved", title: "Saved" })}
-        >
-          <Star aria-hidden="true" weight={props.scope.kind === "saved" ? "fill" : "regular"} />
-          <span>{t("saved")}</span>
-        </button>
       </nav>
       <section className="subscription-section" aria-labelledby="subscriptions-title">
-        <div className="section-heading">
-          <h2 id="subscriptions-title">{t("spaces")}</h2>
+        <div className="library-toolbar">
+          <h2 id="subscriptions-title">{t("subscriptions")}</h2>
           <button
             className="icon-button icon-button--small"
             type="button"
@@ -124,6 +112,15 @@ export function Sidebar(props: SidebarProps) {
             onClick={props.onAdd}
           >
             <Plus />
+          </button>
+          <button
+            className="icon-button icon-button--small"
+            type="button"
+            aria-label={t("addFolder")}
+            title={t("addFolder")}
+            onClick={props.onOrganizeLibrary}
+          >
+            <FolderSimplePlus />
           </button>
         </div>
         <div className="subscription-scroll">
@@ -181,19 +178,7 @@ export function Sidebar(props: SidebarProps) {
               })}
             </div>
           )}
-          <div className="library-group">
-            <div className="library-group__heading">
-              <h3>{t("folders")}</h3>
-              <button
-                className="icon-button icon-button--small"
-                type="button"
-                aria-label={t("addFolder")}
-                title={t("addFolder")}
-                onClick={props.onOrganizeLibrary}
-              >
-                <FolderSimplePlus />
-              </button>
-            </div>
+          <div className="library-group library-group--tree">
             <FolderTree
               folders={props.folders}
               subscriptions={props.subscriptions}
@@ -201,6 +186,7 @@ export function Sidebar(props: SidebarProps) {
               openFolders={openFolders}
               onToggleFolder={toggleFolder}
               onScopeChange={props.onScopeChange}
+              onContextMenu={openContextMenu}
             />
             {props.folders.length === 0 && props.subscriptions.length === 0 && (
               <div className="sidebar-library-empty">
@@ -208,54 +194,9 @@ export function Sidebar(props: SidebarProps) {
                 <span>{t("noSubscriptions")}</span>
               </div>
             )}
-            <div className="feed-list">
-              <h3>{t("subscriptions")}</h3>
-              {props.subscriptions.map((subscription) => {
-                const active =
-                  props.scope.kind === "feed" && props.scope.id === subscription.feed_id
-                return (
-                  <button
-                    className={active ? "feed-row feed-row--active" : "feed-row"}
-                    key={subscription.id}
-                    type="button"
-                    aria-current={active ? "page" : undefined}
-                    onClick={() =>
-                      props.onScopeChange({
-                        kind: "feed",
-                        id: subscription.feed_id,
-                        title: subscription.title,
-                      })
-                    }
-                    onContextMenu={(event) => openContextMenu(event, subscription)}
-                  >
-                    <span className="feed-row__mark" aria-hidden="true">
-                      <span>{subscription.title.slice(0, 1).toUpperCase()}</span>
-                      {subscription.icon_url && (
-                        <img
-                          src={subscription.icon_url}
-                          alt=""
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          onError={(event) => {
-                            event.currentTarget.hidden = true
-                          }}
-                        />
-                      )}
-                    </span>
-                    <span className="feed-row__title">{subscription.title}</span>
-                    <span className="feed-row__count">{subscription.unread_count}</span>
-                  </button>
-                )
-              })}
-            </div>
           </div>
         </div>
       </section>
-      <button className="sidebar-add button button--secondary" type="button" onClick={props.onAdd}>
-        <Plus />
-        <span>{t("addFeed")}</span>
-        <kbd>⌘ N</kbd>
-      </button>
       <div className="sidebar__footer">
         <div className="server-state" role="status">
           {props.status.isPending ? (
@@ -306,22 +247,69 @@ function FolderTree(props: {
   openFolders: Record<string, boolean>
   onToggleFolder: (folderID: string) => void
   onScopeChange: (scope: LibraryScope) => void
+  onContextMenu: (event: MouseEvent, subscription: Subscription) => void
 }) {
   const { t } = useTranslation()
   const childrenByParent = new Map<string | null, Folder[]>()
+  const subscriptionsByFolder = new Map<string | null, Subscription[]>()
   for (const folder of props.folders) {
     const parent = folder.parent_id ?? null
     const children = childrenByParent.get(parent) ?? []
     children.push(folder)
     childrenByParent.set(parent, children)
   }
+  for (const subscription of props.subscriptions) {
+    const folderID = subscription.folder_id ?? null
+    const items = subscriptionsByFolder.get(folderID) ?? []
+    items.push(subscription)
+    subscriptionsByFolder.set(folderID, items)
+  }
   const rendered = new Set<string>()
+  const renderSubscription = (subscription: Subscription, depth: number) => {
+    const active = props.scope.kind === "feed" && props.scope.id === subscription.feed_id
+    return (
+      <button
+        className={active ? "feed-row feed-row--active feed-row--nested" : "feed-row feed-row--nested"}
+        style={{ paddingLeft: `${9 + depth * 14}px` }}
+        key={subscription.id}
+        type="button"
+        aria-current={active ? "page" : undefined}
+        onClick={() =>
+          props.onScopeChange({ kind: "feed", id: subscription.feed_id, title: subscription.title })
+        }
+        onContextMenu={(event) => props.onContextMenu(event, subscription)}
+      >
+        <span className="feed-row__mark" aria-hidden="true">
+          <span>{subscription.title.slice(0, 1).toUpperCase()}</span>
+          {subscription.icon_url && (
+            <img
+              src={subscription.icon_url}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={(event) => {
+                event.currentTarget.hidden = true
+              }}
+            />
+          )}
+        </span>
+        <span className="feed-row__title">{subscription.title}</span>
+        <span className="feed-row__count">{subscription.unread_count}</span>
+      </button>
+    )
+  }
   const renderLevel = (parentID: string | null, depth: number): ReactNode[] => {
     const children = childrenByParent.get(parentID) ?? []
-    return children.flatMap((folder) => {
+    const rows: ReactNode[] = []
+    for (const subscription of subscriptionsByFolder.get(parentID) ?? []) {
+      rows.push(renderSubscription(subscription, depth))
+    }
+    rows.push(...children.flatMap((folder) => {
       rendered.add(folder.id)
       const active = props.scope.kind === "folder" && props.scope.id === folder.id
       const childFolders = childrenByParent.get(folder.id) ?? []
+      const directSubscriptions = subscriptionsByFolder.get(folder.id) ?? []
+      const hasChildren = childFolders.length > 0 || directSubscriptions.length > 0
       const descendantIDs = new Set([folder.id])
       const collectDescendants = (parentID: string) => {
         for (const child of childrenByParent.get(parentID) ?? []) {
@@ -346,15 +334,16 @@ function FolderTree(props: {
             className={active ? "folder-row folder-row--active" : "folder-row"}
             type="button"
             aria-current={active ? "page" : undefined}
-            onClick={() =>
+            onClick={() => {
               props.onScopeChange({ kind: "folder", id: folder.id, title: folder.name })
-            }
+              if (hasChildren && !(props.openFolders[folder.id] ?? true)) props.onToggleFolder(folder.id)
+            }}
           >
             <FolderSimple aria-hidden="true" />
             <span>{folder.name}</span>
             <span className="folder-row__count">{unread}</span>
           </button>
-          {childFolders.length > 0 && (
+          {hasChildren && (
             <button
               className="folder-row__toggle"
               type="button"
@@ -369,7 +358,8 @@ function FolderTree(props: {
         </div>,
         ...(expanded ? renderLevel(folder.id, depth + 1) : []),
       ]
-    })
+    }))
+    return rows
   }
   const rows = renderLevel(null, 0)
   for (const folder of props.folders) {

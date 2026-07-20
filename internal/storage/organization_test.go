@@ -74,6 +74,17 @@ func TestFolderCycleAndAutomationRules(t *testing.T) {
 	if err != nil || len(detail.TagIDs) != 1 || detail.TagIDs[0] != tag.ID {
 		t.Fatalf("entry detail tags failed: %+v, %v", detail.TagIDs, err)
 	}
+	if err := AddEntryTagsByName(ctx, db, domain.DefaultProfileID, page.Items[0].ID, []string{"Economic Policy", "economic policy", "Data Flows"}); err != nil {
+		t.Fatal(err)
+	}
+	detail, err = GetEntry(ctx, db, domain.DefaultProfileID, page.Items[0].ID)
+	if err != nil || len(detail.TagIDs) != 3 {
+		t.Fatalf("generated tags should preserve manual tags and deduplicate names: %+v, %v", detail.TagIDs, err)
+	}
+	allTags, err := ListTags(ctx, db, domain.DefaultProfileID)
+	if err != nil || len(allTags) != 3 {
+		t.Fatalf("generated tag records were not deduplicated: %+v, %v", allTags, err)
+	}
 
 	filterQuery := json.RawMessage(`{"state":"starred"}`)
 	if _, err := CreateSavedFilter(ctx, db, domain.DefaultProfileID, "Favorites", filterQuery); err != nil {

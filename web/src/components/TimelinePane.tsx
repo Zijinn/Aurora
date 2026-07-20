@@ -1,5 +1,4 @@
 import {
-  Article,
   ArrowsClockwise,
   CircleNotch,
   Plus,
@@ -39,7 +38,12 @@ export function TimelinePane(props: TimelinePaneProps) {
   const { locale, t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
   const subscriptionIcons = useMemo(
-    () => new Map(props.subscriptions.map((subscription) => [subscription.feed_id, subscription.icon_url] as const)),
+    () =>
+      new Map(
+        props.subscriptions.map(
+          (subscription) => [subscription.feed_id, subscription.icon_url] as const,
+        ),
+      ),
     [props.subscriptions],
   )
   const selectedFeedID = props.scope.kind === "feed" ? props.scope.id : null
@@ -80,11 +84,7 @@ export function TimelinePane(props: TimelinePaneProps) {
         </div>
       </header>
       <div className="timeline-filterbar">
-        <div
-          className="timeline-filterbar__scopes"
-          role="group"
-          aria-label={t("articleFilters")}
-        >
+        <div className="timeline-filterbar__scopes" role="group" aria-label={t("articleFilters")}>
           <button
             className={
               props.scope.kind === "all" ? "filter-chip filter-chip--active" : "filter-chip"
@@ -115,16 +115,17 @@ export function TimelinePane(props: TimelinePaneProps) {
           >
             {t("saved")}
           </button>
+          <button
+            className="filter-chip timeline-mark-read"
+            type="button"
+            aria-label={t("markAllRead")}
+            title={t("markAllRead")}
+            disabled={props.entries.length === 0 || props.markReadPending}
+            onClick={props.onMarkAllRead}
+          >
+            <span>{t("markRead")}</span>
+          </button>
         </div>
-        <button
-          className="button button--quiet timeline-mark-read"
-          type="button"
-          disabled={props.entries.length === 0 || props.markReadPending}
-          onClick={props.onMarkAllRead}
-        >
-          {props.markReadPending ? <CircleNotch className="spin" /> : <Article />}
-          <span>{t("markAllRead")}</span>
-        </button>
       </div>
       {props.scope.kind === "today" && (
         <TodayOverview entries={props.entries} subscriptions={props.subscriptions} />

@@ -53,7 +53,7 @@ func main() {
 		Handler:           api.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		WriteTimeout:      310 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
 

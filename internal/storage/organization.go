@@ -162,6 +162,56 @@ func SetEntryTags(ctx context.Context, db *sql.DB, profileID, entryID string, ta
 	return tx.Commit()
 }
 
+func AddEntryTagsByName(ctx context.Context, db *sql.DB, profileID, entryID string, names []string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(SELECT 1 FROM entries e JOIN subscriptions s ON s.feed_id = e.feed_id
+		WHERE e.id = ? AND s.profile_id = ?)`, entryID, profileID).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	seen := make(map[string]struct{}, len(names))
+	for _, rawName := range names {
+		name := strings.TrimSpace(rawName)
+		key := strings.ToLower(name)
+		if name == "" {
+			continue
+		}
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		var tagID string
+		err := tx.QueryRowContext(ctx, `
+			SELECT id FROM tags WHERE profile_id = ? AND name = ? COLLATE NOCASE LIMIT 1`,
+			profileID, name,
+		).Scan(&tagID)
+		if errors.Is(err, sql.ErrNoRows) {
+			tagID = uuid.NewString()
+			if _, err = tx.ExecContext(ctx, `
+				INSERT INTO tags (id, profile_id, name, created_at) VALUES (?, ?, ?, ?)`,
+				tagID, profileID, name, formatTime(time.Now().UTC()),
+			); err != nil {
+				return fmt.Errorf("create generated tag: %w", err)
+			}
+		} else if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO entry_tags (entry_id, tag_id) VALUES (?, ?)`, entryID, tagID); err != nil {
+			return fmt.Errorf("assign generated tag: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
 func ListRules(ctx context.Context, db *sql.DB, profileID string) ([]domain.Rule, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, name, enabled, priority, conditions_json, actions_json, created_at, updated_at

@@ -30,6 +30,7 @@ import {
   deleteSyncAccount,
   fetchReadability,
   getEntry,
+  getJob,
   getAIUsage,
   getServerStatus,
   importOPML,
@@ -57,7 +58,14 @@ import {
   updateFeed,
   updateSyncAccount,
 } from "../api/client"
-import type { Entry, EntryState, SyncProvider, SyncProviderID } from "../api/types"
+import type {
+  Entry,
+  EntryState,
+  Folder,
+  Subscription,
+  SyncProvider,
+  SyncProviderID,
+} from "../api/types"
 import { useTranslation } from "../lib/i18n"
 import { keyboardChord } from "../lib/shortcuts"
 import { enqueueStateMutation, flushMutationOutbox } from "../offline/database"
@@ -124,6 +132,9 @@ export function AppShell() {
   const setPaneLayout = useReaderStore((state) => state.setPaneLayout)
   const alwaysTranslateTitles = useReaderStore((state) => state.alwaysTranslateTitles)
   const alwaysTranslateContent = useReaderStore((state) => state.alwaysTranslateContent)
+  const autoAcademicTags = useReaderStore((state) => state.autoAcademicTags)
+  const autoAcademicTagFolderIDs = useReaderStore((state) => state.autoAcademicTagFolderIDs)
+  const autoAcademicTagFeedIDs = useReaderStore((state) => state.autoAcademicTagFeedIDs)
   const { locale, t } = useTranslation()
   const deferredSearch = useDeferredValue(search)
   const [addOpen, setAddOpen] = useState(false)
@@ -136,12 +147,14 @@ export function AppShell() {
   const [organizationMode, setOrganizationMode] = useState<"all" | "folders">("all")
   const [dialogReturnTarget, setDialogReturnTarget] = useState<"preferences" | null>(null)
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false)
+  const [importJobID, setImportJobID] = useState<string | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const online = useOnlineState()
   const shellRef = useRef<HTMLElement>(null)
   const dragStartLayout = useRef<PaneLayout>(paneLayout)
   const dragLayout = useRef<PaneLayout>(paneLayout)
   const automaticTranslationAttempts = useRef(new Set<string>())
+  const automaticTagAttempts = useRef(new Set<string>())
   const closeSecondaryDialog = useCallback(
     (setOpen: (open: boolean) => void) => {
       setOpen(false)
@@ -331,22 +344,43 @@ export function AppShell() {
       aiProfiles.data?.items.find((profile) => profile.enabled),
     [aiProfiles.data?.items],
   )
+  const configuredAutoTagFeedIDs = useMemo(
+    () =>
+      resolveAutoTagFeedIDs(
+        folders.data?.items ?? [],
+        subscriptions.data?.items ?? [],
+        autoAcademicTagFolderIDs,
+        autoAcademicTagFeedIDs,
+      ),
+    [
+      autoAcademicTagFeedIDs,
+      autoAcademicTagFolderIDs,
+      folders.data?.items,
+      subscriptions.data?.items,
+    ],
+  )
   const selectedFeedIconURL = selectedEntry
-    ? subscriptions.data?.items.find((subscription) => subscription.feed_id === selectedEntry.feed_id)?.icon_url ?? null
+    ? (subscriptions.data?.items.find(
+        (subscription) => subscription.feed_id === selectedEntry.feed_id,
+      )?.icon_url ?? null)
     : null
   const entryDetail = useQuery({
     queryKey: ["entry", selectedEntryID, aiLanguage],
     queryFn: ({ signal }) => getEntry(selectedEntryID!, aiLanguage, signal),
     enabled: selectedEntryID !== null,
   })
+  const importJob = useQuery({
+    queryKey: ["job", importJobID],
+    queryFn: ({ signal }) => getJob(importJobID!, signal),
+    enabled: importJobID !== null,
+    refetchInterval: (query) =>
+      query.state.data?.state === "queued" || query.state.data?.state === "running" ? 1000 : false,
+  })
 
   useEffect(() => {
     if (!alwaysTranslateTitles || !automaticAIProfile) return
     const candidates = entries
-      .filter(
-        (entry) =>
-          !entry.ai_translated_title && shouldTranslateEntry(entry, locale),
-      )
+      .filter((entry) => !entry.ai_translated_title && shouldTranslateEntry(entry, locale))
       .filter((entry) => {
         const key = `${automaticAIProfile.id}:title_translation:${aiLanguage}:${entry.id}`
         return !automaticTranslationAttempts.current.has(key)
@@ -376,18 +410,73 @@ export function AppShell() {
     const key = `${automaticAIProfile.id}:translation:${aiLanguage}:${selectedEntry.id}`
     if (automaticTranslationAttempts.current.has(key)) return
     automaticTranslationAttempts.current.add(key)
-    void runAIOperation(
-      selectedEntry.id,
-      "translation",
-      automaticAIProfile.id,
-      aiLanguage,
-    )
+    void runAIOperation(selectedEntry.id, "translation", automaticAIProfile.id, aiLanguage)
+  }, [aiLanguage, alwaysTranslateContent, automaticAIProfile, locale, selectedEntry])
+
+  useEffect(() => {
+    if (!autoAcademicTags || !automaticAIProfile || configuredAutoTagFeedIDs.size === 0) return
+    let cancelled = false
+    const run = async () => {
+      const candidatesByID = new Map(
+        entries
+          .filter(
+            (entry) => configuredAutoTagFeedIDs.has(entry.feed_id) && entry.tag_ids.length === 0,
+          )
+          .map((entry) => [entry.id, entry] as const),
+      )
+      const pages = await Promise.allSettled(
+        Array.from(configuredAutoTagFeedIDs).map((feedID) =>
+          listEntries({
+            scope: { kind: "feed", id: feedID, title: "" },
+            query: "",
+            aiLanguage,
+          }),
+        ),
+      )
+      if (cancelled) return
+      for (const page of pages) {
+        if (page.status !== "fulfilled") continue
+        for (const entry of page.value.items) {
+          if (entry.tag_ids.length === 0) candidatesByID.set(entry.id, entry)
+        }
+      }
+      const candidates = Array.from(candidatesByID.values())
+        .sort(
+          (left, right) =>
+            new Date(right.discovered_at).getTime() - new Date(left.discovered_at).getTime(),
+        )
+        .filter((entry) => {
+          const key = `${automaticAIProfile.id}:academic_tags:${aiLanguage}:${entry.id}`
+          return !automaticTagAttempts.current.has(key)
+        })
+        .slice(0, 12)
+      if (candidates.length === 0) return
+      for (const entry of candidates) {
+        automaticTagAttempts.current.add(
+          `${automaticAIProfile.id}:academic_tags:${aiLanguage}:${entry.id}`,
+        )
+      }
+      await Promise.allSettled(
+        candidates.map((entry) =>
+          runAIOperation(entry.id, "academic_tags", automaticAIProfile.id, aiLanguage),
+        ),
+      )
+      if (cancelled) return
+      void queryClient.invalidateQueries({ queryKey: ["entries"] })
+      void queryClient.invalidateQueries({ queryKey: ["entry"] })
+      void queryClient.invalidateQueries({ queryKey: ["tags"] })
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
   }, [
     aiLanguage,
-    alwaysTranslateContent,
+    autoAcademicTags,
     automaticAIProfile,
-    locale,
-    selectedEntry,
+    configuredAutoTagFeedIDs,
+    entries,
+    queryClient,
   ])
 
   const invalidateLibrary = useCallback(async () => {
@@ -481,14 +570,26 @@ export function AppShell() {
   })
   const importMutation = useMutation({
     mutationFn: importOPML,
-    onSuccess: async () => {
-      setAddOpen(false)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
-        queryClient.invalidateQueries({ queryKey: ["folders"] }),
-      ])
+    onSuccess: (job) => {
+      setImportJobID(job.id)
     },
   })
+  useEffect(() => {
+    const state = importJob.data?.state
+    if (!state || state === "queued" || state === "running") return
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
+      queryClient.invalidateQueries({ queryKey: ["folders"] }),
+      queryClient.invalidateQueries({ queryKey: ["entries"] }),
+    ])
+    if (state === "succeeded") {
+      const closeTimer = window.setTimeout(() => {
+        setAddOpen(false)
+        setImportJobID(null)
+      }, 0)
+      return () => window.clearTimeout(closeTimer)
+    }
+  }, [importJob.data?.state, queryClient])
   const restoreMutation = useMutation({
     mutationFn: restoreBackup,
     onSuccess: async () => {
@@ -629,6 +730,7 @@ export function AppShell() {
       void queryClient.invalidateQueries({ queryKey: ["ai-chat"] })
       void queryClient.invalidateQueries({ queryKey: ["ai-profiles"] })
       void queryClient.invalidateQueries({ queryKey: ["ai-usage"] })
+      void queryClient.invalidateQueries({ queryKey: ["tags"] })
     }
     source.addEventListener("ai.result", aiRefresh)
     source.addEventListener("ai.chat", aiRefresh)
@@ -823,9 +925,27 @@ export function AppShell() {
               open
               folders={folders.data?.items ?? []}
               addPending={addMutation.isPending}
-              importPending={importMutation.isPending}
-              error={addMutation.error ?? importMutation.error}
-              onOpenChange={setAddOpen}
+              importPending={
+                importMutation.isPending ||
+                importJob.data?.state === "queued" ||
+                importJob.data?.state === "running"
+              }
+              error={
+                addMutation.error ??
+                importMutation.error ??
+                (importJob.data?.state === "failed"
+                  ? new Error(importJob.data.error_message ?? t("opmlImportFailed"))
+                  : null)
+              }
+              onOpenChange={(open) => {
+                setAddOpen(open)
+                if (
+                  !open &&
+                  importJob.data?.state !== "queued" &&
+                  importJob.data?.state !== "running"
+                )
+                  setImportJobID(null)
+              }}
               onAdd={(url, folderID) => addMutation.mutate({ url, folderID })}
               onImport={(file) => importMutation.mutate(file)}
             />
@@ -854,6 +974,8 @@ export function AppShell() {
               }
               aiProfiles={aiProfiles.data?.items ?? []}
               aiUsage={aiUsage.data}
+              folders={folders.data?.items ?? []}
+              subscriptions={subscriptions.data?.items ?? []}
               pairingCode={pairingCodeMutation.data}
               pairingCodePending={pairingCodeMutation.isPending}
               onOpenChange={(open) => {
@@ -1062,6 +1184,36 @@ function shouldTranslateEntry(entry: Entry, locale: "zh-CN" | "en-US") {
   if (language.startsWith("en")) return false
   if (language) return true
   return /[\u3400-\u9fff]/.test(sample)
+}
+
+function resolveAutoTagFeedIDs(
+  folders: Folder[],
+  subscriptions: Subscription[],
+  selectedFolderIDs: string[],
+  selectedFeedIDs: string[],
+) {
+  const includedFolders = new Set(selectedFolderIDs)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const folder of folders) {
+      if (
+        folder.parent_id &&
+        includedFolders.has(folder.parent_id) &&
+        !includedFolders.has(folder.id)
+      ) {
+        includedFolders.add(folder.id)
+        changed = true
+      }
+    }
+  }
+  const feedIDs = new Set(selectedFeedIDs)
+  for (const subscription of subscriptions) {
+    if (subscription.folder_id && includedFolders.has(subscription.folder_id)) {
+      feedIDs.add(subscription.feed_id)
+    }
+  }
+  return feedIDs
 }
 
 function useOnlineState() {
