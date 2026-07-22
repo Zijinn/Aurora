@@ -451,6 +451,7 @@ export function updateFeed(
     view_mode?: ViewMode
     refresh_policy?: Subscription["refresh_policy"]
     refresh_interval_minutes?: number
+    position?: number
   },
 ): Promise<Subscription> {
   return request<Subscription>(`/api/v1/feeds/${encodeURIComponent(feedID)}`, {
@@ -497,9 +498,9 @@ function libraryScopeFilters(scope: LibraryScope): Record<string, string> {
 }
 
 export async function importOPML(file: File): Promise<Job> {
-	const headers = new Headers({ "Content-Type": "application/xml; charset=utf-8" })
-	const token = localStorage.getItem("cairn-device-token")
-	if (token) headers.set("Authorization", `Bearer ${token}`)
+  const headers = new Headers({ "Content-Type": "application/xml; charset=utf-8" })
+  const token = localStorage.getItem("cairn-device-token")
+  if (token) headers.set("Authorization", `Bearer ${token}`)
   const response = await fetch("/api/v1/imports/opml", {
     method: "POST",
     headers,
@@ -514,9 +515,9 @@ export async function importOPML(file: File): Promise<Job> {
 }
 
 export async function restoreBackup(file: File): Promise<void> {
-	const headers = new Headers({ "Content-Type": "application/json" })
-	const token = localStorage.getItem("cairn-device-token")
-	if (token) headers.set("Authorization", `Bearer ${token}`)
+  const headers = new Headers({ "Content-Type": "application/json" })
+  const token = localStorage.getItem("cairn-device-token")
+  if (token) headers.set("Authorization", `Bearer ${token}`)
   const response = await fetch("/api/v1/restore", {
     method: "POST",
     headers,

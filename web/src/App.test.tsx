@@ -120,7 +120,7 @@ describe("Aurora reading experience", () => {
     renderApp()
     expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument()
     expect(await screen.findByText("Your reading trail starts here")).toBeInTheDocument()
-    expect(await screen.findByText("Library ready")).toBeInTheDocument()
+    expect(screen.queryByText("Library ready")).not.toBeInTheDocument()
   })
 
   it("opens the add subscription workflow", async () => {

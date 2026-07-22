@@ -269,7 +269,7 @@ func DeleteSubscription(ctx context.Context, db *sql.DB, profileID, feedID strin
 
 func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]domain.Subscription, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT s.id, s.profile_id, s.feed_id, s.folder_id,
+		SELECT s.id, s.profile_id, s.feed_id, s.folder_id, s.position,
 			COALESCE(s.title_override, f.title), f.icon_url, f.url, f.site_url,
 			COUNT(CASE WHEN e.id IS NOT NULL AND COALESCE(es.is_read, 0) = 0 THEN 1 END),
 			s.view_mode, s.refresh_policy, s.refresh_interval_minutes,
@@ -280,7 +280,7 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 		LEFT JOIN entry_states es ON es.entry_id = e.id AND es.profile_id = s.profile_id
 		WHERE s.profile_id = ?
 		GROUP BY s.id
-		ORDER BY COALESCE(s.title_override, f.title) COLLATE NOCASE`, profileID)
+		ORDER BY COALESCE(s.folder_id, ''), s.position, COALESCE(s.title_override, f.title) COLLATE NOCASE, s.id`, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("list subscriptions: %w", err)
 	}
@@ -294,7 +294,7 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 		var hidden int
 		var createdAt, updatedAt string
 		if err := rows.Scan(
-			&item.ID, &item.ProfileID, &item.FeedID, &folderID,
+			&item.ID, &item.ProfileID, &item.FeedID, &folderID, &item.Position,
 			&item.Title, &iconURL, &feedURL, &siteURL, &item.UnreadCount,
 			&item.ViewMode, &item.RefreshPolicy, &item.RefreshIntervalMinutes,
 			&hidden, &createdAt, &updatedAt,
@@ -336,11 +336,12 @@ func UpdateSubscription(ctx context.Context, db *sql.DB, profileID, feedID strin
 				WHEN ? IS NULL THEN refresh_policy
 				WHEN ? > 0 THEN 'fixed' ELSE 'inherit' END,
 			hide_from_timeline = COALESCE(?, hide_from_timeline),
+			position = COALESCE(?, position),
 			updated_at = ?
 		WHERE profile_id = ? AND feed_id = ?`,
 		setFolder, nullable(patch.FolderID), setTitle, nullable(patch.TitleOverride),
 		nullable(patch.ViewMode), nullableInt(patch.RefreshIntervalMinutes), setRefreshPolicy, nullable(patch.RefreshPolicy), nullableInt(patch.RefreshIntervalMinutes), nullableInt(patch.RefreshIntervalMinutes),
-		nullableBool(patch.HideFromTimeline), formatTime(now), profileID, feedID,
+		nullableBool(patch.HideFromTimeline), nullableInt(patch.Position), formatTime(now), profileID, feedID,
 	)
 	if err != nil {
 		return domain.Subscription{}, fmt.Errorf("update subscription: %w", err)

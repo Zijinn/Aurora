@@ -146,6 +146,7 @@ func (s *Server) updateFeed(w http.ResponseWriter, r *http.Request) {
 		RefreshPolicy          json.RawMessage `json:"refresh_policy"`
 		RefreshIntervalMinutes json.RawMessage `json:"refresh_interval_minutes"`
 		HideFromTimeline       json.RawMessage `json:"hide_from_timeline"`
+		Position               json.RawMessage `json:"position"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
@@ -195,9 +196,14 @@ func (s *Server) updateFeed(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_visibility", "Invalid visibility", err.Error())
 		return
 	}
+	position, err := optionalInt(request.Position)
+	if err != nil || (position != nil && *position < 0) {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_position", "Invalid position", "Position must be a non-negative integer.")
+		return
+	}
 	updated, err := storage.UpdateSubscription(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("feedID"), domain.SubscriptionPatch{
 		SetFolderID: setFolder, FolderID: folderID, SetTitleOverride: setTitle, TitleOverride: titleOverride,
-		ViewMode: viewMode, RefreshPolicy: refreshPolicy, RefreshIntervalMinutes: refreshInterval, HideFromTimeline: hideFromTimeline,
+		ViewMode: viewMode, RefreshPolicy: refreshPolicy, RefreshIntervalMinutes: refreshInterval, HideFromTimeline: hideFromTimeline, Position: position,
 	})
 	if err != nil {
 		s.storageError(w, r, err)

@@ -33,6 +33,7 @@ type Subscription struct {
 	ProfileID              string    `json:"-"`
 	FeedID                 string    `json:"feed_id"`
 	FolderID               *string   `json:"folder_id"`
+	Position               int       `json:"position"`
 	Title                  string    `json:"title"`
 	IconURL                *string   `json:"icon_url"`
 	FeedURL                string    `json:"feed_url"`
@@ -54,6 +55,7 @@ type SubscriptionPatch struct {
 	ViewMode               *string
 	RefreshPolicy          *string
 	RefreshIntervalMinutes *int
+	Position               *int
 	HideFromTimeline       *bool
 }
 

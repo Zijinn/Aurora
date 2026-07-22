@@ -2,9 +2,8 @@ import {
   Books,
   CaretDown,
   CaretRight,
-  CircleNotch,
   Funnel,
-  FolderSimple,
+  FolderOpen,
   FolderSimplePlus,
   Plus,
   Sparkle,
@@ -12,26 +11,17 @@ import {
   Tag as TagIcon,
   Tray,
 } from "@phosphor-icons/react"
-import type { UseQueryResult } from "@tanstack/react-query"
-import { useState, type MouseEvent, type ReactNode } from "react"
+import { useState, type DragEvent, type MouseEvent, type ReactNode } from "react"
 
-import type {
-  Folder,
-  LibraryScope,
-  SavedFilter,
-  ServerStatus,
-  Subscription,
-  Tag,
-  ViewMode,
-} from "../api/types"
+import type { Folder, LibraryScope, SavedFilter, Subscription, Tag, ViewMode } from "../api/types"
 import { localizedScopeTitle, useTranslation } from "../lib/i18n"
 import { useReaderStore } from "../store/reader"
 import { Brand } from "./Brand"
+import { FolderContextMenu } from "./FolderContextMenu"
 import { SubscriptionContextMenu } from "./SubscriptionContextMenu"
 
 interface SidebarProps {
   scope: LibraryScope
-  status: UseQueryResult<ServerStatus, Error>
   subscriptions: Subscription[]
   folders: Folder[]
   tags: Tag[]
@@ -42,6 +32,11 @@ interface SidebarProps {
   onMarkFeedRead: (feedID: string) => void
   onRefreshFeed: (feedID: string) => void
   onMoveFeed: (feedID: string, folderID: string | null) => void
+  onRenameFeed: (feedID: string, name: string) => void
+  onRenameFolder: (folderID: string, name: string) => void
+  onMergeFeeds: (feedID: string, targetFeedID: string) => void
+  onReorderFolder: (folderID: string, targetID: string, before: boolean) => void
+  onReorderFeed: (feedID: string, targetID: string, before: boolean) => void
   onDeleteFeed: (feedID: string) => void
   onChangeFeedView: (feedID: string, viewMode: ViewMode) => void
   onChangeFeedRefresh: (
@@ -62,14 +57,35 @@ export function Sidebar(props: SidebarProps) {
   const { locale, t } = useTranslation()
   const openFolders = useReaderStore((state) => state.openFolders)
   const toggleFolder = useReaderStore((state) => state.toggleFolder)
-  const [contextMenu, setContextMenu] = useState<{
-    subscription: Subscription
-    position: { x: number; y: number }
-  } | null>(null)
+  const [contextMenu, setContextMenu] = useState<
+    | {
+        kind: "subscription"
+        subscription: Subscription
+        position: { x: number; y: number }
+      }
+    | { kind: "folder"; folder: Folder; position: { x: number; y: number } }
+    | null
+  >(null)
   const unreadTotal = props.subscriptions.reduce((total, item) => total + item.unread_count, 0)
   const openContextMenu = (event: MouseEvent, subscription: Subscription) => {
     event.preventDefault()
-    setContextMenu({ subscription, position: { x: event.clientX, y: event.clientY } })
+    setContextMenu({
+      kind: "subscription",
+      subscription,
+      position: { x: event.clientX, y: event.clientY },
+    })
+  }
+  const openFolderContextMenu = (event: MouseEvent, folder: Folder) => {
+    event.preventDefault()
+    setContextMenu({
+      kind: "folder",
+      folder,
+      position: { x: event.clientX, y: event.clientY },
+    })
+  }
+  const requestRename = (currentName: string) => {
+    const nextName = window.prompt(t("rename"), currentName)?.trim()
+    return nextName && nextName !== currentName ? nextName : null
   }
   const openURL = (value: string | null | undefined) => {
     if (!value) return
@@ -187,6 +203,11 @@ export function Sidebar(props: SidebarProps) {
               onToggleFolder={toggleFolder}
               onScopeChange={props.onScopeChange}
               onContextMenu={openContextMenu}
+              onFolderContextMenu={openFolderContextMenu}
+              onMoveFeed={props.onMoveFeed}
+              onMergeFeeds={props.onMergeFeeds}
+              onReorderFolder={props.onReorderFolder}
+              onReorderFeed={props.onReorderFeed}
             />
             {props.folders.length === 0 && props.subscriptions.length === 0 && (
               <div className="sidebar-library-empty">
@@ -197,30 +218,16 @@ export function Sidebar(props: SidebarProps) {
           </div>
         </div>
       </section>
-      <div className="sidebar__footer">
-        <div className="server-state" role="status">
-          {props.status.isPending ? (
-            <CircleNotch className="spin" aria-hidden="true" />
-          ) : props.status.isError ? (
-            <span className="server-state__indicator server-state__indicator--error" />
-          ) : (
-            <span className="server-state__indicator" />
-          )}
-          <span>
-            {props.status.isPending
-              ? t("connecting")
-              : props.status.isError
-                ? t("serverOffline")
-                : t("libraryReady")}
-          </span>
-        </div>
-      </div>
-      {contextMenu && (
+      {contextMenu?.kind === "subscription" && (
         <SubscriptionContextMenu
           subscription={contextMenu.subscription}
           folders={props.folders}
           position={contextMenu.position}
           onClose={() => setContextMenu(null)}
+          onRename={() => {
+            const name = requestRename(contextMenu.subscription.title)
+            if (name) props.onRenameFeed(contextMenu.subscription.feed_id, name)
+          }}
           onMarkRead={() => props.onMarkFeedRead(contextMenu.subscription.feed_id)}
           onRefresh={() => props.onRefreshFeed(contextMenu.subscription.feed_id)}
           onMove={(folderID) => props.onMoveFeed(contextMenu.subscription.feed_id, folderID)}
@@ -236,6 +243,17 @@ export function Sidebar(props: SidebarProps) {
           }
         />
       )}
+      {contextMenu?.kind === "folder" && (
+        <FolderContextMenu
+          folder={contextMenu.folder}
+          position={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+          onRename={() => {
+            const name = requestRename(contextMenu.folder.name)
+            if (name) props.onRenameFolder(contextMenu.folder.id, name)
+          }}
+        />
+      )}
     </aside>
   )
 }
@@ -248,6 +266,11 @@ function FolderTree(props: {
   onToggleFolder: (folderID: string) => void
   onScopeChange: (scope: LibraryScope) => void
   onContextMenu: (event: MouseEvent, subscription: Subscription) => void
+  onFolderContextMenu: (event: MouseEvent, folder: Folder) => void
+  onMoveFeed: (feedID: string, folderID: string | null) => void
+  onMergeFeeds: (feedID: string, targetFeedID: string) => void
+  onReorderFolder: (folderID: string, targetID: string, before: boolean) => void
+  onReorderFeed: (feedID: string, targetID: string, before: boolean) => void
 }) {
   const { t } = useTranslation()
   const childrenByParent = new Map<string | null, Folder[]>()
@@ -265,15 +288,60 @@ function FolderTree(props: {
     subscriptionsByFolder.set(folderID, items)
   }
   const rendered = new Set<string>()
+  const dragPayload = (event: DragEvent) => {
+    try {
+      return JSON.parse(event.dataTransfer.getData("application/x-aurora-library")) as {
+        type: "subscription" | "folder"
+        id: string
+      }
+    } catch {
+      return null
+    }
+  }
+  const allowDrop = (event: DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "move"
+  }
+  const dropZone = (event: DragEvent) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const ratio = (event.clientY - rect.top) / rect.height
+    if (ratio < 0.28) return "before" as const
+    if (ratio > 0.72) return "after" as const
+    return "merge" as const
+  }
   const renderSubscription = (subscription: Subscription, depth: number) => {
     const active = props.scope.kind === "feed" && props.scope.id === subscription.feed_id
     return (
       <button
-        className={active ? "feed-row feed-row--active feed-row--nested" : "feed-row feed-row--nested"}
+        className={
+          active ? "feed-row feed-row--active feed-row--nested" : "feed-row feed-row--nested"
+        }
         style={{ paddingLeft: `${9 + depth * 14}px` }}
         key={subscription.id}
         type="button"
+        draggable
         aria-current={active ? "page" : undefined}
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = "move"
+          event.dataTransfer.setData(
+            "application/x-aurora-library",
+            JSON.stringify({ type: "subscription", id: subscription.feed_id }),
+          )
+        }}
+        onDragOver={allowDrop}
+        onDrop={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          const source = dragPayload(event)
+          if (!source || source.type !== "subscription" || source.id === subscription.feed_id)
+            return
+          const zone = dropZone(event)
+          if (zone === "merge") {
+            props.onMergeFeeds(source.id, subscription.feed_id)
+          } else {
+            props.onReorderFeed(source.id, subscription.feed_id, zone === "before")
+          }
+        }}
         onClick={() =>
           props.onScopeChange({ kind: "feed", id: subscription.feed_id, title: subscription.title })
         }
@@ -304,61 +372,85 @@ function FolderTree(props: {
     for (const subscription of subscriptionsByFolder.get(parentID) ?? []) {
       rows.push(renderSubscription(subscription, depth))
     }
-    rows.push(...children.flatMap((folder) => {
-      rendered.add(folder.id)
-      const active = props.scope.kind === "folder" && props.scope.id === folder.id
-      const childFolders = childrenByParent.get(folder.id) ?? []
-      const directSubscriptions = subscriptionsByFolder.get(folder.id) ?? []
-      const hasChildren = childFolders.length > 0 || directSubscriptions.length > 0
-      const descendantIDs = new Set([folder.id])
-      const collectDescendants = (parentID: string) => {
-        for (const child of childrenByParent.get(parentID) ?? []) {
-          descendantIDs.add(child.id)
-          collectDescendants(child.id)
+    rows.push(
+      ...children.flatMap((folder) => {
+        rendered.add(folder.id)
+        const active = props.scope.kind === "folder" && props.scope.id === folder.id
+        const childFolders = childrenByParent.get(folder.id) ?? []
+        const directSubscriptions = subscriptionsByFolder.get(folder.id) ?? []
+        const hasChildren = childFolders.length > 0 || directSubscriptions.length > 0
+        const descendantIDs = new Set([folder.id])
+        const collectDescendants = (parentID: string) => {
+          for (const child of childrenByParent.get(parentID) ?? []) {
+            descendantIDs.add(child.id)
+            collectDescendants(child.id)
+          }
         }
-      }
-      collectDescendants(folder.id)
-      const unread = props.subscriptions
-        .filter(
-          (subscription) => subscription.folder_id && descendantIDs.has(subscription.folder_id),
-        )
-        .reduce((total, subscription) => total + subscription.unread_count, 0)
-      const expanded = props.openFolders[folder.id] ?? true
-      return [
-        <div
-          className="folder-tree-row"
-          key={folder.id}
-          style={{ paddingLeft: `${9 + depth * 14}px` }}
-        >
-          <button
-            className={active ? "folder-row folder-row--active" : "folder-row"}
-            type="button"
-            aria-current={active ? "page" : undefined}
-            onClick={() => {
-              props.onScopeChange({ kind: "folder", id: folder.id, title: folder.name })
-              if (hasChildren && !(props.openFolders[folder.id] ?? true)) props.onToggleFolder(folder.id)
+        collectDescendants(folder.id)
+        const unread = props.subscriptions
+          .filter(
+            (subscription) => subscription.folder_id && descendantIDs.has(subscription.folder_id),
+          )
+          .reduce((total, subscription) => total + subscription.unread_count, 0)
+        const expanded = props.openFolders[folder.id] ?? true
+        return [
+          <div
+            className="folder-tree-row"
+            key={folder.id}
+            style={{ paddingLeft: `${9 + depth * 14}px` }}
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = "move"
+              event.dataTransfer.setData(
+                "application/x-aurora-library",
+                JSON.stringify({ type: "folder", id: folder.id }),
+              )
             }}
+            onDragOver={allowDrop}
+            onDrop={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              const source = dragPayload(event)
+              if (!source || source.id === folder.id) return
+              if (source.type === "folder") {
+                props.onReorderFolder(source.id, folder.id, dropZone(event) !== "after")
+              } else {
+                props.onMoveFeed(source.id, folder.id)
+              }
+            }}
+            onContextMenu={(event) => props.onFolderContextMenu(event, folder)}
           >
-            <FolderSimple aria-hidden="true" />
-            <span>{folder.name}</span>
-            <span className="folder-row__count">{unread}</span>
-          </button>
-          {hasChildren && (
             <button
-              className="folder-row__toggle"
+              className={active ? "folder-row folder-row--active" : "folder-row"}
               type="button"
-              aria-label={expanded ? t("collapseFolder") : t("expandFolder")}
-              title={expanded ? t("collapseFolder") : t("expandFolder")}
-              aria-expanded={expanded}
-              onClick={() => props.onToggleFolder(folder.id)}
+              aria-current={active ? "page" : undefined}
+              onClick={() => {
+                props.onScopeChange({ kind: "folder", id: folder.id, title: folder.name })
+                if (hasChildren && !(props.openFolders[folder.id] ?? true))
+                  props.onToggleFolder(folder.id)
+              }}
             >
-              {expanded ? <CaretDown aria-hidden="true" /> : <CaretRight aria-hidden="true" />}
+              <FolderOpen aria-hidden="true" weight={active ? "fill" : "regular"} />
+              <span>{folder.name}</span>
+              <span className="folder-row__count">{unread}</span>
             </button>
-          )}
-        </div>,
-        ...(expanded ? renderLevel(folder.id, depth + 1) : []),
-      ]
-    }))
+            {hasChildren && (
+              <button
+                className="folder-row__toggle"
+                type="button"
+                aria-label={expanded ? t("collapseFolder") : t("expandFolder")}
+                title={expanded ? t("collapseFolder") : t("expandFolder")}
+                aria-expanded={expanded}
+                onClick={() => props.onToggleFolder(folder.id)}
+              >
+                {expanded ? <CaretDown aria-hidden="true" /> : <CaretRight aria-hidden="true" />}
+              </button>
+            )}
+          </div>,
+          ...(expanded ? renderLevel(folder.id, depth + 1) : []),
+        ]
+      }),
+    )
     return rows
   }
   const rows = renderLevel(null, 0)

@@ -4,7 +4,7 @@ Unicode true
 !include "FileFunc.nsh"
 
 !ifndef VERSION
-  !define VERSION "1.3.0"
+  !define VERSION "1.4.0"
 !endif
 !ifndef APP_EXE
   !error "APP_EXE must point to Aurora.exe"

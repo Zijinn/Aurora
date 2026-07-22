@@ -5,6 +5,7 @@ import {
   Check,
   CopySimple,
   FolderSimple,
+  PencilSimple,
   Timer,
   Trash,
 } from "@phosphor-icons/react"
@@ -19,6 +20,7 @@ interface SubscriptionContextMenuProps {
   folders: Folder[]
   position: { x: number; y: number }
   onClose: () => void
+  onRename: () => void
   onMarkRead: () => void
   onRefresh: () => void
   onMove: (folderID: string | null) => void
@@ -94,6 +96,15 @@ export function SubscriptionContextMenu(props: SubscriptionContextMenuProps) {
         className="subscription-context-menu__item"
         type="button"
         role="menuitem"
+        onClick={() => run(props.onRename)}
+      >
+        <PencilSimple aria-hidden="true" />
+        <span>{t("rename")}</span>
+      </button>
+      <button
+        className="subscription-context-menu__item"
+        type="button"
+        role="menuitem"
         onClick={() => run(props.onMarkRead)}
       >
         <Check aria-hidden="true" />
@@ -134,7 +145,8 @@ export function SubscriptionContextMenu(props: SubscriptionContextMenuProps) {
             ].map((option) => {
               const active =
                 props.subscription.refresh_policy === option.policy &&
-                (option.policy !== "fixed" || props.subscription.refresh_interval_minutes === option.interval)
+                (option.policy !== "fixed" ||
+                  props.subscription.refresh_interval_minutes === option.interval)
               return (
                 <button
                   className="subscription-context-menu__item"
@@ -143,7 +155,11 @@ export function SubscriptionContextMenu(props: SubscriptionContextMenuProps) {
                   key={`${option.policy}-${option.interval}`}
                   onClick={() => run(() => props.onChangeRefresh(option.policy, option.interval))}
                 >
-                  {active ? <Check aria-hidden="true" /> : <span className="subscription-context-menu__icon-spacer" />}
+                  {active ? (
+                    <Check aria-hidden="true" />
+                  ) : (
+                    <span className="subscription-context-menu__icon-spacer" />
+                  )}
                   <span>{t(option.label)}</span>
                 </button>
               )

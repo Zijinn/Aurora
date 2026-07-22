@@ -56,6 +56,7 @@ import {
   updateEntryState,
   updateAIProfile,
   updateFeed,
+  updateFolder,
   updateSyncAccount,
 } from "../api/client"
 import type {
@@ -531,12 +532,16 @@ export function AppShell() {
       viewMode,
       refreshPolicy,
       refreshIntervalMinutes,
+      position,
+      titleOverride,
     }: {
       feedID: string
       folderID?: string | null
       viewMode?: import("../api/types").ViewMode
       refreshPolicy?: import("../api/types").Subscription["refresh_policy"]
       refreshIntervalMinutes?: number
+      position?: number
+      titleOverride?: string | null
     }) =>
       updateFeed(feedID, {
         ...(folderID !== undefined ? { folder_id: folderID } : {}),
@@ -545,6 +550,8 @@ export function AppShell() {
         ...(refreshIntervalMinutes !== undefined
           ? { refresh_interval_minutes: refreshIntervalMinutes }
           : {}),
+        ...(position !== undefined ? { position } : {}),
+        ...(titleOverride !== undefined ? { title_override: titleOverride } : {}),
       }),
     onSuccess: invalidateLibrary,
   })
@@ -644,6 +651,75 @@ export function AppShell() {
       ])
     },
   })
+  const renameFolderMutation = useMutation({
+    mutationFn: ({ folderID, name }: { folderID: string; name: string }) =>
+      updateFolder(folderID, { name }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["folders"] }),
+  })
+  const reorderFolder = useCallback(
+    async (folderID: string, targetID: string, before: boolean) => {
+      if (folderID === targetID) return
+      const items = folders.data?.items ?? []
+      const source = items.find((item) => item.id === folderID)
+      const target = items.find((item) => item.id === targetID)
+      if (!source || !target || source.parent_id !== target.parent_id) return
+      const siblings = items
+        .filter((item) => item.parent_id === source.parent_id)
+        .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
+        .filter((item) => item.id !== source.id)
+      const targetIndex = siblings.findIndex((item) => item.id === target.id)
+      siblings.splice(Math.max(0, targetIndex + (before ? 0 : 1)), 0, source)
+      await Promise.all(siblings.map((item, index) => updateFolder(item.id, { position: index })))
+      await queryClient.invalidateQueries({ queryKey: ["folders"] })
+    },
+    [folders.data?.items, queryClient],
+  )
+  const reorderFeed = useCallback(
+    async (feedID: string, targetFeedID: string, before: boolean) => {
+      if (feedID === targetFeedID) return
+      const items = subscriptions.data?.items ?? []
+      const source = items.find((item) => item.feed_id === feedID)
+      const target = items.find((item) => item.feed_id === targetFeedID)
+      if (!source || !target || source.folder_id !== target.folder_id) return
+      const siblings = items
+        .filter((item) => item.folder_id === source.folder_id)
+        .sort((a, b) => a.position - b.position || a.title.localeCompare(b.title))
+        .filter((item) => item.feed_id !== source.feed_id)
+      const targetIndex = siblings.findIndex((item) => item.feed_id === target.feed_id)
+      siblings.splice(Math.max(0, targetIndex + (before ? 0 : 1)), 0, source)
+      await Promise.all(
+        siblings.map((item, index) => updateFeed(item.feed_id, { position: index })),
+      )
+      await queryClient.invalidateQueries({ queryKey: ["subscriptions"] })
+    },
+    [queryClient, subscriptions.data?.items],
+  )
+  const mergeSubscriptions = useCallback(
+    async (feedID: string, targetFeedID: string) => {
+      if (feedID === targetFeedID) return
+      const items = subscriptions.data?.items ?? []
+      const source = items.find((item) => item.feed_id === feedID)
+      const target = items.find((item) => item.feed_id === targetFeedID)
+      if (!source || !target) return
+      let folderID = target.folder_id
+      if (!folderID) {
+        const folder = await createFolderMutation.mutateAsync({
+          name: target.title,
+          parent_id: null,
+        })
+        folderID = folder.id
+      }
+      await Promise.all([
+        updateFeed(source.feed_id, { folder_id: folderID }),
+        updateFeed(target.feed_id, { folder_id: folderID }),
+      ])
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["folders"] }),
+        queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
+      ])
+    },
+    [createFolderMutation, queryClient, subscriptions.data?.items],
+  )
   const createTagMutation = useMutation({
     mutationFn: createTag,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tags"] }),
@@ -800,7 +876,6 @@ export function AppShell() {
       >
         <Sidebar
           scope={scope}
-          status={status}
           subscriptions={subscriptions.data?.items ?? []}
           folders={folders.data?.items ?? []}
           tags={tags.data?.items ?? []}
@@ -814,6 +889,15 @@ export function AppShell() {
           onMarkFeedRead={(feedID) => markFeedReadMutation.mutate(feedID)}
           onRefreshFeed={(feedID) => refreshMutation.mutate(feedID)}
           onMoveFeed={(feedID, folderID) => feedUpdateMutation.mutate({ feedID, folderID })}
+          onRenameFeed={(feedID, name) =>
+            feedUpdateMutation.mutate({ feedID, titleOverride: name })
+          }
+          onRenameFolder={(folderID, name) => renameFolderMutation.mutate({ folderID, name })}
+          onMergeFeeds={(feedID, targetFeedID) => void mergeSubscriptions(feedID, targetFeedID)}
+          onReorderFolder={(folderID, targetID, before) =>
+            void reorderFolder(folderID, targetID, before)
+          }
+          onReorderFeed={(feedID, targetID, before) => void reorderFeed(feedID, targetID, before)}
           onDeleteFeed={(feedID) => {
             if (window.confirm(t("unsubscribeConfirmation"))) feedDeleteMutation.mutate(feedID)
           }}

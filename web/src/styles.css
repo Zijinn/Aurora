@@ -3353,6 +3353,153 @@ button:disabled {
   }
 }
 
+/* Refined source list and full-width reading canvas. */
+.sidebar {
+  padding: max(14px, env(safe-area-inset-top)) 12px 14px max(12px, env(safe-area-inset-left));
+  background: color-mix(in srgb, var(--surface-raised) 92%, var(--accent-soft));
+}
+.sidebar__header {
+  min-height: 46px;
+  padding: 3px 8px;
+  margin-bottom: 4px;
+  background: var(--surface-raised);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgb(25 35 55 / 0.04);
+}
+.brand {
+  gap: 9px;
+}
+.brand__mark {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  padding: 3px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.brand__name {
+  font-size: 18px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+.nav-list--compact {
+  margin-top: 10px;
+  gap: 4px;
+}
+.nav-list--compact .nav-item {
+  height: 34px;
+  padding: 0 10px;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 650;
+  border-radius: 8px;
+}
+.nav-list--compact .nav-item--active {
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-soft) 82%, var(--surface-raised));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.sidebar-section-label {
+  padding: 2px 10px 4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 720;
+}
+.subscription-section {
+  min-height: 0;
+  margin-top: 16px;
+}
+.library-toolbar {
+  min-height: 32px;
+  padding: 0 5px 5px 10px;
+}
+.library-toolbar h2 {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 740;
+}
+.library-toolbar .icon-button {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  border-radius: 7px;
+}
+.subscription-scroll {
+  padding-bottom: 10px;
+}
+.folder-tree-row,
+.feed-tree-row {
+  min-height: 38px;
+}
+.folder-tree-row .folder-row,
+.feed-row--nested {
+  height: 38px;
+  gap: 10px;
+  border-radius: 8px;
+  cursor: grab;
+}
+.folder-tree-row .folder-row:active,
+.feed-row--nested:active {
+  cursor: grabbing;
+}
+.folder-tree-row .folder-row {
+  font-size: 15px;
+  font-weight: 650;
+}
+.folder-tree-row .folder-row > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent-strong);
+}
+.feed-row--nested {
+  font-size: 14px;
+  font-weight: 620;
+}
+.feed-row--nested .feed-row__mark {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+  border-radius: 8px;
+}
+.folder-row__toggle {
+  height: 38px;
+  border-radius: 7px;
+}
+.sidebar .folder-row:hover,
+.sidebar .feed-row:hover {
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-raised));
+}
+.sidebar .folder-row--active,
+.sidebar .feed-row--active {
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-soft) 80%, var(--surface-raised));
+}
+.sidebar__footer {
+  display: none;
+}
+.app-shell--reader-open .article-header,
+.app-shell--reader-open .article-content {
+  width: min(760px, calc(100% - 56px));
+}
+.app-shell--reader-open .article-header {
+  padding: 34px 0 28px;
+}
+.app-shell--reader-open .article-header h1 {
+  max-width: none;
+  font-size: clamp(30px, 3vw, 38px);
+  line-height: 1.12;
+  text-wrap: pretty;
+}
+.app-shell--reader-open .article-header__summary {
+  max-width: none;
+}
+.app-shell--reader-open .article-content {
+  padding-top: 48px;
+}
+
 .preference-switch {
   position: relative;
   display: block;
@@ -4268,6 +4415,17 @@ button:disabled {
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.subscription-context-menu__title--folder {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.subscription-context-menu__title--folder svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  color: var(--accent-strong);
 }
 .subscription-context-menu__item {
   display: grid;
@@ -5207,6 +5365,97 @@ button:disabled {
   }
 }
 
+/* Sidebar brand alignment: Heiti text, Aurora blue accents, and an unframed lockup. */
+.sidebar {
+  --sidebar-blue: #245fba;
+  --sidebar-blue-soft: #e9f1ff;
+  background: var(--surface-raised);
+}
+.sidebar__header {
+  min-height: 46px;
+  padding: 0 8px;
+  margin-bottom: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.brand {
+  gap: 10px;
+  min-height: 42px;
+}
+.brand__mark {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: none;
+}
+.brand__name {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 760;
+}
+.nav-list--compact .nav-item {
+  color: var(--text);
+}
+.nav-list--compact .nav-item--active {
+  color: var(--sidebar-blue);
+  background: var(--sidebar-blue-soft);
+  box-shadow: inset 0 0 0 1px rgb(36 95 186 / 0.12);
+}
+.nav-list--compact .nav-item--active svg {
+  color: var(--sidebar-blue);
+}
+.sidebar .folder-row,
+.sidebar .feed-row {
+  color: var(--text);
+}
+
+/* Match the filter rail to the Today signal card surface. */
+.timeline-filterbar__scopes {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+/* Keep the reading measure tidy while allowing prose to align at both edges. */
+.reader--article .article-header__summary,
+.reader--article .article-content {
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.app-shell--reader-open .timeline-filterbar__scopes {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  border-radius: 12px;
+  box-shadow: none;
+}
+.app-shell--reader-open .timeline-filterbar .filter-chip--active {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.sidebar .folder-row--active,
+.sidebar .feed-row--active {
+  color: var(--sidebar-blue);
+  background: var(--sidebar-blue-soft);
+  box-shadow: inset 0 0 0 1px rgb(36 95 186 / 0.12);
+}
+.sidebar .folder-tree-row .folder-row > svg {
+  color: var(--sidebar-blue);
+}
+.sidebar .folder-row:hover,
+.sidebar .feed-row:hover {
+  color: #243b61;
+  background: color-mix(in srgb, var(--sidebar-blue-soft) 62%, var(--surface-raised));
+}
+
 /* Final chrome pass: use tonal separation instead of hard vertical rules. */
 .sidebar {
   border-right-color: transparent;
@@ -5593,4 +5842,32 @@ button:disabled {
   .app-shell--reader-open .article-header h1 {
     font-size: 26px;
   }
+}
+
+/* Keep the article title on the same reading measure as its summary and body. */
+.app-shell--reader-open .article-header h1 {
+  max-width: none;
+  text-wrap: pretty;
+}
+
+/* Final sidebar surface lock: exactly match the reader surface and remove the logo frame. */
+.sidebar {
+  background: var(--surface-raised);
+}
+.sidebar__header {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.brand__mark {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.brand__name,
+.nav-list--compact .nav-item,
+.sidebar .folder-row,
+.sidebar .feed-row {
+  color: var(--text);
 }

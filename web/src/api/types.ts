@@ -145,6 +145,7 @@ export interface Subscription {
   id: string
   feed_id: string
   folder_id: string | null
+  position: number
   title: string
   icon_url: string | null
   feed_url: string
