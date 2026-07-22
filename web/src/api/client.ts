@@ -501,11 +501,12 @@ export async function importOPML(file: File): Promise<Job> {
   const headers = new Headers({ "Content-Type": "application/xml; charset=utf-8" })
   const token = localStorage.getItem("cairn-device-token")
   if (token) headers.set("Authorization", `Bearer ${token}`)
+  const body = await file.text()
   const response = await fetch("/api/v1/imports/opml", {
     method: "POST",
     headers,
     credentials: "same-origin",
-    body: file,
+    body,
   })
   if (!response.ok) {
     const problem = (await response.json().catch(() => undefined)) as Problem | undefined
@@ -518,11 +519,12 @@ export async function restoreBackup(file: File): Promise<void> {
   const headers = new Headers({ "Content-Type": "application/json" })
   const token = localStorage.getItem("cairn-device-token")
   if (token) headers.set("Authorization", `Bearer ${token}`)
+  const body = await file.text()
   const response = await fetch("/api/v1/restore", {
     method: "POST",
     headers,
     credentials: "same-origin",
-    body: file,
+    body,
   })
   if (!response.ok) {
     const problem = (await response.json().catch(() => undefined)) as Problem | undefined
