@@ -60,6 +60,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/sync/providers", s.listSyncProviders)
 	mux.HandleFunc("GET /api/v1/sync/accounts", s.listSyncAccounts)
 	mux.HandleFunc("POST /api/v1/sync/accounts", s.createSyncAccount)
+	mux.HandleFunc("POST /api/v1/sync/accounts/test", s.testSyncAccountConnection)
 	mux.HandleFunc("PATCH /api/v1/sync/accounts/{accountID}", s.updateSyncAccount)
 	mux.HandleFunc("DELETE /api/v1/sync/accounts/{accountID}", s.deleteSyncAccount)
 	mux.HandleFunc("POST /api/v1/sync/accounts/{accountID}/sync", s.runSyncAccount)

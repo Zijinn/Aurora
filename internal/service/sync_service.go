@@ -51,6 +51,19 @@ type SyncAccountUpdate struct {
 	SyncIntervalMinutes *int
 }
 
+type SyncConnectionTestInput struct {
+	AccountID           string
+	Provider            string
+	Endpoint            string
+	Credentials         syncadapter.Credentials
+	AllowPrivateNetwork *bool
+}
+
+type SyncConnectionTestResult struct {
+	OK       bool   `json:"ok"`
+	Endpoint string `json:"endpoint"`
+}
+
 type SyncResult struct {
 	PushedStates        int    `json:"pushed_states"`
 	PulledStates        int    `json:"pulled_states"`
@@ -129,7 +142,7 @@ func (s *SyncService) UpdateAccount(ctx context.Context, accountID string, input
 		return domain.SyncAccount{}, err
 	}
 	if input.Credentials != nil {
-		credentials = *input.Credentials
+		credentials = mergeSyncCredentials(credentials, *input.Credentials)
 	}
 	name := record.Account.Name
 	if input.Name != nil {
@@ -165,6 +178,47 @@ func (s *SyncService) UpdateAccount(ctx context.Context, accountID string, input
 		patch.SetEncryptedCredentials = true
 	}
 	return storage.UpdateSyncAccount(ctx, s.db, domain.DefaultProfileID, accountID, patch)
+}
+
+func (s *SyncService) TestConnection(ctx context.Context, input SyncConnectionTestInput) (SyncConnectionTestResult, error) {
+	provider := strings.ToLower(strings.TrimSpace(input.Provider))
+	endpoint := strings.TrimSpace(input.Endpoint)
+	credentials := input.Credentials
+	allowPrivate := false
+	if input.AllowPrivateNetwork != nil {
+		allowPrivate = *input.AllowPrivateNetwork
+	}
+
+	if strings.TrimSpace(input.AccountID) != "" {
+		record, err := storage.GetSyncAccountRecord(ctx, s.db, domain.DefaultProfileID, strings.TrimSpace(input.AccountID))
+		if err != nil {
+			return SyncConnectionTestResult{}, err
+		}
+		storedCredentials, err := s.decryptCredentials(record)
+		if err != nil {
+			return SyncConnectionTestResult{}, err
+		}
+		provider = record.Account.Provider
+		if endpoint == "" {
+			endpoint = record.Account.Endpoint
+		}
+		credentials = mergeSyncCredentials(storedCredentials, credentials)
+		allowPrivate = record.Account.AllowPrivateNetwork
+		if input.AllowPrivateNetwork != nil {
+			allowPrivate = *input.AllowPrivateNetwork
+		}
+	}
+	if provider != "webdav" {
+		return SyncConnectionTestResult{}, errors.New("connection testing is currently available only for WebDAV")
+	}
+	normalized, err := normalizeLibrarySyncEndpoint(provider, endpoint)
+	if err != nil {
+		return SyncConnectionTestResult{}, err
+	}
+	if err := s.testWebDAVConnection(ctx, normalized, credentials, allowPrivate); err != nil {
+		return SyncConnectionTestResult{}, err
+	}
+	return SyncConnectionTestResult{OK: true, Endpoint: normalized}, nil
 }
 
 func (s *SyncService) DeleteAccount(ctx context.Context, accountID string) error {
@@ -365,6 +419,22 @@ func (s *SyncService) decryptCredentials(record storage.SyncAccountRecord) (sync
 		return syncadapter.Credentials{}, fmt.Errorf("decode sync credentials: %w", err)
 	}
 	return credentials, nil
+}
+
+func mergeSyncCredentials(current, replacement syncadapter.Credentials) syncadapter.Credentials {
+	if strings.TrimSpace(replacement.Username) != "" {
+		current.Username = strings.TrimSpace(replacement.Username)
+	}
+	if replacement.Password != "" {
+		current.Password = replacement.Password
+	}
+	if strings.TrimSpace(replacement.APIKey) != "" {
+		current.APIKey = strings.TrimSpace(replacement.APIKey)
+	}
+	if strings.TrimSpace(replacement.Token) != "" {
+		current.Token = strings.TrimSpace(replacement.Token)
+	}
+	return current
 }
 
 func validateSyncAccount(provider, name, endpoint string, interval int, credentials syncadapter.Credentials) (string, string, string, int, error) {

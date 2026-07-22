@@ -15,6 +15,7 @@ import {
   DownloadSimple,
   LinkSimple,
   Palette,
+  PencilSimple,
   Plus,
   Trash,
   UploadSimple,
@@ -62,6 +63,7 @@ interface PreferencesDialogProps {
   onCreatePairingCode: () => void
   onRevokeDevice: (deviceID: string) => void
   onAddSyncAccount: (provider?: SyncProviderID) => void
+  onEditSyncAccount: (account: SyncAccount) => void
   onToggleSyncAccount: (accountID: string, enabled: boolean) => void
   onRunSyncAccount: (accountID: string, mode: "auto" | "push" | "pull") => void
   onDeleteSyncAccount: (accountID: string) => void
@@ -640,6 +642,7 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                       onAdd={() => props.onAddSyncAccount()}
                       onToggle={props.onToggleSyncAccount}
                       onRun={runCloudSync}
+                      onEdit={props.onEditSyncAccount}
                       onDelete={props.onDeleteSyncAccount}
                       cloud
                     />
@@ -654,6 +657,7 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                       onAdd={() => props.onAddSyncAccount("freshrss")}
                       onToggle={props.onToggleSyncAccount}
                       onRun={(account) => props.onRunSyncAccount(account.id, "auto")}
+                      onEdit={props.onEditSyncAccount}
                       onDelete={props.onDeleteSyncAccount}
                     />
                   </>
@@ -814,6 +818,7 @@ function SyncAccountSection(props: {
   onAdd: () => void
   onToggle: (accountID: string, enabled: boolean) => void
   onRun: (account: SyncAccount, mode: "auto" | "push" | "pull") => void
+  onEdit: (account: SyncAccount) => void
   onDelete: (accountID: string) => void
 }) {
   return (
@@ -867,6 +872,15 @@ function SyncAccountSection(props: {
                 </small>
               </span>
               <span className="sync-account-actions">
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={`${props.t("edit")} ${account.name}`}
+                  title={props.t("editSyncAccount")}
+                  onClick={() => props.onEdit(account)}
+                >
+                  <PencilSimple />
+                </button>
                 <button
                   className="icon-button"
                   type="button"

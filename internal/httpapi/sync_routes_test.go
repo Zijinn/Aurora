@@ -133,6 +133,119 @@ func TestSyncFailureDoesNotBlockLocalFeedRefresh(t *testing.T) {
 	waitForJobState(t, httpServer.URL, refreshJob.ID, "succeeded")
 }
 
+func TestWebDAVConnectionTestIsReadOnlyAndDoesNotPersistCredentials(t *testing.T) {
+	var requests int
+	expectedPassword := "saved-app-password"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.Method != "PROPFIND" || r.URL.Path != "/dav/" || r.Header.Get("Depth") != "0" {
+			t.Errorf("unexpected WebDAV probe: %s %s depth=%q", r.Method, r.URL.Path, r.Header.Get("Depth"))
+		}
+		username, password, ok := r.BasicAuth()
+		if !ok || username != "nutstore@example.com" || password != expectedPassword {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusMultiStatus)
+	}))
+	defer upstream.Close()
+
+	_, httpServer := newSyncTestServer(t, nil)
+	createdResponse := requestJSON(t, http.MethodPost, httpServer.URL+"/api/v1/sync/accounts", map[string]any{
+		"provider": "webdav", "name": "Nutstore", "endpoint": upstream.URL + "/dav/",
+		"credentials":           map[string]string{"username": "nutstore@example.com", "password": "saved-app-password"},
+		"allow_private_network": true, "sync_interval_minutes": 30,
+	})
+	if createdResponse.StatusCode != http.StatusCreated {
+		t.Fatalf("create WebDAV account returned %d: %s", createdResponse.StatusCode, readBody(t, createdResponse))
+	}
+	var account struct {
+		ID string `json:"id"`
+	}
+	decodeResponse(t, createdResponse, &account)
+
+	failedTest := requestJSON(t, http.MethodPost, httpServer.URL+"/api/v1/sync/accounts/test", map[string]any{
+		"account_id": account.ID, "credentials": map[string]string{"password": "wrong-password"},
+		"allow_private_network": true,
+	})
+	if failedTest.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("wrong WebDAV password returned %d: %s", failedTest.StatusCode, readBody(t, failedTest))
+	}
+	if body := readBody(t, failedTest); !strings.Contains(body, `"code":"authentication_error"`) {
+		t.Fatalf("wrong WebDAV password returned unexpected problem: %s", body)
+	}
+
+	savedCredentialsTest := requestJSON(t, http.MethodPost, httpServer.URL+"/api/v1/sync/accounts/test", map[string]any{
+		"account_id": account.ID, "allow_private_network": true,
+	})
+	if savedCredentialsTest.StatusCode != http.StatusOK {
+		t.Fatalf("saved WebDAV credentials were changed by test: %d %s", savedCredentialsTest.StatusCode, readBody(t, savedCredentialsTest))
+	}
+	var result struct {
+		OK       bool   `json:"ok"`
+		Endpoint string `json:"endpoint"`
+	}
+	decodeResponse(t, savedCredentialsTest, &result)
+	if !result.OK || result.Endpoint != upstream.URL+"/dav/aurora-library.json" {
+		t.Fatalf("unexpected connection result: %+v", result)
+	}
+
+	unsavedTest := requestJSON(t, http.MethodPost, httpServer.URL+"/api/v1/sync/accounts/test", map[string]any{
+		"provider": "webdav", "endpoint": upstream.URL + "/dav/",
+		"credentials":           map[string]string{"username": "nutstore@example.com", "password": "saved-app-password"},
+		"allow_private_network": true,
+	})
+	if unsavedTest.StatusCode != http.StatusOK {
+		t.Fatalf("unsaved WebDAV test returned %d: %s", unsavedTest.StatusCode, readBody(t, unsavedTest))
+	}
+	_ = readBody(t, unsavedTest)
+
+	updatedPassword := "updated-app-password"
+	updateResponse := requestJSON(t, http.MethodPatch, httpServer.URL+"/api/v1/sync/accounts/"+account.ID, map[string]any{
+		"credentials": map[string]string{"password": updatedPassword},
+	})
+	if updateResponse.StatusCode != http.StatusOK {
+		t.Fatalf("update WebDAV application password returned %d: %s", updateResponse.StatusCode, readBody(t, updateResponse))
+	}
+	_ = readBody(t, updateResponse)
+	expectedPassword = updatedPassword
+	updatedCredentialsTest := requestJSON(t, http.MethodPost, httpServer.URL+"/api/v1/sync/accounts/test", map[string]any{
+		"account_id": account.ID,
+	})
+	if updatedCredentialsTest.StatusCode != http.StatusOK {
+		t.Fatalf("password-only update did not preserve username: %d %s", updatedCredentialsTest.StatusCode, readBody(t, updatedCredentialsTest))
+	}
+	_ = readBody(t, updatedCredentialsTest)
+
+	accountsResponse, err := http.Get(httpServer.URL + "/api/v1/sync/accounts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var accounts struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	decodeResponse(t, accountsResponse, &accounts)
+	if len(accounts.Items) != 1 {
+		t.Fatalf("connection test persisted an account: %d accounts", len(accounts.Items))
+	}
+	if requests != 4 {
+		t.Fatalf("expected four read-only probes, got %d", requests)
+	}
+}
+
+func TestWebDAVConnectionTestRejectsInvalidEndpoint(t *testing.T) {
+	_, httpServer := newSyncTestServer(t, nil)
+	response := requestJSON(t, http.MethodPost, httpServer.URL+"/api/v1/sync/accounts/test", map[string]any{
+		"provider": "webdav", "endpoint": "not-a-webdav-url",
+	})
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid WebDAV endpoint returned %d: %s", response.StatusCode, readBody(t, response))
+	}
+	if body := readBody(t, response); !strings.Contains(body, `"code":"connection_test_failed"`) {
+		t.Fatalf("invalid WebDAV endpoint returned unexpected problem: %s", body)
+	}
+}
+
 func newSyncTestServer(t *testing.T, fetcher *feedcore.Fetcher) (*Server, *httptest.Server) {
 	t.Helper()
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "cairn.db"))

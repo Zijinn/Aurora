@@ -110,6 +110,26 @@ export interface CreateSyncAccountInput {
   sync_interval_minutes: number
 }
 
+export type UpdateSyncAccountInput = Partial<
+  Pick<
+    SyncAccount,
+    "name" | "endpoint" | "enabled" | "allow_private_network" | "sync_interval_minutes"
+  >
+> & { credentials?: SyncCredentials }
+
+export interface TestSyncConnectionInput {
+  account_id?: string
+  provider: SyncProviderID
+  endpoint: string
+  credentials: SyncCredentials
+  allow_private_network: boolean
+}
+
+export interface SyncConnectionTestResult {
+  ok: boolean
+  endpoint: string
+}
+
 export function listSyncProviders(signal?: AbortSignal): Promise<ListResponse<SyncProvider>> {
   return request<ListResponse<SyncProvider>>("/api/v1/sync/providers", { signal })
 }
@@ -127,16 +147,20 @@ export function createSyncAccount(input: CreateSyncAccountInput): Promise<SyncAc
 
 export function updateSyncAccount(
   accountID: string,
-  patch: Partial<
-    Pick<
-      SyncAccount,
-      "name" | "endpoint" | "enabled" | "allow_private_network" | "sync_interval_minutes"
-    >
-  > & { credentials?: SyncCredentials },
+  patch: UpdateSyncAccountInput,
 ): Promise<SyncAccount> {
   return request<SyncAccount>(`/api/v1/sync/accounts/${encodeURIComponent(accountID)}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
+  })
+}
+
+export function testSyncConnection(
+  input: TestSyncConnectionInput,
+): Promise<SyncConnectionTestResult> {
+  return request<SyncConnectionTestResult>("/api/v1/sync/accounts/test", {
+    method: "POST",
+    body: JSON.stringify(input),
   })
 }
 

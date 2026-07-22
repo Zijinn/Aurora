@@ -820,6 +820,30 @@ paths:
           description: Sync account and mappings deleted.
         "404":
           $ref: "#/components/responses/Problem"
+  /api/v1/sync/accounts/test:
+    post:
+      operationId: testSyncAccountConnection
+      tags: [sync]
+      summary: Test WebDAV access without writing or persisting credentials.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestSyncConnectionRequest"
+      responses:
+        "200":
+          description: The WebDAV collection is reachable and accepted the credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncConnectionTestResult"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
   /api/v1/sync/accounts/{accountId}/sync:
     parameters:
       - $ref: "#/components/parameters/SyncAccountId"
@@ -1524,6 +1548,34 @@ components:
           type: integer
           minimum: 5
           maximum: 10080
+    TestSyncConnectionRequest:
+      type: object
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: Existing account whose encrypted credentials should be used as the base.
+        provider:
+          type: string
+          enum: [webdav]
+        endpoint:
+          type: string
+          description: WebDAV directory or snapshot file URL. The test probes its parent collection with PROPFIND and performs no write.
+        credentials:
+          $ref: "#/components/schemas/SyncCredentials"
+        allow_private_network:
+          type: boolean
+          default: false
+    SyncConnectionTestResult:
+      type: object
+      required: [ok, endpoint]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        endpoint:
+          type: string
+          description: Normalized Aurora snapshot file URL.
     SyncAccount:
       type: object
       required: [id, provider, name, endpoint, enabled, allow_private_network, sync_interval_minutes, created_at, updated_at]

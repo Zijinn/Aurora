@@ -30,6 +30,14 @@ type syncAccountPatchRequest struct {
 	SyncIntervalMinutes *int                     `json:"sync_interval_minutes"`
 }
 
+type syncConnectionTestRequest struct {
+	AccountID           string                  `json:"account_id"`
+	Provider            string                  `json:"provider"`
+	Endpoint            string                  `json:"endpoint"`
+	Credentials         syncadapter.Credentials `json:"credentials"`
+	AllowPrivateNetwork *bool                   `json:"allow_private_network"`
+}
+
 func (s *Server) listSyncProviders(w http.ResponseWriter, r *http.Request) {
 	providers := service.SupportedSyncProviders()
 	keys := make([]string, 0, len(providers))
@@ -105,6 +113,40 @@ func (s *Server) updateSyncAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) testSyncAccountConnection(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSync(w, r) {
+		return
+	}
+	var request syncConnectionTestRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		return
+	}
+	result, err := s.syncs.TestConnection(r.Context(), service.SyncConnectionTestInput{
+		AccountID: request.AccountID, Provider: request.Provider, Endpoint: request.Endpoint,
+		Credentials: request.Credentials, AllowPrivateNetwork: request.AllowPrivateNetwork,
+	})
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			s.storageError(w, r, err)
+			return
+		}
+		status := http.StatusBadRequest
+		code := syncadapter.ErrorCode(err)
+		switch code {
+		case "authentication_error":
+			status = http.StatusUnauthorized
+		case "network_error", "http_error":
+			status = http.StatusBadGateway
+		default:
+			code = "connection_test_failed"
+		}
+		writeProblem(w, r, status, code, "Connection test failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) deleteSyncAccount(w http.ResponseWriter, r *http.Request) {

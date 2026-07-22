@@ -224,6 +224,13 @@ const messages: Record<Locale, Record<string, string>> = {
     allowPrivateEndpoint: "允许访问私有网络地址",
     addAccount: "添加账户",
     addSyncAccount: "添加同步账户",
+    edit: "编辑",
+    editSyncAccount: "编辑同步账户",
+    saveChanges: "保存更改",
+    testConnection: "测试连接",
+    testingConnection: "正在测试",
+    connectionSuccessful: "连接成功，可以使用此 WebDAV 位置。",
+    connectionTestFailed: "连接测试失败",
     libraryCloudSync: "资料库云同步",
     libraryCloudSyncDescription:
       "在多个目标之间同步订阅、文章、阅读状态与设置；WebDAV 和 iCloud 可同时启用。",
@@ -239,6 +246,15 @@ const messages: Record<Locale, Record<string, string>> = {
     cloudPushConfirmation: "用当前本地资料库覆盖此云端快照？",
     cloudPullConfirmation: "从此云端快照恢复并替换当前本地资料库？",
     webdavSyncDescription: "使用现有 WebDAV 文件地址同步可移植的 Aurora 资料库快照。",
+    nutstore: "坚果云",
+    useNutstore: "使用坚果云",
+    nutstoreWebDAVHint:
+      "坚果云请使用账户邮箱和“安全选项 > 第三方应用管理”生成的应用密码，不能使用登录密码。",
+    webdavAuthenticationFailed:
+      "认证失败（HTTP 401）。坚果云需要账户邮箱和第三方应用密码，请勿填写登录密码。",
+    passwordOrAppPassword: "密码 / 应用密码",
+    leaveBlankToKeep: "留空则保留原设置",
+    savedCredentialsHint: "账户凭据不会显示；留空时继续使用已加密保存的凭据。",
     icloudDrive: "iCloud Drive",
     icloudSyncDescription: "将资料库快照写入本机 iCloud Drive，并由系统同步到其他设备。",
     icloudPath: "iCloud 文件路径",
@@ -559,6 +575,13 @@ const messages: Record<Locale, Record<string, string>> = {
     allowPrivateEndpoint: "Allow private network endpoint",
     addAccount: "Add account",
     addSyncAccount: "Add sync account",
+    edit: "Edit",
+    editSyncAccount: "Edit sync account",
+    saveChanges: "Save changes",
+    testConnection: "Test connection",
+    testingConnection: "Testing",
+    connectionSuccessful: "Connection successful. This WebDAV location is ready to use.",
+    connectionTestFailed: "Connection test failed",
     libraryCloudSync: "Library cloud sync",
     libraryCloudSyncDescription:
       "Sync subscriptions, articles, reading state, and settings across targets. WebDAV and iCloud can run together.",
@@ -576,6 +599,16 @@ const messages: Record<Locale, Record<string, string>> = {
     cloudPullConfirmation: "Restore this cloud snapshot and replace the current local library?",
     webdavSyncDescription:
       "Use an existing WebDAV file URL to synchronize a portable Aurora library snapshot.",
+    nutstore: "Nutstore",
+    useNutstore: "Use Nutstore",
+    nutstoreWebDAVHint:
+      "For Nutstore, use your account email and an app password generated under Security > Third-party app management, not your login password.",
+    webdavAuthenticationFailed:
+      "Authentication failed (HTTP 401). Nutstore requires your account email and a third-party app password, not your login password.",
+    passwordOrAppPassword: "Password / app password",
+    leaveBlankToKeep: "Leave blank to keep the saved value",
+    savedCredentialsHint:
+      "Saved credentials are never displayed. Leave these fields blank to keep the encrypted credentials.",
     icloudDrive: "iCloud Drive",
     icloudSyncDescription:
       "Write the library snapshot to local iCloud Drive for the system to sync across devices.",

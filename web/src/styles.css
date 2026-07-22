@@ -3908,6 +3908,33 @@ button:disabled {
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
+.sync-account-dialog {
+  width: min(600px, calc(100vw - 28px));
+}
+.sync-account-dialog .dialog-header {
+  min-height: 52px;
+}
+.sync-account-dialog .sync-dialog-form {
+  padding: 14px 22px 18px;
+}
+.sync-account-dialog .sync-dialog-form > .field-label:not(:first-child) {
+  margin-top: 10px;
+}
+.sync-account-dialog .text-input,
+.sync-account-dialog .select-input {
+  height: 36px;
+}
+.sync-account-dialog .sync-provider-note {
+  padding: 8px 0;
+  margin-top: 10px;
+}
+.sync-account-dialog .checkbox-row {
+  min-height: 32px;
+  margin-top: 8px;
+}
+.sync-account-dialog .dialog-actions {
+  margin-top: 14px;
+}
 .sync-provider-note > svg {
   width: 24px;
   height: 24px;
@@ -3926,6 +3953,36 @@ button:disabled {
   color: var(--text-secondary);
   font-size: 10px;
   line-height: 1.45;
+}
+.sync-provider-note__action {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 10px;
+  margin-left: auto;
+  font-size: 10px;
+}
+.form-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  margin: 16px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.form-status svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+.form-status--success {
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-left: 3px solid var(--accent-strong);
+}
+.dialog-actions--split {
+  justify-content: space-between;
 }
 
 .preferences-dialog {

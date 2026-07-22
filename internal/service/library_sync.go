@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -307,6 +308,40 @@ func authorizeLibrarySyncRequest(request *http.Request, credentials syncadapter.
 	} else if credentials.Username != "" || credentials.Password != "" {
 		request.SetBasicAuth(credentials.Username, credentials.Password)
 	}
+}
+
+func (s *SyncService) testWebDAVConnection(ctx context.Context, snapshotEndpoint string, credentials syncadapter.Credentials, allowPrivate bool) error {
+	parsed, err := url.Parse(snapshotEndpoint)
+	if err != nil {
+		return err
+	}
+	collection := *parsed
+	collection.Path = path.Dir(parsed.Path)
+	if !strings.HasSuffix(collection.Path, "/") {
+		collection.Path += "/"
+	}
+	collection.RawPath = ""
+	collection.RawQuery = ""
+	collection.Fragment = ""
+
+	request, err := http.NewRequestWithContext(ctx, "PROPFIND", collection.String(), strings.NewReader(`<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><allprop/></propfind>`))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Accept", "application/xml, text/xml")
+	request.Header.Set("Content-Type", "application/xml; charset=utf-8")
+	request.Header.Set("Depth", "0")
+	authorizeLibrarySyncRequest(request, credentials)
+	response, err := s.clientFactory(allowPrivate).Do(request)
+	if err != nil {
+		return &syncadapter.Error{Code: "network_error", Retryable: !errors.Is(err, context.Canceled), Err: err}
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return webDAVStatusError(response.StatusCode)
+	}
+	return nil
 }
 
 func webDAVStatusError(status int) error {

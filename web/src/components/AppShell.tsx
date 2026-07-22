@@ -58,12 +58,14 @@ import {
   updateFeed,
   updateFolder,
   updateSyncAccount,
+  testSyncConnection,
 } from "../api/client"
 import type {
   Entry,
   EntryState,
   Folder,
   Subscription,
+  SyncAccount,
   SyncProvider,
   SyncProviderID,
 } from "../api/types"
@@ -143,6 +145,7 @@ export function AppShell() {
   const [commandOpen, setCommandOpen] = useState(false)
   const [syncAccountOpen, setSyncAccountOpen] = useState(false)
   const [syncAccountProvider, setSyncAccountProvider] = useState<SyncProviderID>()
+  const [syncAccountEditing, setSyncAccountEditing] = useState<SyncAccount>()
   const [aiProfileOpen, setAIProfileOpen] = useState(false)
   const [organizationOpen, setOrganizationOpen] = useState(false)
   const [organizationMode, setOrganizationMode] = useState<"all" | "folders">("all")
@@ -624,6 +627,20 @@ export function AppShell() {
       await queryClient.invalidateQueries({ queryKey: ["sync-accounts"] })
     },
   })
+  const updateSyncSettingsMutation = useMutation({
+    mutationFn: ({
+      accountID,
+      patch,
+    }: {
+      accountID: string
+      patch: Parameters<typeof updateSyncAccount>[1]
+    }) => updateSyncAccount(accountID, patch),
+    onSuccess: async () => {
+      setSyncAccountEditing(undefined)
+      closeSecondaryDialog(setSyncAccountOpen)
+      await queryClient.invalidateQueries({ queryKey: ["sync-accounts"] })
+    },
+  })
   const toggleSyncMutation = useMutation({
     mutationFn: ({ accountID, enabled }: { accountID: string; enabled: boolean }) =>
       updateSyncAccount(accountID, { enabled }),
@@ -1072,7 +1089,15 @@ export function AppShell() {
               onAddSyncAccount={(provider) => {
                 setDialogReturnTarget("preferences")
                 setPreferencesOpen(false)
+                setSyncAccountEditing(undefined)
                 setSyncAccountProvider(provider)
+                setSyncAccountOpen(true)
+              }}
+              onEditSyncAccount={(account) => {
+                setDialogReturnTarget("preferences")
+                setPreferencesOpen(false)
+                setSyncAccountProvider(account.provider)
+                setSyncAccountEditing(account)
                 setSyncAccountOpen(true)
               }}
               onOrganizeLibrary={() => {
@@ -1134,17 +1159,40 @@ export function AppShell() {
         {syncAccountOpen && (
           <Suspense fallback={null}>
             <SyncAccountDialog
-              key={`${syncAccountProvider ?? "default"}-${syncAccountOpen ? "open" : "closed"}`}
+              key={syncAccountEditing?.id ?? `${syncAccountProvider ?? "default"}-new`}
               open
               providers={availableSyncProviders}
+              account={syncAccountEditing}
               initialProvider={syncAccountProvider}
-              pending={createSyncMutation.isPending}
-              error={createSyncMutation.error}
+              pending={createSyncMutation.isPending || updateSyncSettingsMutation.isPending}
+              error={createSyncMutation.error ?? updateSyncSettingsMutation.error}
               onOpenChange={(open) => {
                 if (open) setSyncAccountOpen(true)
-                else closeSecondaryDialog(setSyncAccountOpen)
+                else {
+                  setSyncAccountEditing(undefined)
+                  closeSecondaryDialog(setSyncAccountOpen)
+                }
               }}
-              onCreate={(input) => createSyncMutation.mutate(input)}
+              onTest={testSyncConnection}
+              onSave={(input) => {
+                if (!syncAccountEditing) {
+                  createSyncMutation.mutate(input)
+                  return
+                }
+                const hasCredentialChanges = Object.values(input.credentials).some(
+                  (value) => typeof value === "string" && value.length > 0,
+                )
+                updateSyncSettingsMutation.mutate({
+                  accountID: syncAccountEditing.id,
+                  patch: {
+                    name: input.name,
+                    endpoint: input.endpoint,
+                    allow_private_network: input.allow_private_network,
+                    sync_interval_minutes: input.sync_interval_minutes,
+                    ...(hasCredentialChanges ? { credentials: input.credentials } : {}),
+                  },
+                })
+              }}
             />
           </Suspense>
         )}
