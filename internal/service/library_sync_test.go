@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -135,5 +136,106 @@ func TestWebDAVDirectoryEndpointGetsSnapshotFilename(t *testing.T) {
 	}
 	if got != "https://dav.example.test/Aurora/aurora-library.json" {
 		t.Fatalf("unexpected normalized endpoint: %q", got)
+	}
+	nutstore, err := normalizeLibrarySyncEndpoint("webdav", "https://dav.jianguoyun.com/dav/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nutstore != "https://dav.jianguoyun.com/dav/Aurora/aurora-library.json" {
+		t.Fatalf("unexpected Nutstore endpoint: %q", nutstore)
+	}
+	legacy, err := normalizeLibrarySyncEndpoint("webdav", "https://dav.jianguoyun.com/dav/aurora-library.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy != nutstore {
+		t.Fatalf("legacy Nutstore endpoint was not migrated: %q", legacy)
+	}
+}
+
+func TestWebDAVConnectionCreatesCollectionAndChecksWriteAccess(t *testing.T) {
+	collectionCreated := false
+	testFileWritten := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "PROPFIND" && r.URL.Path == "/dav/Aurora/":
+			if collectionCreated {
+				w.WriteHeader(http.StatusMultiStatus)
+			} else {
+				http.NotFound(w, r)
+			}
+		case r.Method == "PROPFIND" && r.URL.Path == "/dav/":
+			w.WriteHeader(http.StatusMultiStatus)
+		case r.Method == "MKCOL" && r.URL.Path == "/dav/Aurora/":
+			collectionCreated = true
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/dav/Aurora/aurora-connection-test-"):
+			testFileWritten = true
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/dav/Aurora/aurora-connection-test-"):
+			if !testFileWritten {
+				http.NotFound(w, r)
+				return
+			}
+			testFileWritten = false
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Fatalf("unexpected WebDAV request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+
+	service := &SyncService{clientFactory: func(bool) *http.Client { return upstream.Client() }}
+	err := service.testWebDAVConnection(
+		context.Background(),
+		upstream.URL+"/dav/Aurora/aurora-library.json",
+		syncadapter.Credentials{Username: "user", Password: "app-password"},
+		true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !collectionCreated || testFileWritten {
+		t.Fatalf("connection test did not prepare and clean up the collection: created=%v test_file=%v", collectionCreated, testFileWritten)
+	}
+}
+
+func TestWebDAVSnapshotWriteCreatesMissingCollectionAndRetries(t *testing.T) {
+	collectionCreated := false
+	writes := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/dav/Aurora/aurora-library.json":
+			writes++
+			if !collectionCreated {
+				http.NotFound(w, r)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == "PROPFIND" && r.URL.Path == "/dav/Aurora/":
+			http.NotFound(w, r)
+		case r.Method == "PROPFIND" && r.URL.Path == "/dav/":
+			w.WriteHeader(http.StatusMultiStatus)
+		case r.Method == "MKCOL" && r.URL.Path == "/dav/Aurora/":
+			collectionCreated = true
+			w.WriteHeader(http.StatusCreated)
+		default:
+			t.Fatalf("unexpected WebDAV request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+
+	service := &SyncService{clientFactory: func(bool) *http.Client { return upstream.Client() }}
+	record := storage.SyncAccountRecord{Account: domain.SyncAccount{
+		Provider:            "webdav",
+		Endpoint:            upstream.URL + "/dav/Aurora/aurora-library.json",
+		AllowPrivateNetwork: true,
+	}}
+	document := storage.BackupDocument{Format: storage.LibrarySnapshotFormat, Version: 1}
+	if err := service.writeRemoteSnapshot(context.Background(), record, syncadapter.Credentials{}, document); err != nil {
+		t.Fatal(err)
+	}
+	if !collectionCreated || writes != 2 {
+		t.Fatalf("snapshot write did not create and retry: created=%v writes=%d", collectionCreated, writes)
 	}
 }

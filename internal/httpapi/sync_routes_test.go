@@ -133,20 +133,27 @@ func TestSyncFailureDoesNotBlockLocalFeedRefresh(t *testing.T) {
 	waitForJobState(t, httpServer.URL, refreshJob.ID, "succeeded")
 }
 
-func TestWebDAVConnectionTestIsReadOnlyAndDoesNotPersistCredentials(t *testing.T) {
+func TestWebDAVConnectionTestVerifiesWritesAndDoesNotPersistCredentials(t *testing.T) {
 	var requests int
 	expectedPassword := "saved-app-password"
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
-		if r.Method != "PROPFIND" || r.URL.Path != "/dav/" || r.Header.Get("Depth") != "0" {
-			t.Errorf("unexpected WebDAV probe: %s %s depth=%q", r.Method, r.URL.Path, r.Header.Get("Depth"))
-		}
 		username, password, ok := r.BasicAuth()
 		if !ok || username != "nutstore@example.com" || password != expectedPassword {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		w.WriteHeader(http.StatusMultiStatus)
+		switch {
+		case r.Method == "PROPFIND" && r.URL.Path == "/dav/" && r.Header.Get("Depth") == "0":
+			w.WriteHeader(http.StatusMultiStatus)
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/dav/aurora-connection-test-"):
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/dav/aurora-connection-test-"):
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("unexpected WebDAV probe: %s %s depth=%q", r.Method, r.URL.Path, r.Header.Get("Depth"))
+			http.NotFound(w, r)
+		}
 	}))
 	defer upstream.Close()
 
@@ -228,8 +235,8 @@ func TestWebDAVConnectionTestIsReadOnlyAndDoesNotPersistCredentials(t *testing.T
 	if len(accounts.Items) != 1 {
 		t.Fatalf("connection test persisted an account: %d accounts", len(accounts.Items))
 	}
-	if requests != 4 {
-		t.Fatalf("expected four read-only probes, got %d", requests)
+	if requests != 10 {
+		t.Fatalf("expected one failed authentication probe and three write checks, got %d requests", requests)
 	}
 }
 

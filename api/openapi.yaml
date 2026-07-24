@@ -1560,7 +1560,7 @@ components:
           enum: [webdav]
         endpoint:
           type: string
-          description: WebDAV directory or snapshot file URL. The test probes its parent collection with PROPFIND and performs no write.
+          description: WebDAV directory or snapshot file URL. The test prepares the target collection and verifies write/delete access with a unique temporary file.
         credentials:
           $ref: "#/components/schemas/SyncCredentials"
         allow_private_network:

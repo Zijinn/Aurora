@@ -80,7 +80,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
   }
   const useNutstore = () => {
     setName(t("nutstore"))
-    setEndpoint("https://dav.jianguoyun.com/dav/")
+    setEndpoint("https://dav.jianguoyun.com/dav/Aurora/")
     setConnection({ status: "idle" })
   }
   const credentials = (): SyncCredentials => ({
@@ -137,10 +137,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content
-          className="dialog-content sync-account-dialog"
-          aria-describedby={undefined}
-        >
+        <Dialog.Content className="dialog-content sync-account-dialog" aria-describedby={undefined}>
           <div className="dialog-header">
             <Dialog.Title>{editing ? t("editSyncAccount") : t("addSyncAccount")}</Dialog.Title>
             <Dialog.Close asChild>
@@ -228,7 +225,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
                 isICloud
                   ? t("icloudPathPlaceholder")
                   : isWebDAV
-                    ? "https://dav.jianguoyun.com/dav/"
+                    ? "https://dav.jianguoyun.com/dav/Aurora/"
                     : "https://reader.example.com"
               }
               value={endpoint}
@@ -238,6 +235,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
               }}
             />
             {isICloud && <p className="field-hint">{t("icloudDefaultPathHint")}</p>}
+            {isICloud && <p className="field-hint">{t("icloudOtherDevicesHint")}</p>}
             {isWebDAV && <p className="field-hint">{t("nutstoreWebDAVHint")}</p>}
             {usesAPIKey ? (
               <>

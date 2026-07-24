@@ -5723,6 +5723,34 @@ button:disabled {
 .feed-tree-row {
   min-height: 36px;
 }
+.folder-tree-row,
+.feed-row--nested {
+  position: relative;
+}
+.library-drop-target--before::before,
+.library-drop-target--after::after {
+  position: absolute;
+  z-index: 4;
+  right: 6px;
+  left: 6px;
+  height: 2px;
+  pointer-events: none;
+  content: "";
+  background: var(--accent);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface-raised) 82%, transparent);
+}
+.library-drop-target--before::before {
+  top: -1px;
+}
+.library-drop-target--after::after {
+  bottom: -1px;
+}
+.library-drop-target--inside > .folder-row,
+.feed-row--nested.library-drop-target--inside {
+  background: color-mix(in srgb, var(--accent-soft) 78%, var(--surface-raised));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
+}
 .folder-tree-row .folder-row,
 .feed-row--nested {
   height: 36px;

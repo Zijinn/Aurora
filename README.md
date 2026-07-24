@@ -42,6 +42,8 @@ WebDAV and iCloud targets are independent and may be enabled together. Aurora re
 
 iCloud Drive synchronization uses the system's local iCloud folder. On macOS the default file is `iCloud Drive/Aurora/aurora-library.json`; Windows can use the equivalent local iCloud Drive folder when iCloud for Windows is installed.
 
+For a new device, connect the same WebDAV directory or sign in to the same Apple ID with iCloud Drive enabled, add the matching cloud target in Aurora, and choose **Restore library from cloud**. Use **Replace cloud with local library** on the first device to establish the initial snapshot. iPad PWA clients do not read iCloud Drive directly; they connect to a computer running the Aurora server.
+
 ## AI And Privacy
 
 AI is optional. Provider keys are encrypted with the installation master key and never returned by the REST API. Remote endpoints require explicit approval before article content is transmitted; local Ollama endpoints stay on the device. Title translation sends only the title, while summaries, full translation, key points, and chat use the selected article content.

@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Zijinn/Aurora/internal/storage"
 	"github.com/Zijinn/Aurora/internal/syncadapter"
 )
@@ -41,6 +43,13 @@ func (s *SyncService) runLibrarySync(
 ) (SyncResult, error) {
 	if mode != "auto" && mode != "push" && mode != "pull" {
 		return SyncResult{}, errors.New("library sync mode must be auto, push, or pull")
+	}
+	if record.Account.Provider == "webdav" {
+		normalized, err := normalizeLibrarySyncEndpoint("webdav", record.Account.Endpoint)
+		if err != nil {
+			return SyncResult{}, err
+		}
+		record.Account.Endpoint = normalized
 	}
 	if progress != nil {
 		progress(0, 3)
@@ -223,20 +232,29 @@ func (s *SyncService) writeRemoteSnapshot(ctx context.Context, record storage.Sy
 		}
 		return nil
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPut, record.Account.Endpoint, bytes.NewReader(body))
+	status, err := s.sendWebDAVRequest(ctx, http.MethodPut, record.Account.Endpoint, body, "application/json", credentials, record.Account.AllowPrivateNetwork)
 	if err != nil {
 		return err
 	}
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Content-Type", "application/json")
-	authorizeLibrarySyncRequest(request, credentials)
-	response, err := s.clientFactory(record.Account.AllowPrivateNetwork).Do(request)
-	if err != nil {
-		return &syncadapter.Error{Code: "network_error", Retryable: !errors.Is(err, context.Canceled), Err: err}
+	if status >= 200 && status < 300 {
+		return nil
 	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return webDAVStatusError(response.StatusCode)
+	if status != http.StatusNotFound {
+		return webDAVStatusError(status)
+	}
+	collection, err := webDAVCollectionURL(record.Account.Endpoint)
+	if err != nil {
+		return err
+	}
+	if err := s.ensureWebDAVCollection(ctx, collection, credentials, record.Account.AllowPrivateNetwork, 0); err != nil {
+		return err
+	}
+	status, err = s.sendWebDAVRequest(ctx, http.MethodPut, record.Account.Endpoint, body, "application/json", credentials, record.Account.AllowPrivateNetwork)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return webDAVStatusError(status)
 	}
 	return nil
 }
@@ -248,7 +266,16 @@ func normalizeLibrarySyncEndpoint(provider, raw string) (string, error) {
 		if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return "", errors.New("WebDAV endpoint must be an HTTP or HTTPS file URL without embedded credentials")
 		}
-		if parsed.Path == "" || strings.HasSuffix(parsed.Path, "/") {
+		if strings.EqualFold(parsed.Hostname(), "dav.jianguoyun.com") {
+			cleanPath := path.Clean(parsed.Path)
+			switch {
+			case cleanPath == "/dav", cleanPath == "/dav/aurora-library.json":
+				parsed.Path = "/dav/Aurora/aurora-library.json"
+			case path.Ext(cleanPath) == "":
+				parsed.Path = strings.TrimRight(parsed.Path, "/") + "/aurora-library.json"
+			}
+			endpoint = parsed.String()
+		} else if parsed.Path == "" || strings.HasSuffix(parsed.Path, "/") {
 			parsed.Path = strings.TrimRight(parsed.Path, "/") + "/aurora-library.json"
 			endpoint = parsed.String()
 		}
@@ -311,37 +338,104 @@ func authorizeLibrarySyncRequest(request *http.Request, credentials syncadapter.
 }
 
 func (s *SyncService) testWebDAVConnection(ctx context.Context, snapshotEndpoint string, credentials syncadapter.Credentials, allowPrivate bool) error {
+	collection, err := webDAVCollectionURL(snapshotEndpoint)
+	if err != nil {
+		return err
+	}
+	if err := s.ensureWebDAVCollection(ctx, collection, credentials, allowPrivate, 0); err != nil {
+		return err
+	}
+	testFile := *collection
+	testFile.Path = path.Join(collection.Path, "aurora-connection-test-"+uuid.NewString()+".tmp")
+	status, err := s.sendWebDAVRequest(ctx, http.MethodPut, testFile.String(), []byte("Aurora WebDAV connection test\n"), "text/plain; charset=utf-8", credentials, allowPrivate)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return webDAVStatusError(status)
+	}
+	status, err = s.sendWebDAVRequest(ctx, http.MethodDelete, testFile.String(), nil, "", credentials, allowPrivate)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("remove WebDAV connection test file: %w", webDAVStatusError(status))
+	}
+	return nil
+}
+
+func webDAVCollectionURL(snapshotEndpoint string) (*url.URL, error) {
 	parsed, err := url.Parse(snapshotEndpoint)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	collection := *parsed
-	collection.Path = path.Dir(parsed.Path)
-	if !strings.HasSuffix(collection.Path, "/") {
-		collection.Path += "/"
+	parsed.Path = path.Dir(parsed.Path)
+	if !strings.HasSuffix(parsed.Path, "/") {
+		parsed.Path += "/"
 	}
-	collection.RawPath = ""
-	collection.RawQuery = ""
-	collection.Fragment = ""
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed, nil
+}
 
-	request, err := http.NewRequestWithContext(ctx, "PROPFIND", collection.String(), strings.NewReader(`<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><allprop/></propfind>`))
+func (s *SyncService) ensureWebDAVCollection(ctx context.Context, collection *url.URL, credentials syncadapter.Credentials, allowPrivate bool, depth int) error {
+	if depth > 16 {
+		return errors.New("WebDAV collection nesting is too deep")
+	}
+	status, err := s.sendWebDAVRequest(ctx, "PROPFIND", collection.String(), []byte(`<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><allprop/></propfind>`), "application/xml; charset=utf-8", credentials, allowPrivate)
 	if err != nil {
 		return err
 	}
-	request.Header.Set("Accept", "application/xml, text/xml")
-	request.Header.Set("Content-Type", "application/xml; charset=utf-8")
-	request.Header.Set("Depth", "0")
+	if status >= 200 && status < 300 {
+		return nil
+	}
+	if status != http.StatusNotFound {
+		return webDAVStatusError(status)
+	}
+	cleanPath := strings.TrimRight(collection.Path, "/")
+	if cleanPath == "" {
+		return webDAVStatusError(status)
+	}
+	parent := *collection
+	parent.Path = path.Dir(cleanPath)
+	if !strings.HasSuffix(parent.Path, "/") {
+		parent.Path += "/"
+	}
+	if err := s.ensureWebDAVCollection(ctx, &parent, credentials, allowPrivate, depth+1); err != nil {
+		return err
+	}
+	status, err = s.sendWebDAVRequest(ctx, "MKCOL", collection.String(), nil, "", credentials, allowPrivate)
+	if err != nil {
+		return err
+	}
+	if (status < 200 || status >= 300) && status != http.StatusMethodNotAllowed {
+		return webDAVStatusError(status)
+	}
+	return nil
+}
+
+func (s *SyncService) sendWebDAVRequest(ctx context.Context, method, endpoint string, body []byte, contentType string, credentials syncadapter.Credentials, allowPrivate bool) (int, error) {
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	request.Header.Set("Accept", "application/json, application/xml, text/xml, */*")
+	request.Header.Set("User-Agent", "Aurora/WebDAV")
+	if contentType != "" {
+		request.Header.Set("Content-Type", contentType)
+	}
+	if method == "PROPFIND" {
+		request.Header.Set("Depth", "0")
+	}
 	authorizeLibrarySyncRequest(request, credentials)
 	response, err := s.clientFactory(allowPrivate).Do(request)
 	if err != nil {
-		return &syncadapter.Error{Code: "network_error", Retryable: !errors.Is(err, context.Canceled), Err: err}
+		return 0, &syncadapter.Error{Code: "network_error", Retryable: !errors.Is(err, context.Canceled), Err: err}
 	}
 	defer response.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return webDAVStatusError(response.StatusCode)
-	}
-	return nil
+	return response.StatusCode, nil
 }
 
 func webDAVStatusError(status int) error {

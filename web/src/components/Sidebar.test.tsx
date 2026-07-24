@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { Folder, Subscription } from "../api/types"
+import type { Folder, LibraryScope, Subscription } from "../api/types"
 import { useReaderStore } from "../store/reader"
 import { Sidebar } from "./Sidebar"
 
@@ -65,9 +65,30 @@ describe("Sidebar rename menus", () => {
   })
 })
 
+describe("Sidebar folder interactions", () => {
+  it("toggles a folder when its main row is clicked", () => {
+    const onScopeChange = vi.fn()
+    renderSidebar({ onScopeChange })
+
+    const folderRow = screen.getByRole("button", { name: "Research2" })
+    expect(screen.getByRole("button", { name: "Example feed2" })).toBeInTheDocument()
+    fireEvent.click(folderRow)
+
+    expect(onScopeChange).toHaveBeenCalledWith({
+      kind: "folder",
+      id: "folder-1",
+      title: "Research",
+    })
+    expect(screen.queryByRole("button", { name: "Example feed2" })).not.toBeInTheDocument()
+    fireEvent.click(folderRow)
+    expect(screen.getByRole("button", { name: "Example feed2" })).toBeInTheDocument()
+  })
+})
+
 function renderSidebar(overrides: {
   onRenameFeed?: (feedID: string, name: string) => void
   onRenameFolder?: (folderID: string, name: string) => void
+  onScopeChange?: (scope: LibraryScope) => void
 }) {
   return render(
     <Sidebar
@@ -76,7 +97,7 @@ function renderSidebar(overrides: {
       folders={[folder]}
       tags={[]}
       savedFilters={[]}
-      onScopeChange={vi.fn()}
+      onScopeChange={overrides.onScopeChange ?? vi.fn()}
       onAdd={vi.fn()}
       onOrganizeLibrary={vi.fn()}
       onMarkFeedRead={vi.fn()}

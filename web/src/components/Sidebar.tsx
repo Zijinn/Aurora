@@ -273,6 +273,14 @@ function FolderTree(props: {
   onReorderFeed: (feedID: string, targetID: string, before: boolean) => void
 }) {
   const { t } = useTranslation()
+  const [dragging, setDragging] = useState<{
+    type: "subscription" | "folder"
+    id: string
+  } | null>(null)
+  const [dropIndicator, setDropIndicator] = useState<{
+    id: string
+    position: "before" | "after" | "inside"
+  } | null>(null)
   const childrenByParent = new Map<string | null, Folder[]>()
   const subscriptionsByFolder = new Map<string | null, Subscription[]>()
   for (const folder of props.folders) {
@@ -302,6 +310,15 @@ function FolderTree(props: {
     event.preventDefault()
     event.dataTransfer.dropEffect = "move"
   }
+  const clearDragState = () => {
+    setDragging(null)
+    setDropIndicator(null)
+  }
+  const clearDropIndicator = (event: DragEvent) => {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return
+    setDropIndicator(null)
+  }
   const dropZone = (event: DragEvent) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const ratio = (event.clientY - rect.top) / rect.height
@@ -311,11 +328,17 @@ function FolderTree(props: {
   }
   const renderSubscription = (subscription: Subscription, depth: number) => {
     const active = props.scope.kind === "feed" && props.scope.id === subscription.feed_id
+    const indicator =
+      dropIndicator?.id === `subscription:${subscription.feed_id}` ? dropIndicator.position : null
     return (
       <button
-        className={
-          active ? "feed-row feed-row--active feed-row--nested" : "feed-row feed-row--nested"
-        }
+        className={[
+          "feed-row feed-row--nested",
+          active ? "feed-row--active" : "",
+          indicator ? `library-drop-target library-drop-target--${indicator}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         style={{ paddingLeft: `${9 + depth * 14}px` }}
         key={subscription.id}
         type="button"
@@ -327,11 +350,24 @@ function FolderTree(props: {
             "application/x-aurora-library",
             JSON.stringify({ type: "subscription", id: subscription.feed_id }),
           )
+          setDragging({ type: "subscription", id: subscription.feed_id })
         }}
-        onDragOver={allowDrop}
+        onDragEnd={clearDragState}
+        onDragOver={(event) => {
+          allowDrop(event)
+          if (!dragging || dragging.type !== "subscription" || dragging.id === subscription.feed_id)
+            return
+          const zone = dropZone(event)
+          setDropIndicator({
+            id: `subscription:${subscription.feed_id}`,
+            position: zone === "merge" ? "inside" : zone,
+          })
+        }}
+        onDragLeave={clearDropIndicator}
         onDrop={(event) => {
           event.preventDefault()
           event.stopPropagation()
+          clearDragState()
           const source = dragPayload(event)
           if (!source || source.type !== "subscription" || source.id === subscription.feed_id)
             return
@@ -393,9 +429,16 @@ function FolderTree(props: {
           )
           .reduce((total, subscription) => total + subscription.unread_count, 0)
         const expanded = props.openFolders[folder.id] ?? true
+        const indicator =
+          dropIndicator?.id === `folder:${folder.id}` ? dropIndicator.position : null
         return [
           <div
-            className="folder-tree-row"
+            className={[
+              "folder-tree-row",
+              indicator ? `library-drop-target library-drop-target--${indicator}` : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             key={folder.id}
             style={{ paddingLeft: `${9 + depth * 14}px` }}
             draggable
@@ -405,11 +448,26 @@ function FolderTree(props: {
                 "application/x-aurora-library",
                 JSON.stringify({ type: "folder", id: folder.id }),
               )
+              setDragging({ type: "folder", id: folder.id })
             }}
-            onDragOver={allowDrop}
+            onDragEnd={clearDragState}
+            onDragOver={(event) => {
+              allowDrop(event)
+              if (!dragging || dragging.id === folder.id) return
+              if (dragging.type === "subscription") {
+                setDropIndicator({ id: `folder:${folder.id}`, position: "inside" })
+                return
+              }
+              setDropIndicator({
+                id: `folder:${folder.id}`,
+                position: dropZone(event) === "after" ? "after" : "before",
+              })
+            }}
+            onDragLeave={clearDropIndicator}
             onDrop={(event) => {
               event.preventDefault()
               event.stopPropagation()
+              clearDragState()
               const source = dragPayload(event)
               if (!source || source.id === folder.id) return
               if (source.type === "folder") {
@@ -424,10 +482,10 @@ function FolderTree(props: {
               className={active ? "folder-row folder-row--active" : "folder-row"}
               type="button"
               aria-current={active ? "page" : undefined}
+              aria-expanded={hasChildren ? expanded : undefined}
               onClick={() => {
                 props.onScopeChange({ kind: "folder", id: folder.id, title: folder.name })
-                if (hasChildren && !(props.openFolders[folder.id] ?? true))
-                  props.onToggleFolder(folder.id)
+                if (hasChildren) props.onToggleFolder(folder.id)
               }}
             >
               <FolderOpen aria-hidden="true" weight={active ? "fill" : "regular"} />

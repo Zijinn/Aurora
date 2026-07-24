@@ -229,7 +229,7 @@ const messages: Record<Locale, Record<string, string>> = {
     saveChanges: "保存更改",
     testConnection: "测试连接",
     testingConnection: "正在测试",
-    connectionSuccessful: "连接成功，可以使用此 WebDAV 位置。",
+    connectionSuccessful: "连接成功，已验证 WebDAV 读取、写入和删除权限。",
     connectionTestFailed: "连接测试失败",
     libraryCloudSync: "资料库云同步",
     libraryCloudSyncDescription:
@@ -245,11 +245,11 @@ const messages: Record<Locale, Record<string, string>> = {
     restoreFromCloud: "从云端恢复资料库",
     cloudPushConfirmation: "用当前本地资料库覆盖此云端快照？",
     cloudPullConfirmation: "从此云端快照恢复并替换当前本地资料库？",
-    webdavSyncDescription: "使用现有 WebDAV 文件地址同步可移植的 Aurora 资料库快照。",
+    webdavSyncDescription: "使用 WebDAV 目录同步可移植的 Aurora 资料库快照。",
     nutstore: "坚果云",
     useNutstore: "使用坚果云",
     nutstoreWebDAVHint:
-      "坚果云请使用账户邮箱和“安全选项 > 第三方应用管理”生成的应用密码，不能使用登录密码。",
+      "坚果云请使用账户邮箱和“安全选项 > 第三方应用管理”生成的应用密码。Aurora 会创建并使用专用目录。",
     webdavAuthenticationFailed:
       "认证失败（HTTP 401）。坚果云需要账户邮箱和第三方应用密码，请勿填写登录密码。",
     passwordOrAppPassword: "密码 / 应用密码",
@@ -260,6 +260,8 @@ const messages: Record<Locale, Record<string, string>> = {
     icloudPath: "iCloud 文件路径",
     icloudPathPlaceholder: "留空以使用默认 Aurora 文件夹",
     icloudDefaultPathHint: "留空将使用 iCloud Drive/Aurora/aurora-library.json。",
+    icloudOtherDevicesHint:
+      "其他 Mac/Windows 登录同一 Apple ID 并启用 iCloud Drive 后，添加 iCloud 同步并选择“从云端恢复”。iPad 端需连接一台正在运行 Aurora 服务的电脑。",
     snapshotFileURL: "快照文件 URL",
     optional: "可选",
     addAIProvider: "添加 AI 提供商",
@@ -580,7 +582,8 @@ const messages: Record<Locale, Record<string, string>> = {
     saveChanges: "Save changes",
     testConnection: "Test connection",
     testingConnection: "Testing",
-    connectionSuccessful: "Connection successful. This WebDAV location is ready to use.",
+    connectionSuccessful:
+      "Connection successful. WebDAV read, write, and delete access is verified.",
     connectionTestFailed: "Connection test failed",
     libraryCloudSync: "Library cloud sync",
     libraryCloudSyncDescription:
@@ -598,11 +601,11 @@ const messages: Record<Locale, Record<string, string>> = {
     cloudPushConfirmation: "Replace this cloud snapshot with the current local library?",
     cloudPullConfirmation: "Restore this cloud snapshot and replace the current local library?",
     webdavSyncDescription:
-      "Use an existing WebDAV file URL to synchronize a portable Aurora library snapshot.",
+      "Use a WebDAV directory to synchronize a portable Aurora library snapshot.",
     nutstore: "Nutstore",
     useNutstore: "Use Nutstore",
     nutstoreWebDAVHint:
-      "For Nutstore, use your account email and an app password generated under Security > Third-party app management, not your login password.",
+      "For Nutstore, use your account email and an app password generated under Security > Third-party app management. Aurora creates and uses a dedicated directory.",
     webdavAuthenticationFailed:
       "Authentication failed (HTTP 401). Nutstore requires your account email and a third-party app password, not your login password.",
     passwordOrAppPassword: "Password / app password",
@@ -615,6 +618,8 @@ const messages: Record<Locale, Record<string, string>> = {
     icloudPath: "iCloud file path",
     icloudPathPlaceholder: "Leave blank to use the default Aurora folder",
     icloudDefaultPathHint: "Leave blank to use iCloud Drive/Aurora/aurora-library.json.",
+    icloudOtherDevicesHint:
+      'On another Mac or Windows PC, sign in to the same Apple ID, enable iCloud Drive, add iCloud sync, then choose "Restore library from cloud". iPad must connect to a computer running the Aurora server.',
     snapshotFileURL: "Snapshot file URL",
     optional: "optional",
     addAIProvider: "Add AI provider",
