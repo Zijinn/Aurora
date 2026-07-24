@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeft,
   ArrowSquareOut,
   BookmarkSimple,
+  Books,
+  Brain,
   CheckCircle,
   CircleNotch,
   ClockCountdown,
@@ -34,7 +36,12 @@ import {
 } from "react"
 
 import type { AIProfile, Entry, EntryDetail, EntryState, Tag } from "../api/types"
-import { listAIResults } from "../api/client"
+import {
+  getEntryZoteroStatus,
+  getZoteroStatus,
+  listAIResults,
+  saveEntryToZotero,
+} from "../api/client"
 import {
   applyAnnotations,
   serializeSelection,
@@ -43,7 +50,6 @@ import {
 } from "../lib/annotations"
 import { useTranslation } from "../lib/i18n"
 import { useReaderStore } from "../store/reader"
-import { AIWorkbench } from "./AIWorkbench"
 
 interface PendingSelection extends SerializedSelection {
   left: number
@@ -66,10 +72,13 @@ interface ReaderPaneProps {
   onTagsChange: (entryID: string, tagIDs: string[]) => void
   onFetchReadability: (entryID: string) => void
   onConfigureAI: () => void
+  aiOpen?: boolean
+  onToggleAI?: () => void
 }
 
 export function ReaderPane(props: ReaderPaneProps) {
   const { locale, t } = useTranslation()
+  const queryClient = useQueryClient()
   const { detail, onStateChange } = props
   const [preferReadability, setPreferReadability] = useState(true)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
@@ -93,6 +102,26 @@ export function ReaderPane(props: ReaderPaneProps) {
     queryKey: ["ai-results", entry?.id],
     queryFn: ({ signal }) => listAIResults(entry!.id, signal),
     enabled: Boolean(entry && alwaysTranslateContent && props.aiProfiles.length > 0),
+  })
+  const zoteroStatus = useQuery({
+    queryKey: ["zotero-status"],
+    queryFn: ({ signal }) => getZoteroStatus(signal),
+    staleTime: 15_000,
+  })
+  const entryZotero = useQuery({
+    queryKey: ["entry-zotero", entry?.id],
+    queryFn: ({ signal }) => getEntryZoteroStatus(entry!.id, signal),
+    enabled: Boolean(entry),
+  })
+  const zoteroMutation = useMutation({
+    mutationFn: (entryID: string) => saveEntryToZotero(entryID),
+    onSuccess: (result) => {
+      queryClient.setQueryData(["entry-zotero", result.export.entry_id], {
+        saved: true,
+        export: result.export,
+      })
+      queryClient.setQueryData(["zotero-status"], result.target)
+    },
   })
   const translatedContent = aiResults.data?.items.find(
     (result) => result.operation === "translation" && result.language === translationLanguage,
@@ -240,12 +269,16 @@ export function ReaderPane(props: ReaderPaneProps) {
           <ArrowLeft />
         </button>
         <div className="reader-toolbar__spacer" />
-        <AIWorkbench
-          key={entry.id}
-          entryID={entry.id}
-          profiles={props.aiProfiles}
-          onConfigure={props.onConfigureAI}
-        />
+        <button
+          className={props.aiOpen ? "icon-button icon-button--active" : "icon-button"}
+          type="button"
+          aria-label={t("aiAssistant")}
+          title={t("aiAssistant")}
+          aria-expanded={props.aiOpen}
+          onClick={props.onToggleAI}
+        >
+          <Brain />
+        </button>
         <button
           className={appearanceOpen ? "icon-button icon-button--active" : "icon-button"}
           type="button"
@@ -358,6 +391,28 @@ export function ReaderPane(props: ReaderPaneProps) {
         >
           <CheckCircle weight={entry.state.is_read ? "fill" : "regular"} />
         </button>
+        <button
+          className={entryZotero.data?.saved ? "icon-button icon-button--active" : "icon-button"}
+          type="button"
+          aria-label={entryZotero.data?.saved ? t("savedToZotero") : t("saveToZotero")}
+          title={
+            entryZotero.data?.saved
+              ? t("savedToZotero")
+              : zoteroStatus.data?.available
+                ? `${t("saveToZotero")} · ${zoteroStatus.data.collection_name || zoteroStatus.data.library_name || "Zotero"}`
+                : t("zoteroUnavailable")
+          }
+          disabled={zoteroMutation.isPending || entryZotero.data?.saved}
+          onClick={() => zoteroMutation.mutate(entry.id)}
+        >
+          {zoteroMutation.isPending ? (
+            <CircleNotch className="spin" />
+          ) : entryZotero.data?.saved ? (
+            <CheckCircle weight="fill" />
+          ) : (
+            <Books />
+          )}
+        </button>
         {entry.canonical_url && (
           <a
             className="icon-button"
@@ -371,6 +426,11 @@ export function ReaderPane(props: ReaderPaneProps) {
           </a>
         )}
       </div>
+      {zoteroMutation.error && (
+        <div className="reader-toast reader-toast--error" role="alert">
+          {zoteroMutation.error.message}
+        </div>
+      )}
       {appearanceOpen && (
         <aside className="reader-inspector" aria-label={t("readerAppearance")}>
           <header className="reader-inspector__header">

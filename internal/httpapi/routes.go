@@ -73,7 +73,11 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/entries/{entryID}/ai-results", s.listAIResults)
 	mux.HandleFunc("POST /api/v1/entries/{entryID}/ai/{operation}", s.runAIOperation)
 	mux.HandleFunc("POST /api/v1/entries/{entryID}/ai-chat", s.startAIChat)
+	mux.HandleFunc("POST /api/v1/ai/library-chat", s.startAILibraryChat)
 	mux.HandleFunc("GET /api/v1/ai/chats/{sessionID}", s.getAIChat)
+	mux.HandleFunc("GET /api/v1/integrations/zotero/status", s.getZoteroStatus)
+	mux.HandleFunc("GET /api/v1/entries/{entryID}/zotero", s.getEntryZoteroStatus)
+	mux.HandleFunc("POST /api/v1/entries/{entryID}/zotero", s.saveEntryToZotero)
 }
 
 func (s *Server) listFeeds(w http.ResponseWriter, r *http.Request) {

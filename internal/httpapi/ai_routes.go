@@ -215,6 +215,33 @@ func (s *Server) startAIChat(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"job": queued, "session": session})
 }
 
+func (s *Server) startAILibraryChat(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAI(w, r) {
+		return
+	}
+	var request struct {
+		ProfileID string   `json:"profile_id"`
+		SessionID string   `json:"session_id"`
+		Message   string   `json:"message"`
+		EntryIDs  []string `json:"entry_ids"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		return
+	}
+	session, payload, err := s.ai.PrepareLibraryChat(r.Context(), request.EntryIDs, request.ProfileID, request.SessionID, request.Message)
+	if err != nil {
+		s.aiRequestError(w, r, err)
+		return
+	}
+	queued, err := s.jobs.Enqueue(r.Context(), "ai.chat", payload)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"job": queued, "session": session})
+}
+
 func (s *Server) getAIChat(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAI(w, r) {
 		return

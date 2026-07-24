@@ -76,7 +76,7 @@ func ListEntries(ctx context.Context, db *sql.DB, filter domain.EntryFilter) (do
 		SELECT e.id, e.feed_id, COALESCE(s.title_override, f.title), e.guid,
 			e.canonical_url, e.title, e.author, e.summary, e.published_at,
 			e.discovered_at, e.content_hash, e.lead_image_url, e.audio_url,
-			e.video_url, e.language,
+			e.video_url, e.language, e.doi,
 			(SELECT ar.result_text FROM ai_results ar
 				WHERE ar.profile_id = s.profile_id AND ar.entry_id = e.id
 					AND ar.operation = 'title_translation' AND ar.language = ?
@@ -252,7 +252,7 @@ func GetEntry(ctx context.Context, db *sql.DB, profileID, entryID string, reques
 		SELECT e.id, e.feed_id, COALESCE(s.title_override, f.title), e.guid,
 			e.canonical_url, e.title, e.author, e.summary, e.published_at,
 			e.discovered_at, e.content_hash, e.lead_image_url, e.audio_url,
-			e.video_url, e.language,
+			e.video_url, e.language, e.doi,
 			(SELECT ar.result_text FROM ai_results ar
 				WHERE ar.profile_id = s.profile_id AND ar.entry_id = e.id
 					AND ar.operation = 'title_translation' AND ar.language = ?
@@ -366,19 +366,20 @@ func getEntryState(ctx context.Context, tx *sql.Tx, profileID, entryID string) (
 
 func scanEntry(row scanner) (domain.Entry, error) {
 	var entry domain.Entry
-	var guid, canonicalURL, author, summary, leadImage, audio, video, language, translatedTitle, aiSummary, tagIDs sql.NullString
+	var guid, canonicalURL, author, summary, leadImage, audio, video, language, doi, translatedTitle, aiSummary, tagIDs sql.NullString
 	var publishedAt, discoveredAt, stateUpdatedAt string
 	var isRead, isStarred, isReadLater int
 	if err := row.Scan(
 		&entry.ID, &entry.FeedID, &entry.FeedTitle, &guid,
 		&canonicalURL, &entry.Title, &author, &summary, &publishedAt,
-		&discoveredAt, &entry.ContentHash, &leadImage, &audio, &video, &language, &translatedTitle, &aiSummary,
+		&discoveredAt, &entry.ContentHash, &leadImage, &audio, &video, &language, &doi, &translatedTitle, &aiSummary,
 		&isRead, &isStarred, &isReadLater, &stateUpdatedAt, &tagIDs,
 	); err != nil {
 		return domain.Entry{}, fmt.Errorf("scan entry: %w", err)
 	}
 	populateEntry(&entry, guid, canonicalURL, author, summary, leadImage, audio, video, language, publishedAt, discoveredAt, isRead, isStarred, isReadLater, stateUpdatedAt)
 	entry.AITranslatedTitle = stringPointer(translatedTitle)
+	entry.DOI = stringPointer(doi)
 	entry.AISummary = stringPointer(aiSummary)
 	entry.TagIDs = splitTagIDs(tagIDs)
 	return entry, nil
@@ -386,14 +387,14 @@ func scanEntry(row scanner) (domain.Entry, error) {
 
 func scanEntryDetail(row scanner) (domain.Entry, error) {
 	var entry domain.Entry
-	var guid, canonicalURL, author, summary, leadImage, audio, video, language, translatedTitle, aiSummary, tagIDs sql.NullString
+	var guid, canonicalURL, author, summary, leadImage, audio, video, language, doi, translatedTitle, aiSummary, tagIDs sql.NullString
 	var publishedAt, discoveredAt, stateUpdatedAt string
 	var isRead, isStarred, isReadLater int
 	var readability sql.NullString
 	if err := row.Scan(
 		&entry.ID, &entry.FeedID, &entry.FeedTitle, &guid,
 		&canonicalURL, &entry.Title, &author, &summary, &publishedAt,
-		&discoveredAt, &entry.ContentHash, &leadImage, &audio, &video, &language, &translatedTitle, &aiSummary,
+		&discoveredAt, &entry.ContentHash, &leadImage, &audio, &video, &language, &doi, &translatedTitle, &aiSummary,
 		&isRead, &isStarred, &isReadLater, &stateUpdatedAt,
 		&entry.SanitizedHTML, &readability, &tagIDs,
 	); err != nil {
@@ -401,6 +402,7 @@ func scanEntryDetail(row scanner) (domain.Entry, error) {
 	}
 	populateEntry(&entry, guid, canonicalURL, author, summary, leadImage, audio, video, language, publishedAt, discoveredAt, isRead, isStarred, isReadLater, stateUpdatedAt)
 	entry.AITranslatedTitle = stringPointer(translatedTitle)
+	entry.DOI = stringPointer(doi)
 	entry.AISummary = stringPointer(aiSummary)
 	entry.ReadabilityHTML = stringPointer(readability)
 	entry.TagIDs = splitTagIDs(tagIDs)

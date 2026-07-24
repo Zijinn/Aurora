@@ -148,6 +148,56 @@ it("adjusts reading typography from the right-side inspector", () => {
   })
 })
 
+it("writes to Zotero only after the save button is clicked", async () => {
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
+    if (url.includes("/integrations/zotero/status")) {
+      return Promise.resolve(
+        jsonResponse({
+          available: true,
+          editable: true,
+          library_id: "1",
+          library_name: "My Library",
+          collection_id: "227",
+          collection_name: "Research",
+        }),
+      )
+    }
+    if (url.includes("/entries/entry-1/zotero") && init?.method === "POST") {
+      return Promise.resolve(
+        jsonResponse({
+          saved: true,
+          duplicate: false,
+          target: { available: true, editable: true },
+          export: {
+            entry_id: "entry-1",
+            metadata_fingerprint: "hash",
+            exported_at: "2026-07-24T00:00:00Z",
+            updated_at: "2026-07-24T00:00:00Z",
+          },
+        }),
+      )
+    }
+    if (url.includes("/entries/entry-1/zotero")) {
+      return Promise.resolve(jsonResponse({ saved: false }))
+    }
+    return Promise.resolve(jsonResponse({ items: [] }))
+  })
+
+  renderReader()
+  await screen.findByRole("button", { name: "Save to Zotero" })
+  expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false)
+
+  fireEvent.click(screen.getByRole("button", { name: "Save to Zotero" }))
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true),
+  )
+  expect(await screen.findByRole("button", { name: "Saved to Zotero" })).toBeDisabled()
+
+  fetchMock.mockRestore()
+})
+
 it("restores saved highlights and notes for the current article", async () => {
   useReaderStore.setState({
     locale: "en-US",
@@ -233,4 +283,11 @@ function renderReader() {
       />
     </QueryClientProvider>,
   )
+}
+
+function jsonResponse(value: unknown, status = 200) {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
 }

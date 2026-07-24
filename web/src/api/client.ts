@@ -25,6 +25,9 @@ import type {
   SavedFilter,
   Tag,
   ViewMode,
+  ZoteroSaveResult,
+  ZoteroStatus,
+  EntryZoteroStatus,
 } from "./types"
 import { entryDetailCacheKey, entryPageCacheKey, readCache, writeCache } from "../offline/database"
 
@@ -277,6 +280,42 @@ export function startAIChat(
       body: JSON.stringify({ profile_id: profileID, session_id: sessionID, message }),
     },
   )
+}
+
+export function startAILibraryChat(
+  entryIDs: string[],
+  profileID: string,
+  sessionID: string | undefined,
+  message: string,
+): Promise<{ job: Job; session: AIChatSession }> {
+  return request<{ job: Job; session: AIChatSession }>("/api/v1/ai/library-chat", {
+    method: "POST",
+    body: JSON.stringify({
+      entry_ids: entryIDs,
+      profile_id: profileID,
+      session_id: sessionID,
+      message,
+    }),
+  })
+}
+
+export function getZoteroStatus(signal?: AbortSignal): Promise<ZoteroStatus> {
+  return request<ZoteroStatus>("/api/v1/integrations/zotero/status", { signal })
+}
+
+export function getEntryZoteroStatus(
+  entryID: string,
+  signal?: AbortSignal,
+): Promise<EntryZoteroStatus> {
+  return request<EntryZoteroStatus>(`/api/v1/entries/${encodeURIComponent(entryID)}/zotero`, {
+    signal,
+  })
+}
+
+export function saveEntryToZotero(entryID: string): Promise<ZoteroSaveResult> {
+  return request<ZoteroSaveResult>(`/api/v1/entries/${encodeURIComponent(entryID)}/zotero`, {
+    method: "POST",
+  })
 }
 
 export function getAIChat(sessionID: string, signal?: AbortSignal): Promise<AIChatSession> {

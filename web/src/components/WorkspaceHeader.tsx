@@ -1,4 +1,14 @@
-import { GearSix, MagnifyingGlass, Minus, Moon, Plus, Square, Sun, X } from "@phosphor-icons/react"
+import {
+  Brain,
+  GearSix,
+  MagnifyingGlass,
+  Minus,
+  Moon,
+  Plus,
+  Square,
+  Sun,
+  X,
+} from "@phosphor-icons/react"
 import { useEffect, useState } from "react"
 
 import type { LibraryScope } from "../api/types"
@@ -15,12 +25,16 @@ interface WorkspaceHeaderProps {
   onThemeChange: (theme: ThemeMode) => void
   onPreferences: () => void
   onAdd: () => void
+  aiOpen: boolean
+  onAI: () => void
 }
 
 export function WorkspaceHeader(props: WorkspaceHeaderProps) {
   const { locale, t } = useTranslation()
   const platform = desktopPlatform()
-  const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false)
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
+  )
   const dark = props.theme === "dark" || (props.theme === "system" && systemDark)
 
   useEffect(() => {
@@ -52,6 +66,16 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
       </label>
       <div className="workspace-actions">
         <button
+          className={props.aiOpen ? "icon-button icon-button--active" : "icon-button"}
+          type="button"
+          aria-label={t("aiAssistant")}
+          title={t("aiAssistant")}
+          aria-expanded={props.aiOpen}
+          onClick={props.onAI}
+        >
+          <Brain />
+        </button>
+        <button
           className="icon-button"
           type="button"
           aria-label={dark ? t("switchToLight") : t("switchToDark")}
@@ -60,10 +84,22 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
         >
           {dark ? <Sun /> : <Moon />}
         </button>
-        <button className="icon-button" type="button" aria-label={t("preferences")} title={t("preferences")} onClick={props.onPreferences}>
+        <button
+          className="icon-button"
+          type="button"
+          aria-label={t("preferences")}
+          title={t("preferences")}
+          onClick={props.onPreferences}
+        >
           <GearSix />
         </button>
-        <button className="button button--primary workspace-add" type="button" aria-label={t("addFeed")} title={t("addFeed")} onClick={props.onAdd}>
+        <button
+          className="button button--primary workspace-add"
+          type="button"
+          aria-label={t("addFeed")}
+          title={t("addFeed")}
+          onClick={props.onAdd}
+        >
           <Plus />
           <span>{t("addFeed")}</span>
         </button>

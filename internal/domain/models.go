@@ -75,6 +75,7 @@ type Entry struct {
 	AudioURL          *string    `json:"audio_url,omitempty"`
 	VideoURL          *string    `json:"video_url,omitempty"`
 	Language          *string    `json:"language,omitempty"`
+	DOI               *string    `json:"doi,omitempty"`
 	AITranslatedTitle *string    `json:"ai_translated_title,omitempty"`
 	AISummary         *string    `json:"ai_summary,omitempty"`
 	TagIDs            []string   `json:"tag_ids"`
@@ -142,6 +143,7 @@ type ParsedEntry struct {
 	AudioURL      *string
 	VideoURL      *string
 	Language      *string
+	DOI           *string
 }
 
 type FeedCandidate struct {

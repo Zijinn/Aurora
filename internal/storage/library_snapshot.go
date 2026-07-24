@@ -149,6 +149,8 @@ func RestoreLibrarySnapshot(ctx context.Context, db *sql.DB, document BackupDocu
 			AND NOT EXISTS (SELECT 1 FROM entries e WHERE e.id = sync_mappings.local_id);
 		DELETE FROM sync_mappings WHERE local_kind = 'feed'
 			AND NOT EXISTS (SELECT 1 FROM feeds f WHERE f.id = sync_mappings.local_id);
+		DELETE FROM zotero_exports
+		WHERE NOT EXISTS (SELECT 1 FROM entries e WHERE e.id = zotero_exports.entry_id);
 	`); err != nil {
 		return fmt.Errorf("clean local snapshot references: %w", err)
 	}

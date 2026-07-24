@@ -79,6 +79,7 @@ import { MobileNav } from "./MobileNav"
 import { MobileLibraryDialog } from "./MobileLibraryDialog"
 import { PaneDivider } from "./PaneDivider"
 import { WorkspaceHeader } from "./WorkspaceHeader"
+import { AIWorkbench } from "./AIWorkbench"
 
 const AddFeedDialog = lazy(() =>
   import("./AddFeedDialog").then((module) => ({ default: module.AddFeedDialog })),
@@ -133,6 +134,8 @@ export function AppShell() {
   const setTheme = useReaderStore((state) => state.setTheme)
   const paneLayout = useReaderStore((state) => state.paneLayout)
   const setPaneLayout = useReaderStore((state) => state.setPaneLayout)
+  const aiPanelWidth = useReaderStore((state) => state.aiPanelWidth)
+  const setAIPanelWidth = useReaderStore((state) => state.setAIPanelWidth)
   const alwaysTranslateTitles = useReaderStore((state) => state.alwaysTranslateTitles)
   const alwaysTranslateContent = useReaderStore((state) => state.alwaysTranslateContent)
   const autoAcademicTags = useReaderStore((state) => state.autoAcademicTags)
@@ -151,6 +154,7 @@ export function AppShell() {
   const [organizationMode, setOrganizationMode] = useState<"all" | "folders">("all")
   const [dialogReturnTarget, setDialogReturnTarget] = useState<"preferences" | null>(null)
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false)
+  const [aiOpen, setAIOpen] = useState(false)
   const [importJobID, setImportJobID] = useState<string | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const online = useOnlineState()
@@ -253,6 +257,7 @@ export function AppShell() {
   const shellStyle = {
     "--sidebar-width": `${constrainedPaneLayout.sidebarWidth}px`,
     "--timeline-width": `${constrainedPaneLayout.timelineWidth}px`,
+    "--ai-panel-width": `${aiPanelWidth}px`,
   } as CSSProperties
 
   const status = useQuery({
@@ -933,8 +938,10 @@ export function AppShell() {
             onThemeChange={setTheme}
             onPreferences={() => setPreferencesOpen(true)}
             onAdd={() => setAddOpen(true)}
+            aiOpen={aiOpen}
+            onAI={() => setAIOpen((open) => !open)}
           />
-          <div className="workspace-body">
+          <div className={aiOpen ? "workspace-body workspace-body--ai-open" : "workspace-body"}>
             <TimelinePane
               scope={scope}
               entries={entries}
@@ -979,8 +986,25 @@ export function AppShell() {
                   onTagsChange={(entryID, tagIDs) => tagMutation.mutate({ entryID, tagIDs })}
                   onFetchReadability={(entryID) => readabilityMutation.mutate(entryID)}
                   onConfigureAI={() => setAIProfileOpen(true)}
+                  aiOpen={aiOpen}
+                  onToggleAI={() => setAIOpen((open) => !open)}
                 />
               </Suspense>
+            )}
+            {aiOpen && (
+              <AIWorkbench
+                key={selectedEntryID ?? `library-${scope.kind}-${"id" in scope ? scope.id : "all"}`}
+                entryID={selectedEntryID ?? undefined}
+                entryIDs={
+                  selectedEntryID ? undefined : entries.slice(0, 20).map((entry) => entry.id)
+                }
+                profiles={aiProfiles.data?.items ?? []}
+                width={aiPanelWidth}
+                contextLabel={selectedEntryID ? t("privateToArticle") : t("currentLibraryContext")}
+                onWidthChange={setAIPanelWidth}
+                onClose={() => setAIOpen(false)}
+                onConfigure={() => setAIProfileOpen(true)}
+              />
             )}
           </div>
         </section>

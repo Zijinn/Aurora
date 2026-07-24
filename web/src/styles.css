@@ -3353,6 +3353,171 @@ button:disabled {
   }
 }
 
+/* Shared AI assistant: a real workspace column on wide screens, a full-height sheet on small ones. */
+.workspace-body--ai-open {
+  grid-template-columns: minmax(0, 1fr) var(--ai-panel-width);
+}
+.app-shell--reader-open .workspace-body--ai-open {
+  grid-template-columns: var(--timeline-width) minmax(360px, 1fr) var(--ai-panel-width);
+}
+.ai-workbench,
+.ai-workbench.ai-workbench--open {
+  position: relative;
+  z-index: 20;
+  display: block;
+  width: var(--ai-panel-width);
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow: visible;
+  background: var(--surface);
+  border: 0;
+  border-left: 1px solid var(--border-strong);
+}
+.ai-workbench__body {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  width: 100%;
+  height: 100%;
+  padding: 0 20px 24px;
+  overflow: auto;
+  background: var(--surface);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.ai-workbench__resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  z-index: 3;
+  width: 10px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: col-resize;
+  touch-action: none;
+}
+.ai-workbench__resize::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  content: "";
+  background: var(--border-strong);
+  transition:
+    width 120ms ease,
+    background 120ms ease;
+}
+.ai-workbench__resize:hover::after,
+.ai-workbench__resize:focus-visible::after {
+  width: 2px;
+  background: var(--accent);
+}
+.ai-workbench__header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+.ai-chat {
+  display: flex;
+  min-height: 340px;
+  flex-direction: column;
+}
+.ai-chat__messages {
+  flex: 1;
+}
+.ai-chat__suggestions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 14px;
+}
+.ai-chat__suggestions button {
+  min-height: 42px;
+  padding: 8px 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: left;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.ai-chat__suggestions button:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+}
+.reader-toast {
+  position: absolute;
+  top: 58px;
+  right: 14px;
+  z-index: 8;
+  max-width: min(360px, calc(100% - 28px));
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 11px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: var(--shadow-panel);
+}
+.reader-toast--error {
+  color: var(--danger);
+}
+
+@media (min-width: 901px) and (max-width: 1365px) {
+  .workspace-body {
+    position: relative;
+  }
+  .workspace-body--ai-open,
+  .workspace-body--ai-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell--reader-open .workspace-body--ai-open {
+    grid-template-columns: var(--timeline-width) minmax(360px, 1fr);
+  }
+  .ai-workbench,
+  .ai-workbench.ai-workbench--open {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    height: auto;
+    box-shadow: -18px 0 48px rgb(20 22 26 / 0.12);
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace-body--ai-open,
+  .app-shell--reader-open .workspace-body--ai-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ai-workbench,
+  .ai-workbench.ai-workbench--open {
+    position: fixed;
+    inset: 54px 0 calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    z-index: 82;
+    width: 100% !important;
+    height: auto;
+    border-left: 0;
+  }
+  .app-shell--reader-open .ai-workbench,
+  .app-shell--reader-open .ai-workbench.ai-workbench--open {
+    inset: 0;
+  }
+  .ai-workbench__resize {
+    display: none;
+  }
+  .ai-workbench__body {
+    padding-right: max(18px, env(safe-area-inset-right));
+    padding-left: max(18px, env(safe-area-inset-left));
+  }
+}
+
 /* Refined source list and full-width reading canvas. */
 .sidebar {
   padding: max(14px, env(safe-area-inset-top)) 12px 14px max(12px, env(safe-area-inset-left));

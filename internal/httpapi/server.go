@@ -33,6 +33,7 @@ type Server struct {
 	feeds    *service.FeedService
 	syncs    *service.SyncService
 	ai       *service.AIService
+	zotero   *service.ZoteroService
 	jobs     *job.Manager
 	events   *event.Hub
 	security SecurityConfig
@@ -47,7 +48,10 @@ func NewWithFetcher(db *sql.DB, logger *slog.Logger, webDir string, fetcher *fee
 	hub := event.NewHub()
 	feedService := service.NewFeedService(db, fetcher)
 	manager := job.NewManager(db, hub, logger, 4)
-	s := &Server{db: db, logger: logger, webDir: webDir, feeds: feedService, jobs: manager, events: hub}
+	s := &Server{
+		db: db, logger: logger, webDir: webDir, feeds: feedService,
+		zotero: service.NewZoteroService(db, fetcher), jobs: manager, events: hub,
+	}
 	manager.Register("feed.refresh", func(ctx context.Context, current domain.Job, progress job.ProgressFunc) error {
 		var payload struct {
 			FeedID string `json:"feed_id"`
@@ -220,6 +224,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	if s.ai != nil {
 		capabilities = append(capabilities, "ai")
 	}
+	capabilities = append(capabilities, "zotero_connector")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":               state,
 		"version":              version.Version,

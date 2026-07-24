@@ -131,6 +131,7 @@ func normalizeItem(parser *Parser, item *gofeed.Item, baseURL string, fallbackTi
 		identityPublishedAt = &publishedAt
 	}
 	identityHash := ComputeIdentityHash(title, author, identityPublishedAt, plainText)
+	doi := feedItemDOI(item)
 
 	return domain.ParsedEntry{
 		GUID:          stringValuePointer(strings.TrimSpace(item.GUID)),
@@ -147,7 +148,47 @@ func normalizeItem(parser *Parser, item *gofeed.Item, baseURL string, fallbackTi
 		LeadImageURL:  leadImage,
 		AudioURL:      audioURL,
 		VideoURL:      videoURL,
+		DOI:           stringValuePointer(doi),
 	}
+}
+
+func feedItemDOI(item *gofeed.Item) string {
+	candidates := make([]string, 0, 6)
+	if item.DublinCoreExt != nil {
+		candidates = append(candidates, item.DublinCoreExt.Identifier...)
+	}
+	for namespace, fields := range item.Extensions {
+		for name, values := range fields {
+			qualified := strings.ToLower(namespace + "." + name)
+			if name != "doi" && qualified != "dc.identifier" && qualified != "prism.doi" {
+				continue
+			}
+			for _, value := range values {
+				candidates = append(candidates, value.Value)
+			}
+		}
+	}
+	for _, candidate := range candidates {
+		if doi := normalizeFeedDOI(candidate); doi != "" {
+			return doi
+		}
+	}
+	return ""
+}
+
+func normalizeFeedDOI(value string) string {
+	value = strings.TrimSpace(value)
+	lower := strings.ToLower(value)
+	for _, prefix := range []string{"https://doi.org/", "http://doi.org/", "doi:"} {
+		if index := strings.Index(lower, prefix); index >= 0 {
+			value = value[index+len(prefix):]
+			lower = strings.ToLower(value)
+		}
+	}
+	if !strings.HasPrefix(lower, "10.") || !strings.Contains(value, "/") {
+		return ""
+	}
+	return strings.ToLower(strings.TrimRight(value, ".,;:)]}"))
 }
 
 func ComputeIdentityHash(title, author string, publishedAt *time.Time, plainText string) string {

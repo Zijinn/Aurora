@@ -49,6 +49,7 @@ interface ReaderStore {
   locale: Locale
   theme: ThemeMode
   paneLayout: PaneLayout
+  aiPanelWidth: number
   openFolders: Record<string, boolean>
   readerAppearance: ReaderAppearance
   annotations: ReaderAnnotation[]
@@ -66,6 +67,7 @@ interface ReaderStore {
   setLocale: (locale: Locale) => void
   setTheme: (theme: ThemeMode) => void
   setPaneLayout: (paneLayout: PaneLayout) => void
+  setAIPanelWidth: (width: number) => void
   toggleFolder: (folderID: string) => void
   setReaderAppearance: (appearance: Partial<ReaderAppearance>) => void
   addAnnotation: (annotation: ReaderAnnotation) => void
@@ -91,6 +93,7 @@ export const useReaderStore = create<ReaderStore>()(
       locale: "zh-CN",
       theme: "system",
       paneLayout: defaultPaneLayout,
+      aiPanelWidth: 380,
       openFolders: {},
       readerAppearance: defaultReaderAppearance,
       annotations: [],
@@ -120,6 +123,7 @@ export const useReaderStore = create<ReaderStore>()(
       setLocale: (locale) => set({ locale }),
       setTheme: (theme) => set({ theme }),
       setPaneLayout: (paneLayout) => set({ paneLayout }),
+      setAIPanelWidth: (aiPanelWidth) => set({ aiPanelWidth }),
       toggleFolder: (folderID) =>
         set((state) => ({
           openFolders: { ...state.openFolders, [folderID]: !(state.openFolders[folderID] ?? true) },
@@ -151,6 +155,7 @@ export const useReaderStore = create<ReaderStore>()(
         locale: state.locale,
         theme: state.theme,
         paneLayout: state.paneLayout,
+        aiPanelWidth: state.aiPanelWidth,
         openFolders: state.openFolders,
         readerAppearance: state.readerAppearance,
         annotations: state.annotations,

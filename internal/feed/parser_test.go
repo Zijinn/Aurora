@@ -58,6 +58,23 @@ func TestParserSanitizesActiveContentAndResolvesImages(t *testing.T) {
 	}
 }
 
+func TestParserPreservesDOIExtensions(t *testing.T) {
+	body := []byte(`<?xml version="1.0"?><rss version="2.0"
+		xmlns:dc="http://purl.org/dc/elements/1.1/"
+		xmlns:prism="http://prismstandard.org/namespaces/basic/2.0/">
+		<channel><title>DOI feed</title><link>https://example.com</link><description>Test</description>
+		<item><guid>one</guid><title>DC DOI</title><dc:identifier>doi:10.1234/DC.2026.1</dc:identifier></item>
+		<item><guid>two</guid><title>PRISM DOI</title><prism:doi>10.5678/Prism.2</prism:doi></item>
+		</channel></rss>`)
+	parsed, err := NewParser().Parse(body, "https://example.com/feed.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.Entries) != 2 || parsed.Entries[0].DOI == nil || *parsed.Entries[0].DOI != "10.1234/dc.2026.1" || parsed.Entries[1].DOI == nil || *parsed.Entries[1].DOI != "10.5678/prism.2" {
+		t.Fatalf("DOI extensions were not preserved: %+v", parsed.Entries)
+	}
+}
+
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join("testdata", name))

@@ -120,6 +120,41 @@ export interface AIChatSession {
   updated_at: string
 }
 
+export interface ZoteroStatus {
+  available: boolean
+  editable: boolean
+  library_id?: string
+  library_name?: string
+  collection_id?: string
+  collection_name?: string
+  error_message?: string
+}
+
+export interface ZoteroExport {
+  entry_id: string
+  zotero_item_key?: string
+  library_id?: string
+  library_name?: string
+  collection_id?: string
+  collection_name?: string
+  metadata_fingerprint: string
+  exported_at: string
+  updated_at: string
+}
+
+export interface EntryZoteroStatus {
+  saved: boolean
+  export?: ZoteroExport
+}
+
+export interface ZoteroSaveResult {
+  saved: boolean
+  duplicate: boolean
+  doi?: string
+  target: ZoteroStatus
+  export: ZoteroExport
+}
+
 export type ViewMode = "compact" | "standard" | "card" | "magazine" | "image"
 
 export interface Feed {
@@ -217,6 +252,7 @@ export interface Entry {
   audio_url?: string | null
   video_url?: string | null
   language?: string | null
+  doi?: string | null
   ai_translated_title?: string | null
   ai_summary?: string | null
   tag_ids: string[]

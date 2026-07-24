@@ -1059,6 +1059,89 @@ paths:
                     $ref: "#/components/schemas/AIChatSession"
         "428":
           $ref: "#/components/responses/Problem"
+  /api/v1/ai/library-chat:
+    post:
+      operationId: startAILibraryChat
+      tags: [ai, jobs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entry_ids, message]
+              properties:
+                entry_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: string
+                    format: uuid
+                profile_id:
+                  type: string
+                  format: uuid
+                session_id:
+                  type: string
+                  format: uuid
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 4000
+      responses:
+        "202":
+          description: Current-library chat job accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job, session]
+                properties:
+                  job:
+                    $ref: "#/components/schemas/Job"
+                  session:
+                    $ref: "#/components/schemas/AIChatSession"
+        "428":
+          $ref: "#/components/responses/Problem"
+  /api/v1/integrations/zotero/status:
+    get:
+      operationId: getZoteroStatus
+      tags: [integrations]
+      responses:
+        "200":
+          description: Zotero Desktop availability and currently selected target.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [available, editable]
+                properties:
+                  available: { type: boolean }
+                  editable: { type: boolean }
+                  library_id: { type: string }
+                  library_name: { type: string }
+                  collection_id: { type: string }
+                  collection_name: { type: string }
+                  error_message: { type: string }
+  /api/v1/entries/{entryId}/zotero:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+    get:
+      operationId: getEntryZoteroStatus
+      tags: [entries, integrations]
+      responses:
+        "200":
+          description: Whether this Aurora entry has been mapped to Zotero.
+    post:
+      operationId: saveEntryToZotero
+      tags: [entries, integrations]
+      responses:
+        "200":
+          description: Entry imported or matched to an existing Zotero item.
+        "409":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
   /api/v1/ai/chats/{sessionId}:
     parameters:
       - name: sessionId
@@ -1198,6 +1281,8 @@ components:
         canonical_url:
           type: [string, "null"]
           format: uri
+        doi:
+          type: [string, "null"]
         site_url:
           type: [string, "null"]
           format: uri

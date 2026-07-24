@@ -55,6 +55,8 @@ type AIProfilePatch struct {
 type AIEntryContent struct {
 	EntryID      string
 	Title        string
+	FeedTitle    string
+	PublishedAt  string
 	CanonicalURL string
 	Content      string
 }
@@ -263,12 +265,13 @@ func MarkAIProfileFailure(ctx context.Context, db *sql.DB, aiProfileID, code, me
 func GetAIEntryContent(ctx context.Context, db *sql.DB, profileID, entryID string) (AIEntryContent, error) {
 	var item AIEntryContent
 	var canonicalURL sql.NullString
-	err := db.QueryRowContext(ctx, `SELECT e.id, e.title, e.canonical_url,
-		COALESCE(NULLIF(ec.readability_text, ''), NULLIF(ec.plain_text, ''), NULLIF(e.summary, ''), e.title)
-		FROM entries e
-		JOIN subscriptions s ON s.feed_id = e.feed_id AND s.profile_id = ?
-		LEFT JOIN entry_contents ec ON ec.entry_id = e.id WHERE e.id = ?`, profileID, entryID,
-	).Scan(&item.EntryID, &item.Title, &canonicalURL, &item.Content)
+	err := db.QueryRowContext(ctx, `SELECT e.id, e.title, COALESCE(s.title_override, f.title), e.published_at, e.canonical_url,
+			COALESCE(NULLIF(ec.readability_text, ''), NULLIF(ec.plain_text, ''), NULLIF(e.summary, ''), e.title)
+			FROM entries e
+			JOIN feeds f ON f.id = e.feed_id
+			JOIN subscriptions s ON s.feed_id = e.feed_id AND s.profile_id = ?
+			LEFT JOIN entry_contents ec ON ec.entry_id = e.id WHERE e.id = ?`, profileID, entryID,
+	).Scan(&item.EntryID, &item.Title, &item.FeedTitle, &item.PublishedAt, &canonicalURL, &item.Content)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AIEntryContent{}, ErrNotFound
 	}
@@ -363,7 +366,7 @@ func CreateAIChatSession(ctx context.Context, db *sql.DB, profileID, aiProfileID
 	now := time.Now().UTC()
 	_, err := db.ExecContext(ctx, `INSERT INTO ai_chat_sessions
 		(id, profile_id, ai_profile_id, entry_id, title, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`, id, profileID, aiProfileID, entryID, title, formatTime(now), formatTime(now))
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, id, profileID, aiProfileID, nullableStringValue(entryID), title, formatTime(now), formatTime(now))
 	if err != nil {
 		return domain.AIChatSession{}, fmt.Errorf("create AI chat: %w", err)
 	}
@@ -460,7 +463,7 @@ func SaveAIChatAssistantAndUsage(ctx context.Context, db *sql.DB, profileID, aiP
 		id, profile_id, ai_profile_id, entry_id, job_id, operation, provider, model,
 		input_tokens, output_tokens, total_tokens, created_at
 	) VALUES (?, ?, ?, ?, ?, 'chat', ?, ?, ?, ?, ?, ?)`, uuid.NewString(), profileID,
-		aiProfileID, entryID, jobID, provider, model, usage.InputTokens, usage.OutputTokens,
+		aiProfileID, nullableStringValue(entryID), jobID, provider, model, usage.InputTokens, usage.OutputTokens,
 		usage.TotalTokens, formatTime(now))
 	if err != nil {
 		return domain.AIChatMessage{}, err

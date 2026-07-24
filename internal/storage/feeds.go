@@ -446,12 +446,12 @@ func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, en
 				INSERT INTO entries (
 					id, feed_id, guid, canonical_url, title, author, summary,
 					published_at, discovered_at, content_hash, identity_hash, lead_image_url,
-					audio_url, video_url, language, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					audio_url, video_url, language, doi, created_at, updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				entryID, feedID, nullable(entry.GUID), nullable(entry.CanonicalURL), entry.Title,
 				nullable(entry.Author), nullable(entry.Summary), formatTime(entry.PublishedAt), formatTime(now),
 				entry.ContentHash, nullable(&entry.IdentityHash), nullable(entry.LeadImageURL), nullable(entry.AudioURL), nullable(entry.VideoURL),
-				nullable(entry.Language), formatTime(now), formatTime(now),
+				nullable(entry.Language), nullable(entry.DOI), formatTime(now), formatTime(now),
 			)
 			if err != nil {
 				return 0, fmt.Errorf("insert entry: %w", err)
@@ -467,10 +467,10 @@ func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, en
 			_, err = tx.ExecContext(ctx, `
 				UPDATE entries SET guid = ?, canonical_url = ?, title = ?, author = ?, summary = ?,
 					published_at = ?, content_hash = ?, identity_hash = ?, lead_image_url = ?, audio_url = ?,
-					video_url = ?, language = ?, updated_at = ? WHERE id = ?`,
+					video_url = ?, language = ?, doi = ?, updated_at = ? WHERE id = ?`,
 				nullable(entry.GUID), nullable(entry.CanonicalURL), entry.Title, nullable(entry.Author), nullable(entry.Summary),
 				formatTime(entry.PublishedAt), entry.ContentHash, nullable(&entry.IdentityHash), nullable(entry.LeadImageURL), nullable(entry.AudioURL),
-				nullable(entry.VideoURL), nullable(entry.Language), formatTime(now), entryID,
+				nullable(entry.VideoURL), nullable(entry.Language), nullable(entry.DOI), formatTime(now), entryID,
 			)
 			if err != nil {
 				return 0, fmt.Errorf("update entry: %w", err)

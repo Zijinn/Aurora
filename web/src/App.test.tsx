@@ -123,6 +123,20 @@ describe("Aurora reading experience", () => {
     expect(screen.queryByText("Library ready")).not.toBeInTheDocument()
   })
 
+  it("opens the home AI panel without starting a model request", async () => {
+    renderApp()
+    fireEvent.click(await screen.findByRole("button", { name: "AI assistant" }))
+    expect(await screen.findByText("Aurora Insight")).toBeInTheDocument()
+    expect(document.querySelector(".workspace-body")).toHaveClass("workspace-body--ai-open")
+    expect(
+      vi.mocked(fetch).mock.calls.some(([input, init]) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+        return url.includes("/api/v1/ai/library-chat") && init?.method === "POST"
+      }),
+    ).toBe(false)
+  })
+
   it("opens the add subscription workflow", async () => {
     renderApp()
     const addButtons = await screen.findAllByRole("button", { name: "Add feed" })
