@@ -205,7 +205,15 @@ jobs:
         run: |
           wails3 generate webview2bootstrapper -dir build/windows
           $out = "$pwd\dist\Aurora-$($env:VERSION)-windows-x64-setup.exe"
-          $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          $makensis = (Get-Command makensis.exe -ErrorAction SilentlyContinue)?.Source
+          if (-not $makensis) { $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
+          if (-not (Test-Path $makensis)) { $makensis = "${env:ProgramFiles}\NSIS\makensis.exe" }
+          if (-not (Test-Path $makensis)) {
+            choco install nsis --no-progress -y
+            $makensis = (Get-Command makensis.exe -ErrorAction SilentlyContinue)?.Source
+            if (-not $makensis) { $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
+            if (-not (Test-Path $makensis)) { $makensis = "${env:ProgramFiles}\NSIS\makensis.exe" }
+          }
           if (-not (Test-Path $makensis)) { throw "makensis.exe not found at $makensis" }
           & $makensis "/DVERSION=$($env:VERSION)" "/DAPP_EXE=$pwd\dist\Aurora.exe" "/DAPP_ICON=$pwd\build\windows\Aurora.ico" "/DLICENSE_FILE=$pwd\LICENSE" "/DWEBVIEW2_BOOTSTRAPPER=$pwd\build\windows\MicrosoftEdgeWebview2Setup.exe" "/DWEB_ASSETS=$pwd\web\dist" "/DOUT_FILE=$out" build/windows/installer.nsi
       - name: Sign installer
