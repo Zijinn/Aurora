@@ -4,9 +4,15 @@
   font-optical-sizing: auto;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  /* CJK faces sit immediately after the Latin faces so Chinese never falls
+     through to a generic family. Without them, --font-reader resolved Chinese
+     to the system serif (Songti SC on macOS), mixing two faces per line. */
+  --cjk-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC";
+  --cjk-serif: "Songti SC", "SimSun", "Noto Serif CJK SC";
   --font-ui:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Manrope Variable", sans-serif;
-  --font-reader: "Source Serif 4 Variable", Georgia, serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", var(--cjk-sans), sans-serif;
+  --font-reader: var(--font-ui);
+  --font-reader-serif: "Source Serif 4 Variable", Georgia, var(--cjk-serif), serif;
   --accent: #477cf4;
   --accent-strong: #285ecb;
   --accent-fill: #3975eb;
@@ -619,7 +625,6 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) 30px;
   width: 100%;
   min-height: 108px;
-  border-bottom: 1px solid var(--border);
 }
 .timeline-entry__main {
   display: block;
@@ -756,10 +761,10 @@ button:disabled {
 .timeline-entry--card.timeline-entry--selected {
   border-color: var(--accent);
 }
-.timeline-entry--image,
-.timeline-entry--magazine,
-.timeline-entry--card {
-  grid-template-columns: 92px minmax(0, 1fr) 30px;
+.timeline-entry--image.timeline-entry--has-image,
+.timeline-entry--magazine.timeline-entry--has-image,
+.timeline-entry--card.timeline-entry--has-image {
+  grid-template-columns: minmax(0, 1fr) 92px 30px;
 }
 .timeline-entry__image {
   width: 84px;
@@ -2261,13 +2266,20 @@ button:disabled {
   background: var(--canvas);
   border-right: 0;
 }
+/* Compact toolbar sized to one 32px action button plus padding, replacing the
+   116px block that stacked a kicker, large title, and description. */
 .library-page-header {
-  min-height: 116px;
-  align-items: flex-end;
-  padding: 24px 34px 14px;
+  min-height: 52px;
+  align-items: center;
+  padding: 10px 20px;
   background: transparent;
   border-bottom: 0;
   backdrop-filter: none;
+}
+.library-page-header .pane-header__titles h1 {
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.3;
 }
 .pane-header__context {
   margin-bottom: 6px;
@@ -2531,30 +2543,61 @@ button:disabled {
   width: 0;
   height: 0;
 }
+/* Two columns by default; the image column only exists when the entry has a
+   lead image, so text-only journal entries use the full row width. Rows are
+   separated by whitespace and hover tint rather than rules. */
 .timeline-entry {
-  grid-template-columns: 32px 82px minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) 34px;
   width: 100%;
-  min-height: 112px;
+  min-height: auto;
   margin: 0;
-  border-color: var(--border-strong);
-  border-radius: 0;
+  border: 0;
+  border-radius: 8px;
   transition: background 160ms ease;
+}
+.timeline-entry--has-image {
+  grid-template-columns: minmax(0, 1fr) 82px 34px;
 }
 .timeline-entry:hover {
   background: color-mix(in srgb, var(--surface-raised) 54%, transparent);
-  border-radius: 0;
 }
 .timeline-entry--selected {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
-  border-color: var(--border);
-  border-radius: 0;
 }
-.timeline-entry__index {
-  align-self: start;
-  padding-top: 18px;
-  color: var(--text-tertiary);
-  font-size: 8px;
-  font-variant-numeric: tabular-nums;
+/* Unread dot lives in the left gutter, outside the text column. */
+.timeline-entry::before {
+  position: absolute;
+  top: 20px;
+  left: -11px;
+  display: block;
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+  border-radius: 50%;
+  content: "";
+}
+.timeline-entry--read::before {
+  display: none;
+}
+.timeline-entry__feed-icon {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  overflow: hidden;
+  place-items: center;
+  background: var(--surface-muted);
+  border-radius: 4px;
+}
+.timeline-entry__feed-icon > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.timeline-entry__feed-icon--letter {
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 650;
 }
 .timeline-entry__image {
   position: relative;
@@ -2581,32 +2624,40 @@ button:disabled {
 }
 .timeline-entry__main {
   align-self: stretch;
-  padding: 17px 12px;
+  padding: 14px 12px;
 }
 .timeline-entry__meta {
   justify-content: flex-start;
-  margin-bottom: 7px;
-  font-size: 9px;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 10.5px;
 }
 .timeline-entry__feed {
   color: var(--text-secondary);
   font-weight: 650;
 }
+/* Heavier weight than the previous 520: CJK glyphs need more stroke to read as
+   a title at this size. */
 .timeline-entry h2 {
-  font-family: var(--font-reader);
-  font-size: 18px;
-  font-weight: 520;
-  line-height: 1.25;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 .timeline-entry p {
-  max-width: 72ch;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12.5px;
   line-height: 1.5;
 }
-.timeline-entry--standard .timeline-entry__summary,
+/* Standard keeps the abstract visible — for journal feeds it is the only
+   preview available. Compact is the dense, title-only mode. */
 .timeline-entry--compact .timeline-entry__summary {
   display: none;
+}
+.timeline-entry--standard .timeline-entry__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .timeline-entry__author {
   color: var(--text-tertiary);
@@ -2616,9 +2667,10 @@ button:disabled {
   margin-top: 0;
   opacity: 1;
 }
-.timeline-entry--compact {
-  min-height: 72px;
-  grid-template-columns: 32px minmax(0, 1fr) 34px;
+.timeline-entry--compact,
+.timeline-entry--compact.timeline-entry--has-image {
+  min-height: auto;
+  grid-template-columns: minmax(0, 1fr) 34px;
 }
 .timeline-entry--compact .timeline-entry__image {
   display: none;
@@ -2627,24 +2679,75 @@ button:disabled {
   padding-top: 11px;
   padding-bottom: 11px;
 }
-.timeline-entry--card,
-.timeline-entry--magazine,
-.timeline-entry--image {
-  grid-template-columns: 32px 100px minmax(0, 1fr) 34px;
+/* Three distinct layouts. Previously every rule naming magazine or image also
+   named card, so all three rendered identically.
+
+   card     — small thumbnail at the trailing edge, summary clamped to 2 lines
+   magazine — large thumbnail, roomier title, summary clamped to 3 lines
+   image    — image leads full width above the text */
+.timeline-entry--card.timeline-entry--has-image {
+  grid-template-columns: minmax(0, 1fr) 88px 34px;
 }
 .timeline-entry--card {
   width: 100%;
   margin: 0;
   background: transparent;
-  border-width: 0 0 1px;
-  border-radius: 0;
+  border: 0;
   box-shadow: none;
 }
-.timeline-entry--card .timeline-entry__image,
-.timeline-entry--magazine .timeline-entry__image,
-.timeline-entry--image .timeline-entry__image {
+.timeline-entry--card .timeline-entry__image {
   width: 88px;
   height: 82px;
+}
+.timeline-entry--card .timeline-entry__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.timeline-entry--magazine.timeline-entry--has-image {
+  grid-template-columns: minmax(0, 1fr) 168px 34px;
+}
+.timeline-entry--magazine .timeline-entry__image {
+  width: 168px;
+  height: 116px;
+  align-self: start;
+  margin-top: 14px;
+}
+.timeline-entry--magazine h2 {
+  font-size: 17px;
+  line-height: 1.35;
+}
+.timeline-entry--magazine .timeline-entry__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.timeline-entry--image,
+.timeline-entry--image.timeline-entry--has-image {
+  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-areas:
+    "image image"
+    "main star";
+}
+.timeline-entry--image .timeline-entry__image {
+  grid-area: image;
+  width: 100%;
+  height: 172px;
+  margin: 12px 0 0;
+  border-radius: 10px;
+}
+.timeline-entry--image .timeline-entry__main {
+  grid-area: main;
+}
+.timeline-entry--image .entry-star {
+  grid-area: star;
+}
+.timeline-entry--image .timeline-entry__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .empty-mark span {
   background: var(--accent);
@@ -2704,15 +2807,16 @@ button:disabled {
 .app-shell--reader-open .timeline-list__row {
   padding: 2px 0;
 }
+/* The narrow three-pane column collapses every mode to one text column. */
 .app-shell--reader-open .timeline-entry,
 .app-shell--reader-open .timeline-entry--card,
 .app-shell--reader-open .timeline-entry--magazine,
 .app-shell--reader-open .timeline-entry--image {
   grid-template-columns: minmax(0, 1fr) 30px;
-  min-height: 108px;
+  grid-template-areas: none;
+  min-height: auto;
   overflow: hidden;
-  border: 1px solid transparent;
-  border-bottom-color: var(--border);
+  border: 0;
   border-radius: 7px;
 }
 .app-shell--reader-open .timeline-entry:hover {
@@ -2736,7 +2840,6 @@ button:disabled {
 .app-shell--reader-open .timeline-entry:has(.timeline-entry__main:focus-visible) {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
 }
-.app-shell--reader-open .timeline-entry__index,
 .app-shell--reader-open .timeline-entry__image {
   display: none;
 }
@@ -2744,8 +2847,8 @@ button:disabled {
   padding: 12px 9px 11px 12px;
 }
 .app-shell--reader-open .timeline-entry__meta {
-  margin-bottom: 7px;
-  font-size: 9px;
+  margin-bottom: 5px;
+  font-size: 10px;
 }
 .app-shell--reader-open .timeline-entry h2 {
   font-family: var(--font-ui);
@@ -2860,17 +2963,31 @@ button:disabled {
   text-transform: none;
 }
 .article-header__meta {
-  gap: 8px;
-  margin-top: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  margin-top: 3px;
   color: var(--text-tertiary);
-  font-size: 9px;
+  font-size: 11px;
 }
+.article-header__doi {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  border-bottom: 1px solid var(--border-strong);
+}
+.article-header__doi:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+/* No max-width here: an 18ch cap wrapped CJK titles after ~9 characters.
+   The content column already constrains the measure. */
 .article-header h1 {
-  max-width: 18ch;
-  font-size: 38px;
-  font-weight: 480;
-  line-height: 1.04;
-  text-wrap: balance;
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-wrap: pretty;
 }
 .article-header__summary {
   max-width: 62ch;
@@ -3235,11 +3352,11 @@ button:disabled {
     padding: 0 14px 18px;
   }
   .timeline-entry {
-    grid-template-columns: 88px minmax(0, 1fr) 28px;
-    min-height: 120px;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    min-height: auto;
   }
-  .timeline-entry__index {
-    display: none;
+  .timeline-entry--has-image {
+    grid-template-columns: minmax(0, 1fr) 88px 28px;
   }
   .timeline-entry__image {
     width: 78px;
@@ -3265,10 +3382,9 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr) 28px;
     min-height: 78px;
   }
-  .timeline-entry--card,
-  .timeline-entry--magazine,
-  .timeline-entry--image {
-    grid-template-columns: 88px minmax(0, 1fr) 28px;
+  .timeline-entry--card.timeline-entry--has-image,
+  .timeline-entry--magazine.timeline-entry--has-image {
+    grid-template-columns: minmax(0, 1fr) 88px 28px;
   }
   .entry-star {
     width: 28px;
@@ -3646,8 +3762,11 @@ button:disabled {
   display: none;
 }
 .app-shell--reader-open .article-header,
+/* clamp keeps a readable floor when the reader column is narrow. The previous
+   calc(100% - 56px) subtracted a fixed gutter first, so a ~430px column left
+   only ~18 CJK characters per line. */
 .app-shell--reader-open .article-content {
-  width: min(760px, calc(100% - 56px));
+  width: clamp(0px, calc(100% - 32px), 42em);
 }
 .app-shell--reader-open .article-header {
   padding: 34px 0 28px;
@@ -5647,9 +5766,10 @@ button:disabled {
 
 /* Keep the reading measure tidy while allowing prose to align at both edges. */
 .reader--article .article-header__summary,
+/* Left-aligned: justification without hyphenation opens uneven word gaps, and
+   inter-word has no effect on CJK runs that lack spaces. */
 .reader--article .article-content {
-  text-align: justify;
-  text-justify: inter-word;
+  text-align: start;
 }
 
 .app-shell--reader-open .timeline-filterbar__scopes {
@@ -5970,9 +6090,12 @@ button:disabled {
 
 /* Compact three-pane reading layout. */
 .app-shell--reader-open .library-page-header {
-  min-height: 72px;
+  min-height: 48px;
   align-items: center;
-  padding: 8px 12px 6px;
+  padding: 8px 12px;
+}
+.app-shell--reader-open .library-page-header .pane-header__titles h1 {
+  font-size: 15px;
 }
 .app-shell--reader-open .timeline-filterbar {
   min-height: 42px;
@@ -6045,9 +6168,10 @@ button:disabled {
 }
 
 .app-shell--reader-open .article-header h1 {
-  max-width: 22ch;
-  font-size: 32px;
-  line-height: 1.1;
+  max-width: none;
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1.32;
 }
 
 @media (max-width: 1250px) {

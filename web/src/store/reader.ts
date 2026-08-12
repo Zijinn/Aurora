@@ -32,7 +32,9 @@ export interface ReaderAppearance {
 }
 
 export const defaultReaderAppearance: ReaderAppearance = {
-  fontFamily: "serif",
+  // Sans by default: screen-rendered CJK serif (Songti) has uneven stroke
+  // weight below ~20px. Serif stays available in the reader inspector.
+  fontFamily: "sans",
   fontSize: 19,
   lineHeight: 1.8,
 }

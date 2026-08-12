@@ -29,7 +29,10 @@ var (
 )
 
 const (
-	maxAIArticleRunes   = 60000
+	maxAIArticleRunes = 60000
+	// Abstract excerpt sent with academic tagging. Journal abstracts run a few
+	// hundred characters, so this holds a full one without shipping a body.
+	maxAIAbstractRunes  = 1500
 	maxChatMessageRunes = 4000
 	maxChatHistory      = 20
 	maxAcademicTags     = 5
@@ -573,7 +576,7 @@ func operationMessages(operation, language string, content storage.AIEntryConten
 	case "key_points":
 		instruction = "Extract the article's key points as a concise bulleted list."
 	case "academic_tags":
-		instruction = "Based only on the article title, extract 3 to 5 concise academic tags covering discipline, topic, method, region, or data when present. Avoid generic labels such as article, research, paper, or study. Return only a valid JSON array of tag strings, with no Markdown or commentary."
+		instruction = "Using the article title and the abstract when one is provided, extract 3 to 5 concise academic tags covering discipline, topic, method, region, or data when present. Prefer the specific method and data described in the abstract over restating the title. Avoid generic labels such as article, research, paper, or study. Return only a valid JSON array of tag strings, with no Markdown or commentary."
 	}
 	if language != "auto" && operation != "translation" {
 		instruction += " Respond in " + language + "."
@@ -627,16 +630,31 @@ func articleEnvelope(content storage.AIEntryContent) string {
 }
 
 func operationEnvelope(operation string, content storage.AIEntryContent) string {
-	if operation == "title_translation" || operation == "academic_tags" {
+	if operation == "title_translation" {
 		return "<article-title>" + content.Title + "</article-title>"
+	}
+	// Academic tagging reads the abstract as well as the title. For journal
+	// feeds the abstract carries the discipline and method signals that a title
+	// alone often omits; an excerpt keeps the payload small.
+	if operation == "academic_tags" {
+		envelope := "<article-title>" + content.Title + "</article-title>"
+		if excerpt := truncateRunes(content.Content, maxAIAbstractRunes); excerpt != "" {
+			envelope += "\n<article-abstract>" + excerpt + "</article-abstract>"
+		}
+		return envelope
 	}
 	return articleEnvelope(content)
 }
 
 func aiInputHash(record storage.AIProfileRecord, operation, language string, content storage.AIEntryContent) string {
 	canonicalURL, articleContent := content.CanonicalURL, truncateRunes(content.Content, maxAIArticleRunes)
-	if operation == "title_translation" || operation == "academic_tags" {
+	switch operation {
+	case "title_translation":
 		canonicalURL, articleContent = "", ""
+	case "academic_tags":
+		// Keyed on the same excerpt the envelope sends, so cached tags are
+		// reused only when the abstract is unchanged.
+		canonicalURL, articleContent = "", truncateRunes(content.Content, maxAIAbstractRunes)
 	}
 	value := strings.Join([]string{record.Profile.ID, record.Profile.Provider, record.Profile.Endpoint,
 		record.Profile.Model, record.SettingsJSON, operation, language, content.Title, canonicalURL,

@@ -148,18 +148,28 @@ func TestTitleTranslationSendsOnlyTheTitleAndUsesTitleCacheKey(t *testing.T) {
 	}
 }
 
-func TestAcademicTagsUseTitleOnlyAndParseStructuredOutput(t *testing.T) {
+func TestAcademicTagsUseTitleAndAbstractAndParseStructuredOutput(t *testing.T) {
 	record := storage.AIProfileRecord{Profile: domain.AIProfile{
 		ID: "tag-profile", Provider: "ollama", Endpoint: "http://127.0.0.1:11434", Model: "qwen3:8b",
 	}}
-	first := storage.AIEntryContent{Title: "Digital trade and network centrality", CanonicalURL: "https://example.com/one", Content: "private body one"}
-	second := storage.AIEntryContent{Title: first.Title, CanonicalURL: "https://example.com/two", Content: "private body two"}
+	first := storage.AIEntryContent{Title: "Digital trade and network centrality", CanonicalURL: "https://example.com/one", Content: "abstract body one"}
+	second := storage.AIEntryContent{Title: first.Title, CanonicalURL: "https://example.com/two", Content: "abstract body two"}
 	messages := operationMessages("academic_tags", "Chinese", first)
-	if len(messages) != 2 || !strings.Contains(messages[1].Content, first.Title) || strings.Contains(messages[1].Content, first.Content) || strings.Contains(messages[1].Content, first.CanonicalURL) {
-		t.Fatalf("academic tag envelope included more than the title: %+v", messages)
+	// The abstract carries the discipline and method signals; the URL stays out.
+	if len(messages) != 2 || !strings.Contains(messages[1].Content, first.Title) || !strings.Contains(messages[1].Content, first.Content) {
+		t.Fatalf("academic tag envelope missing title or abstract: %+v", messages)
 	}
-	if firstHash, secondHash := aiInputHash(record, "academic_tags", "Chinese", first), aiInputHash(record, "academic_tags", "Chinese", second); firstHash != secondHash {
-		t.Fatalf("title-only tag cache key changed with article content: %s %s", firstHash, secondHash)
+	if strings.Contains(messages[1].Content, first.CanonicalURL) {
+		t.Fatalf("academic tag envelope leaked the canonical URL: %+v", messages)
+	}
+	// The cache key now tracks the abstract, so differing abstracts must not
+	// share cached tags while an identical one still hits the cache.
+	if firstHash, secondHash := aiInputHash(record, "academic_tags", "Chinese", first), aiInputHash(record, "academic_tags", "Chinese", second); firstHash == secondHash {
+		t.Fatalf("tag cache key ignored a changed abstract: %s", firstHash)
+	}
+	sameAbstract := storage.AIEntryContent{Title: first.Title, CanonicalURL: "https://example.com/three", Content: first.Content}
+	if firstHash, sameHash := aiInputHash(record, "academic_tags", "Chinese", first), aiInputHash(record, "academic_tags", "Chinese", sameAbstract); firstHash != sameHash {
+		t.Fatalf("tag cache key changed with the canonical URL: %s %s", firstHash, sameHash)
 	}
 	tags, err := parseAcademicTags("```json\n[\"Digital trade\", \"Network analysis\", \"digital trade\", \"China\", \"Panel data\", \"Extra\"]\n```")
 	if err != nil {

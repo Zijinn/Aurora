@@ -49,6 +49,7 @@ import {
   type SerializedSelection,
 } from "../lib/annotations"
 import { useTranslation } from "../lib/i18n"
+import { formatAuthors, summaryDuplicatesContent } from "../lib/metadata"
 import { useReaderStore } from "../store/reader"
 
 interface PendingSelection extends SerializedSelection {
@@ -80,7 +81,11 @@ export function ReaderPane(props: ReaderPaneProps) {
   const { locale, t } = useTranslation()
   const queryClient = useQueryClient()
   const { detail, onStateChange } = props
-  const [preferReadability, setPreferReadability] = useState(true)
+  // Feed content wins by default. Readability has no paywall detection, so on a
+  // journal landing page it stores nav and citation furniture and would show
+  // that instead of the abstract. Fetching opts in explicitly.
+  const [preferReadability, setPreferReadability] = useState(false)
+  const [lastEntryID, setLastEntryID] = useState<string | undefined>(undefined)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null)
@@ -146,9 +151,24 @@ export function ReaderPane(props: ReaderPaneProps) {
       ),
     [preferReadability, props.detail],
   )
+  const displayAuthors = formatAuthors(entry?.author)
+  // Abstract-only feeds repeat the abstract in both fields; the body already
+  // shows it, so the header copy would duplicate the whole thing.
+  const bodyShowsSummary = !safeHTML && !(alwaysTranslateContent && translatedContent)
+  const showHeaderSummary = Boolean(
+    entry?.ai_summary ??
+      (entry?.summary && !bodyShowsSummary && !summaryDuplicatesContent(entry.summary, safeHTML)),
+  )
   useEffect(() => {
     if (detail && !detail.state.is_read) onStateChange(detail, { is_read: true })
   }, [detail, onStateChange])
+  // Reset the readability preference when the article changes. Adjusting during
+  // render rather than in an effect keeps the first render of a new entry from
+  // briefly reusing the previous entry's choice.
+  if (entry?.id !== lastEntryID) {
+    setLastEntryID(entry?.id)
+    setPreferReadability(false)
+  }
   useEffect(() => {
     if (contentRef.current) applyAnnotations(contentRef.current, entryAnnotations)
   }, [entryAnnotations, safeHTML])
@@ -215,7 +235,7 @@ export function ReaderPane(props: ReaderPaneProps) {
 
   const readerStyle = {
     "--reader-content-font":
-      readerAppearance.fontFamily === "serif" ? "var(--font-reader)" : "var(--font-ui)",
+      readerAppearance.fontFamily === "serif" ? "var(--font-reader-serif)" : "var(--font-ui)",
     "--reader-content-size": `${readerAppearance.fontSize}px`,
     "--reader-content-leading": readerAppearance.lineHeight,
   } as CSSProperties
@@ -353,11 +373,15 @@ export function ReaderPane(props: ReaderPaneProps) {
               : t("fetchFullText")
           }
           disabled={props.readabilityPending || !entry.canonical_url}
-          onClick={() =>
-            detail?.readability_html
-              ? setPreferReadability((value) => !value)
-              : props.onFetchReadability(entry.id)
-          }
+          onClick={() => {
+            if (detail?.readability_html) {
+              setPreferReadability((value) => !value)
+              return
+            }
+            // Fetching is an explicit request to read the extraction.
+            setPreferReadability(true)
+            props.onFetchReadability(entry.id)
+          }}
         >
           {props.readabilityPending ? <CircleNotch className="spin" /> : <TextAlignLeft />}
         </button>
@@ -557,13 +581,24 @@ export function ReaderPane(props: ReaderPaneProps) {
             <div>
               <p className="article-header__source">{entry.feed_title}</p>
               <div className="article-header__meta">
-                {entry.author && <span>{entry.author}</span>}
+                {displayAuthors && <span>{displayAuthors}</span>}
                 <time dateTime={entry.published_at}>
                   {new Intl.DateTimeFormat(locale, {
                     dateStyle: "medium",
                     timeStyle: "short",
                   }).format(new Date(entry.published_at))}
                 </time>
+                {entry.doi && (
+                  <a
+                    className="article-header__doi"
+                    href={`https://doi.org/${entry.doi}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={t("openDOI")}
+                  >
+                    DOI {entry.doi}
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -574,7 +609,7 @@ export function ReaderPane(props: ReaderPaneProps) {
               {entry.ai_translated_title}
             </p>
           )}
-          {(entry.ai_summary || entry.summary) && (
+          {showHeaderSummary && (
             <div
               className={
                 entry.ai_summary

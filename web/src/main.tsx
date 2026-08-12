@@ -1,4 +1,5 @@
-import "@fontsource-variable/manrope"
+// Source Serif 4 backs the optional serif reading mode. Manrope was dropped: it
+// sat after the system faces in --font-ui, so it never rendered a glyph.
 import "@fontsource-variable/source-serif-4"
 import "./styles.css"
 

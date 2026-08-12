@@ -11,6 +11,7 @@ import { useMemo, useRef, useState } from "react"
 
 import type { Entry, LibraryScope, Subscription, ViewMode } from "../api/types"
 import { localizedScopeTitle, useTranslation, type Locale, type Translator } from "../lib/i18n"
+import { formatAuthors } from "../lib/metadata"
 
 interface TimelinePaneProps {
   scope: LibraryScope
@@ -47,10 +48,16 @@ export function TimelinePane(props: TimelinePaneProps) {
     [props.subscriptions],
   )
   const selectedFeedID = props.scope.kind === "feed" ? props.scope.id : null
+  // A per-feed view mode overrides the global preference while that feed is the
+  // active scope. Without this the context-menu choice persisted but never
+  // affected rendering.
+  const viewMode =
+    props.subscriptions.find((subscription) => subscription.feed_id === selectedFeedID)?.view_mode ??
+    props.viewMode
   const virtualizer = useVirtualizer({
     count: props.entries.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => (props.viewMode === "compact" ? 72 : 116),
+    estimateSize: () => (viewMode === "compact" ? 64 : 104),
     overscan: 7,
   })
   const virtualItems = virtualizer.getVirtualItems()
@@ -64,9 +71,7 @@ export function TimelinePane(props: TimelinePaneProps) {
     <section className="timeline" aria-labelledby="timeline-title">
       <header className="pane-header library-page-header">
         <div className="pane-header__titles">
-          <p className="pane-header__context">{scopeContext(props.scope, t)}</p>
           <h1 id="timeline-title">{localizedScopeTitle(props.scope, locale)}</h1>
-          <p className="pane-header__description">{scopeDescription(props.scope, t)}</p>
         </div>
         <div className="pane-header__actions">
           {selectedFeedID && (
@@ -157,10 +162,6 @@ export function TimelinePane(props: TimelinePaneProps) {
         </div>
       ) : (
         <div className="timeline-results">
-          <div className="timeline-group-label">
-            <span>{t("latestStories")}</span>
-            <i />
-          </div>
           <div className="timeline-scroll" ref={scrollRef} onScroll={onScroll}>
             <div className="timeline-list" style={{ height: `${virtualizer.getTotalSize()}px` }}>
               {virtualItems.map((virtualItem) => {
@@ -176,10 +177,10 @@ export function TimelinePane(props: TimelinePaneProps) {
                   >
                     <TimelineEntry
                       entry={entry}
-                      index={virtualItem.index}
                       selected={entry.id === props.selectedEntryID}
-                      viewMode={props.viewMode}
+                      viewMode={viewMode}
                       feedIconURL={subscriptionIcons.get(entry.feed_id) ?? null}
+                      showFeedIcon={props.scope.kind !== "feed"}
                       locale={locale}
                       t={t}
                       onSelect={() => props.onSelect(entry.id)}
@@ -204,33 +205,33 @@ export function TimelinePane(props: TimelinePaneProps) {
 
 function TimelineEntry({
   entry,
-  index,
   selected,
   viewMode,
   feedIconURL,
+  showFeedIcon,
   locale,
   t,
   onSelect,
   onToggleStar,
 }: {
   entry: Entry
-  index: number
   selected: boolean
   viewMode: ViewMode
   feedIconURL: string | null
+  showFeedIcon: boolean
   locale: Locale
   t: Translator
   onSelect: () => void
   onToggleStar: () => void
 }) {
+  const [leadImageFailed, setLeadImageFailed] = useState(false)
+  const hasImage = Boolean(entry.lead_image_url) && !leadImageFailed
+  const displayAuthors = formatAuthors(entry.author)
   return (
     <article
-      className={`timeline-entry timeline-entry--${viewMode}${selected ? " timeline-entry--selected" : ""}${entry.state.is_read ? " timeline-entry--read" : ""}`}
+      className={`timeline-entry timeline-entry--${viewMode}${hasImage ? " timeline-entry--has-image" : ""}${selected ? " timeline-entry--selected" : ""}${entry.state.is_read ? " timeline-entry--read" : ""}`}
     >
-      <span className="timeline-entry__index" aria-hidden="true">
-        {String(index + 1).padStart(2, "0")}
-      </span>
-      <TimelineEntryImage entry={entry} feedIconURL={feedIconURL} />
+      {hasImage && <TimelineEntryImage entry={entry} onFailed={() => setLeadImageFailed(true)} />}
       <button
         className="timeline-entry__main"
         type="button"
@@ -239,7 +240,7 @@ function TimelineEntry({
       >
         <div className="timeline-entry__meta">
           <span className="timeline-entry__feed">
-            <span className="unread-dot" />
+            {showFeedIcon && <TimelineFeedIcon entry={entry} iconURL={feedIconURL} />}
             {entry.feed_title}
           </span>
           <time dateTime={entry.published_at}>
@@ -261,7 +262,7 @@ function TimelineEntry({
             {entry.ai_summary ?? entry.summary}
           </p>
         )}
-        {entry.author && <span className="timeline-entry__author">{entry.author}</span>}
+        {displayAuthors && <span className="timeline-entry__author">{displayAuthors}</span>}
       </button>
       <button
         className={entry.state.is_starred ? "entry-star entry-star--active" : "entry-star"}
@@ -276,32 +277,44 @@ function TimelineEntry({
   )
 }
 
-function TimelineEntryImage({ entry, feedIconURL }: { entry: Entry; feedIconURL: string | null }) {
-  const [leadImageFailed, setLeadImageFailed] = useState(false)
-  const [feedIconFailed, setFeedIconFailed] = useState(false)
-  const source =
-    entry.lead_image_url && !leadImageFailed
-      ? { url: entry.lead_image_url, kind: "lead" as const }
-      : feedIconURL && !feedIconFailed
-        ? { url: feedIconURL, kind: "icon" as const }
-        : null
-
+/**
+ * Renders the per-entry lead image. Only mounted when the entry actually has
+ * one: journal feeds carry no per-entry images, and falling back to the feed
+ * icon here produced a column of identical thumbnails.
+ */
+function TimelineEntryImage({ entry, onFailed }: { entry: Entry; onFailed: () => void }) {
   return (
     <span className="timeline-entry__image" aria-hidden="true">
-      {source ? (
-        <img
-          src={source.url}
-          alt=""
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => {
-            if (source.kind === "lead") setLeadImageFailed(true)
-            else setFeedIconFailed(true)
-          }}
-        />
-      ) : (
-        <span>{entry.feed_title.slice(0, 1).toUpperCase()}</span>
-      )}
+      <img
+        src={entry.lead_image_url ?? ""}
+        alt=""
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={onFailed}
+      />
+    </span>
+  )
+}
+
+/** Small source marker shown in the meta line when the scope spans feeds. */
+function TimelineFeedIcon({ entry, iconURL }: { entry: Entry; iconURL: string | null }) {
+  const [failed, setFailed] = useState(false)
+  if (!iconURL || failed) {
+    return (
+      <span className="timeline-entry__feed-icon timeline-entry__feed-icon--letter" aria-hidden="true">
+        {entry.feed_title.slice(0, 1).toUpperCase()}
+      </span>
+    )
+  }
+  return (
+    <span className="timeline-entry__feed-icon" aria-hidden="true">
+      <img
+        src={iconURL}
+        alt=""
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+      />
     </span>
   )
 }
@@ -394,32 +407,6 @@ function TimelineSkeleton() {
       ))}
     </div>
   )
-}
-
-function scopeContext(scope: LibraryScope, t: Translator) {
-  switch (scope.kind) {
-    case "feed":
-      return t("feed")
-    case "folder":
-      return t("folder")
-    case "today":
-      return t("library")
-    default:
-      return t("smartView")
-  }
-}
-
-function scopeDescription(scope: LibraryScope, t: Translator) {
-  switch (scope.kind) {
-    case "today":
-      return t("todayDescription")
-    case "unread":
-      return t("unreadDescription")
-    case "saved":
-      return t("savedDescription")
-    default:
-      return t("allFeedsDescription")
-  }
 }
 
 function formatRelativeTime(value: string, locale: Locale) {
