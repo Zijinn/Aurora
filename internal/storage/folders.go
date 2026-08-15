@@ -67,7 +67,11 @@ func EnsureFolder(ctx context.Context, db *sql.DB, profileID string, parentID *s
 	}
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO folders (id, profile_id, parent_id, name, position, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 0, ?, ?)`, item.ID, profileID, nullable(parentID), name, formatTime(now), formatTime(now))
+		VALUES (?, ?, ?, ?,
+			COALESCE((SELECT MAX(position) + 1 FROM folders
+				WHERE profile_id = ? AND ((parent_id IS NULL AND ? IS NULL) OR parent_id = ?)), 0),
+			?, ?)`,
+		item.ID, profileID, nullable(parentID), name, profileID, nullable(parentID), nullable(parentID), formatTime(now), formatTime(now))
 	if err != nil {
 		return domain.Folder{}, fmt.Errorf("create folder: %w", err)
 	}

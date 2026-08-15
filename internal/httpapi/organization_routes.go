@@ -29,15 +29,30 @@ func (s *Server) createFolder(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateFolder(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Name     *string `json:"name"`
-		ParentID *string `json:"parent_id"`
-		Position *int    `json:"position"`
+		Name     json.RawMessage `json:"name"`
+		ParentID json.RawMessage `json:"parent_id"`
+		Position json.RawMessage `json:"position"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_folder", "Invalid folder", err.Error())
 		return
 	}
-	item, err := storage.UpdateFolder(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("folderID"), request.ParentID, request.Name, request.Position)
+	name, err := optionalString(request.Name)
+	if err != nil || (name != nil && strings.TrimSpace(*name) == "") {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_folder", "Invalid folder", "Folder name cannot be empty.")
+		return
+	}
+	setParent, parentID, err := optionalNullableString(request.ParentID)
+	if err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_folder", "Invalid folder", err.Error())
+		return
+	}
+	position, err := optionalInt(request.Position)
+	if err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_folder", "Invalid folder", err.Error())
+		return
+	}
+	item, err := storage.UpdateFolder(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("folderID"), setParent, parentID, name, position)
 	if err != nil {
 		if strings.Contains(err.Error(), "cycle") || strings.Contains(err.Error(), "itself") {
 			writeProblem(w, r, http.StatusConflict, "folder_cycle", "Invalid folder nesting", err.Error())

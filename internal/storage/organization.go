@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 )
 
-func UpdateFolder(ctx context.Context, db *sql.DB, profileID, folderID string, parentID *string, name *string, position *int) (domain.Folder, error) {
-	if parentID != nil {
+func UpdateFolder(ctx context.Context, db *sql.DB, profileID, folderID string, setParent bool, parentID *string, name *string, position *int) (domain.Folder, error) {
+	if setParent && parentID != nil {
 		if *parentID == folderID {
 			return domain.Folder{}, errors.New("a folder cannot contain itself")
 		}
@@ -32,10 +32,30 @@ func UpdateFolder(ctx context.Context, db *sql.DB, profileID, folderID string, p
 		}
 	}
 	now := time.Now().UTC()
-	result, err := db.ExecContext(ctx, `
-		UPDATE folders SET parent_id = COALESCE(?, parent_id), name = COALESCE(?, name),
-			position = COALESCE(?, position), updated_at = ?
-		WHERE id = ? AND profile_id = ?`, nullable(parentID), nullable(name), nullableInt(position), formatTime(now), folderID, profileID)
+	sets := []string{"updated_at = ?"}
+	args := []any{formatTime(now)}
+	if setParent {
+		sets = append(sets, "parent_id = ?")
+		args = append(args, nullable(parentID))
+	}
+	if name != nil {
+		sets = append(sets, "name = ?")
+		args = append(args, *name)
+	}
+	if position != nil {
+		sets = append(sets, "position = ?")
+		args = append(args, *position)
+	} else if setParent {
+		// Re-parenting without an explicit position appends to the end of the
+		// new sibling group, so moved folders don't jump to the top.
+		sets = append(sets, `position = COALESCE((
+			SELECT MAX(position) + 1 FROM folders
+			WHERE profile_id = ? AND ((parent_id IS NULL AND ? IS NULL) OR parent_id = ?) AND id != ?
+		), 0)`)
+		args = append(args, profileID, nullable(parentID), nullable(parentID), folderID)
+	}
+	result, err := db.ExecContext(ctx, "UPDATE folders SET "+strings.Join(sets, ", ")+
+		" WHERE id = ? AND profile_id = ?", append(args, folderID, profileID)...)
 	if err != nil {
 		return domain.Folder{}, fmt.Errorf("update folder: %w", err)
 	}

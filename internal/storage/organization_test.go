@@ -25,8 +25,18 @@ func TestFolderCycleAndAutomationRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := UpdateFolder(ctx, db, domain.DefaultProfileID, root.ID, &child.ID, nil, nil); err == nil {
+	if _, err := UpdateFolder(ctx, db, domain.DefaultProfileID, root.ID, true, &child.ID, nil, nil); err == nil {
 		t.Fatal("expected folder cycle to be rejected")
+	}
+	moved, err := UpdateFolder(ctx, db, domain.DefaultProfileID, child.ID, true, nil, nil, nil)
+	if err != nil || moved.ParentID != nil {
+		t.Fatalf("expected explicit null parent to move folder to root: %+v, %v", moved, err)
+	}
+	if moved.Position <= root.Position {
+		t.Fatalf("expected new sibling folder to be appended after existing ones: %d <= %d", moved.Position, root.Position)
+	}
+	if _, err := UpdateFolder(ctx, db, domain.DefaultProfileID, moved.ID, false, nil, nil, nil); err != nil || moved.ParentID != nil {
+		t.Fatalf("expected omitted parent to keep folder at root: %+v, %v", moved, err)
 	}
 
 	tag, err := CreateTag(ctx, db, domain.DefaultProfileID, "Important", nil)
