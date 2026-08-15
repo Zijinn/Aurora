@@ -70,7 +70,6 @@ export function Sidebar(props: SidebarProps) {
     | { kind: "folder"; folder: Folder; position: { x: number; y: number } }
     | null
   >(null)
-  const unreadTotal = props.subscriptions.reduce((total, item) => total + item.unread_count, 0)
   const openContextMenu = (event: MouseEvent, subscription: Subscription) => {
     event.preventDefault()
     setContextMenu({
@@ -100,23 +99,20 @@ export function Sidebar(props: SidebarProps) {
       <div className="sidebar__header">
         <Brand />
       </div>
-      <nav className="nav-list nav-list--compact" aria-label={t("libraryViews")}>
-        <p className="sidebar-section-label">{t("workspace")}</p>
+      <nav className="workspace-segment" aria-label={t("libraryViews")}>
         {workspaceScopes.map(({ scope, icon: Icon }) => {
           const active = props.scope.kind === scope.kind
           return (
             <button
-              className={active ? "nav-item nav-item--active" : "nav-item"}
+              className={active ? "workspace-segment__item workspace-segment__item--active" : "workspace-segment__item"}
               key={scope.kind}
               type="button"
               aria-current={active ? "page" : undefined}
+              title={localizedScopeTitle(scope, locale)}
               onClick={() => props.onScopeChange(scope)}
             >
               <Icon aria-hidden="true" weight={active ? "fill" : "regular"} />
-              <span>{localizedScopeTitle(scope, locale)}</span>
-              {(scope.kind === "all" || scope.kind === "unread") && (
-                <span className="nav-item__count">{unreadTotal}</span>
-              )}
+              <span className="workspace-segment__label">{localizedScopeTitle(scope, locale)}</span>
             </button>
           )
         })}
@@ -524,7 +520,10 @@ function FolderTree(props: {
             type="button"
             aria-current={active ? "page" : undefined}
             aria-expanded={hasChildren ? expanded : undefined}
-            onClick={() => props.onScopeChange({ kind: "folder", id: folder.id, title: folder.name })}
+            onClick={() => {
+              props.onScopeChange({ kind: "folder", id: folder.id, title: folder.name })
+              if (hasChildren) props.onToggleFolder(folder.id)
+            }}
           >
             <FolderOpen aria-hidden="true" weight={active ? "fill" : "regular"} />
             <span>{folder.name}</span>

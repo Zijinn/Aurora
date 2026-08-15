@@ -75,7 +75,7 @@ describe("Sidebar rename menus", () => {
 })
 
 describe("Sidebar folder interactions", () => {
-  it("selects a folder without collapsing it when its main row is clicked", () => {
+  it("selects a folder and toggles it when its main row is clicked", () => {
     const onScopeChange = vi.fn()
     renderSidebar({ onScopeChange })
 
@@ -88,7 +88,9 @@ describe("Sidebar folder interactions", () => {
       id: "folder-1",
       title: "Research",
     })
-    // Clicking the row only selects — the tree stays expanded.
+    // Clicking the row both selects the folder and collapses it.
+    expect(screen.queryByRole("button", { name: "Example feed2" })).not.toBeInTheDocument()
+    fireEvent.click(folderRow)
     expect(screen.getByRole("button", { name: "Example feed2" })).toBeInTheDocument()
   })
 
