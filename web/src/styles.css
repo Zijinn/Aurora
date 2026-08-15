@@ -6004,6 +6004,17 @@ button:disabled {
   font-size: 12px;
   font-weight: 700;
 }
+.folder-tree {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.folder-tree--drop-target {
+  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+  border-radius: 8px;
+  outline: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: -3px;
+}
 .folder-tree-row,
 .feed-tree-row {
   min-height: 36px;

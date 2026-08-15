@@ -30,10 +30,14 @@ interface SidebarProps {
   onAdd: () => void
   onOrganizeLibrary: () => void
   onMarkFeedRead: (feedID: string) => void
+  onMarkFolderRead: (folderID: string) => void
   onRefreshFeed: (feedID: string) => void
   onMoveFeed: (feedID: string, folderID: string | null) => void
   onRenameFeed: (feedID: string, name: string) => void
   onRenameFolder: (folderID: string, name: string) => void
+  onCreateSubfolder: (parentID: string, name: string) => void
+  onDeleteFolder: (folderID: string) => void
+  onMoveFolder: (folderID: string, parentID: string | null) => void
   onMergeFeeds: (feedID: string, targetFeedID: string) => void
   onReorderFolder: (folderID: string, targetID: string, before: boolean) => void
   onReorderFeed: (feedID: string, targetID: string, before: boolean) => void
@@ -205,6 +209,7 @@ export function Sidebar(props: SidebarProps) {
               onContextMenu={openContextMenu}
               onFolderContextMenu={openFolderContextMenu}
               onMoveFeed={props.onMoveFeed}
+              onMoveFolder={props.onMoveFolder}
               onMergeFeeds={props.onMergeFeeds}
               onReorderFolder={props.onReorderFolder}
               onReorderFeed={props.onReorderFeed}
@@ -252,11 +257,23 @@ export function Sidebar(props: SidebarProps) {
             const name = requestRename(contextMenu.folder.name)
             if (name) props.onRenameFolder(contextMenu.folder.id, name)
           }}
+          onNewSubfolder={() => {
+            const name = window.prompt(t("folderName"))?.trim()
+            if (name) props.onCreateSubfolder(contextMenu.folder.id, name)
+          }}
+          onMarkAllRead={() => props.onMarkFolderRead(contextMenu.folder.id)}
+          onDelete={() => props.onDeleteFolder(contextMenu.folder.id)}
         />
       )}
     </aside>
   )
 }
+
+type DragItem = { type: "subscription" | "folder"; id: string }
+type DropPosition = "before" | "after" | "inside"
+type DropIndicator = { id: string; position: DropPosition }
+
+const DRAG_MIME = "application/x-aurora-library"
 
 function FolderTree(props: {
   folders: Folder[]
@@ -268,19 +285,16 @@ function FolderTree(props: {
   onContextMenu: (event: MouseEvent, subscription: Subscription) => void
   onFolderContextMenu: (event: MouseEvent, folder: Folder) => void
   onMoveFeed: (feedID: string, folderID: string | null) => void
+  onMoveFolder: (folderID: string, parentID: string | null) => void
   onMergeFeeds: (feedID: string, targetFeedID: string) => void
   onReorderFolder: (folderID: string, targetID: string, before: boolean) => void
   onReorderFeed: (feedID: string, targetID: string, before: boolean) => void
 }) {
   const { t } = useTranslation()
-  const [dragging, setDragging] = useState<{
-    type: "subscription" | "folder"
-    id: string
-  } | null>(null)
-  const [dropIndicator, setDropIndicator] = useState<{
-    id: string
-    position: "before" | "after" | "inside"
-  } | null>(null)
+  const [dragging, setDragging] = useState<DragItem | null>(null)
+  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null)
+
+  const folderByID = new Map(props.folders.map((folder) => [folder.id, folder]))
   const childrenByParent = new Map<string | null, Folder[]>()
   const subscriptionsByFolder = new Map<string | null, Subscription[]>()
   for (const folder of props.folders) {
@@ -295,13 +309,29 @@ function FolderTree(props: {
     items.push(subscription)
     subscriptionsByFolder.set(folderID, items)
   }
-  const rendered = new Set<string>()
-  const dragPayload = (event: DragEvent) => {
-    try {
-      return JSON.parse(event.dataTransfer.getData("application/x-aurora-library")) as {
-        type: "subscription" | "folder"
-        id: string
+
+  // Descendant lookup is used to block dropping a folder into itself or its
+  // own children — the backend rejects the cycle with a 409, so hide the
+  // affordance up front instead of failing after the drop.
+  const descendantIDs = (folderID: string) => {
+    const ids = new Set<string>()
+    const walk = (parentID: string) => {
+      for (const child of childrenByParent.get(parentID) ?? []) {
+        ids.add(child.id)
+        walk(child.id)
       }
+    }
+    walk(folderID)
+    return ids
+  }
+  // A folder can only be dropped onto a target that is NOT inside its own
+  // subtree. Check the dragged folder's descendants, not the target's.
+  const folderDropBlocked = (draggedID: string, targetID: string) =>
+    draggedID === targetID || descendantIDs(draggedID).has(targetID)
+
+  const dragPayload = (event: DragEvent): DragItem | null => {
+    try {
+      return JSON.parse(event.dataTransfer.getData(DRAG_MIME)) as DragItem
     } catch {
       return null
     }
@@ -319,17 +349,24 @@ function FolderTree(props: {
     if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return
     setDropIndicator(null)
   }
-  const dropZone = (event: DragEvent) => {
+  const dropZone = (event: DragEvent): "before" | "after" | "merge" => {
     const rect = event.currentTarget.getBoundingClientRect()
     const ratio = (event.clientY - rect.top) / rect.height
-    if (ratio < 0.28) return "before" as const
-    if (ratio > 0.72) return "after" as const
-    return "merge" as const
+    if (ratio < 0.28) return "before"
+    if (ratio > 0.72) return "after"
+    return "merge"
   }
+  const startDrag = (event: DragEvent, item: DragItem) => {
+    event.dataTransfer.effectAllowed = "move"
+    event.dataTransfer.setData(DRAG_MIME, JSON.stringify(item))
+    setDragging(item)
+  }
+
   const renderSubscription = (subscription: Subscription, depth: number) => {
     const active = props.scope.kind === "feed" && props.scope.id === subscription.feed_id
     const indicator =
       dropIndicator?.id === `subscription:${subscription.feed_id}` ? dropIndicator.position : null
+    const draggable = dragging?.type === "subscription" && dragging.id !== subscription.feed_id
     return (
       <button
         className={[
@@ -344,19 +381,13 @@ function FolderTree(props: {
         type="button"
         draggable
         aria-current={active ? "page" : undefined}
-        onDragStart={(event) => {
-          event.dataTransfer.effectAllowed = "move"
-          event.dataTransfer.setData(
-            "application/x-aurora-library",
-            JSON.stringify({ type: "subscription", id: subscription.feed_id }),
-          )
-          setDragging({ type: "subscription", id: subscription.feed_id })
-        }}
+        onDragStart={(event) =>
+          startDrag(event, { type: "subscription", id: subscription.feed_id })
+        }
         onDragEnd={clearDragState}
         onDragOver={(event) => {
           allowDrop(event)
-          if (!dragging || dragging.type !== "subscription" || dragging.id === subscription.feed_id)
-            return
+          if (!draggable) return
           const zone = dropZone(event)
           setDropIndicator({
             id: `subscription:${subscription.feed_id}`,
@@ -374,6 +405,11 @@ function FolderTree(props: {
           const zone = dropZone(event)
           if (zone === "merge") {
             props.onMergeFeeds(source.id, subscription.feed_id)
+            return
+          }
+          const sourceItem = props.subscriptions.find((item) => item.feed_id === source.id)
+          if (sourceItem && sourceItem.folder_id !== subscription.folder_id) {
+            props.onMoveFeed(source.id, subscription.folder_id)
           } else {
             props.onReorderFeed(source.id, subscription.feed_id, zone === "before")
           }
@@ -402,119 +438,175 @@ function FolderTree(props: {
       </button>
     )
   }
-  const renderLevel = (parentID: string | null, depth: number): ReactNode[] => {
+
+  const renderLevel = (parentID: string | null, depth: number, ancestors: string[]): ReactNode[] => {
     const children = childrenByParent.get(parentID) ?? []
     const rows: ReactNode[] = []
     for (const subscription of subscriptionsByFolder.get(parentID) ?? []) {
       rows.push(renderSubscription(subscription, depth))
     }
-    rows.push(
-      ...children.flatMap((folder) => {
-        rendered.add(folder.id)
-        const active = props.scope.kind === "folder" && props.scope.id === folder.id
-        const childFolders = childrenByParent.get(folder.id) ?? []
-        const directSubscriptions = subscriptionsByFolder.get(folder.id) ?? []
-        const hasChildren = childFolders.length > 0 || directSubscriptions.length > 0
-        const descendantIDs = new Set([folder.id])
-        const collectDescendants = (parentID: string) => {
-          for (const child of childrenByParent.get(parentID) ?? []) {
-            descendantIDs.add(child.id)
-            collectDescendants(child.id)
-          }
-        }
-        collectDescendants(folder.id)
-        const unread = props.subscriptions
-          .filter(
-            (subscription) => subscription.folder_id && descendantIDs.has(subscription.folder_id),
-          )
-          .reduce((total, subscription) => total + subscription.unread_count, 0)
-        const expanded = props.openFolders[folder.id] ?? true
-        const indicator =
-          dropIndicator?.id === `folder:${folder.id}` ? dropIndicator.position : null
-        return [
-          <div
-            className={[
-              "folder-tree-row",
-              indicator ? `library-drop-target library-drop-target--${indicator}` : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            key={folder.id}
-            style={{ paddingLeft: `${9 + depth * 14}px` }}
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.effectAllowed = "move"
-              event.dataTransfer.setData(
-                "application/x-aurora-library",
-                JSON.stringify({ type: "folder", id: folder.id }),
-              )
-              setDragging({ type: "folder", id: folder.id })
-            }}
-            onDragEnd={clearDragState}
-            onDragOver={(event) => {
-              allowDrop(event)
-              if (!dragging || dragging.id === folder.id) return
-              if (dragging.type === "subscription") {
-                setDropIndicator({ id: `folder:${folder.id}`, position: "inside" })
-                return
-              }
-              setDropIndicator({
-                id: `folder:${folder.id}`,
-                position: dropZone(event) === "after" ? "after" : "before",
-              })
-            }}
-            onDragLeave={clearDropIndicator}
-            onDrop={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              clearDragState()
-              const source = dragPayload(event)
-              if (!source || source.id === folder.id) return
-              if (source.type === "folder") {
-                props.onReorderFolder(source.id, folder.id, dropZone(event) !== "after")
-              } else {
-                props.onMoveFeed(source.id, folder.id)
-              }
-            }}
-            onContextMenu={(event) => props.onFolderContextMenu(event, folder)}
+    for (const folder of children) {
+      const active = props.scope.kind === "folder" && props.scope.id === folder.id
+      const childFolders = childrenByParent.get(folder.id) ?? []
+      const directSubscriptions = subscriptionsByFolder.get(folder.id) ?? []
+      const hasChildren = childFolders.length > 0 || directSubscriptions.length > 0
+      const descendants = descendantIDs(folder.id)
+      const unread = props.subscriptions
+        .filter(
+          (subscription) =>
+            subscription.folder_id &&
+            (subscription.folder_id === folder.id || descendants.has(subscription.folder_id)),
+        )
+        .reduce((total, subscription) => total + subscription.unread_count, 0)
+      const expanded = props.openFolders[folder.id] ?? true
+      const indicator = dropIndicator?.id === `folder:${folder.id}` ? dropIndicator.position : null
+      // Block when the dragged folder's own subtree contains this row — that
+      // drop would create a cycle. Self is included via folderDropBlocked.
+      const draggingBlocked =
+        dragging !== null &&
+        dragging.type === "folder" &&
+        folderDropBlocked(dragging.id, folder.id)
+
+      rows.push(
+        <div
+          className={[
+            "folder-tree-row",
+            indicator ? `library-drop-target library-drop-target--${indicator}` : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          key={folder.id}
+          style={{ paddingLeft: `${9 + depth * 14}px` }}
+          draggable
+          onDragStart={(event) => startDrag(event, { type: "folder", id: folder.id })}
+          onDragEnd={clearDragState}
+          onDragOver={(event) => {
+            allowDrop(event)
+            if (!dragging || draggingBlocked) return
+            if (dragging.type === "subscription") {
+              setDropIndicator({ id: `folder:${folder.id}`, position: "inside" })
+              return
+            }
+            const zone = dropZone(event)
+            setDropIndicator({
+              id: `folder:${folder.id}`,
+              position: zone === "merge" ? "inside" : zone,
+            })
+          }}
+          onDragLeave={clearDropIndicator}
+          onDrop={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            clearDragState()
+            const source = dragPayload(event)
+            if (!source || source.id === folder.id) return
+            if (source.type === "subscription") {
+              props.onMoveFeed(source.id, folder.id)
+              return
+            }
+            if (folderDropBlocked(source.id, folder.id)) return
+            const zone = dropZone(event)
+            if (zone === "merge") {
+              props.onMoveFolder(source.id, folder.id)
+              return
+            }
+            const sourceFolder = folderByID.get(source.id)
+            if (sourceFolder && sourceFolder.parent_id !== folder.parent_id) {
+              props.onMoveFolder(source.id, folder.parent_id ?? null)
+              return
+            }
+            props.onReorderFolder(source.id, folder.id, zone === "before")
+          }}
+          onContextMenu={(event) => props.onFolderContextMenu(event, folder)}
+        >
+          <button
+            className={active ? "folder-row folder-row--active" : "folder-row"}
+            type="button"
+            aria-current={active ? "page" : undefined}
+            aria-expanded={hasChildren ? expanded : undefined}
+            onClick={() => props.onScopeChange({ kind: "folder", id: folder.id, title: folder.name })}
           >
+            <FolderOpen aria-hidden="true" weight={active ? "fill" : "regular"} />
+            <span>{folder.name}</span>
+            <span className="folder-row__count">{unread}</span>
+          </button>
+          {hasChildren && (
             <button
-              className={active ? "folder-row folder-row--active" : "folder-row"}
+              className="folder-row__toggle"
               type="button"
-              aria-current={active ? "page" : undefined}
-              aria-expanded={hasChildren ? expanded : undefined}
-              onClick={() => {
-                props.onScopeChange({ kind: "folder", id: folder.id, title: folder.name })
-                if (hasChildren) props.onToggleFolder(folder.id)
-              }}
+              aria-label={expanded ? t("collapseFolder") : t("expandFolder")}
+              title={expanded ? t("collapseFolder") : t("expandFolder")}
+              aria-expanded={expanded}
+              onClick={() => props.onToggleFolder(folder.id)}
             >
-              <FolderOpen aria-hidden="true" weight={active ? "fill" : "regular"} />
-              <span>{folder.name}</span>
-              <span className="folder-row__count">{unread}</span>
+              {expanded ? <CaretDown aria-hidden="true" /> : <CaretRight aria-hidden="true" />}
             </button>
-            {hasChildren && (
-              <button
-                className="folder-row__toggle"
-                type="button"
-                aria-label={expanded ? t("collapseFolder") : t("expandFolder")}
-                title={expanded ? t("collapseFolder") : t("expandFolder")}
-                aria-expanded={expanded}
-                onClick={() => props.onToggleFolder(folder.id)}
-              >
-                {expanded ? <CaretDown aria-hidden="true" /> : <CaretRight aria-hidden="true" />}
-              </button>
-            )}
-          </div>,
-          ...(expanded ? renderLevel(folder.id, depth + 1) : []),
-        ]
-      }),
-    )
+          )}
+        </div>,
+      )
+      // Ancestors guard against folder-parent cycles in stored data — such a
+      // folder (and its subtree) is reachable from neither the root nor any
+      // orphan fallback, so rendering it would loop forever.
+      if (expanded && !ancestors.includes(folder.id)) {
+        rows.push(...renderLevel(folder.id, depth + 1, [...ancestors, folder.id]))
+      }
+    }
     return rows
   }
-  const rows = renderLevel(null, 0)
+
+  const rows = renderLevel(null, 0, [])
+  // Folders whose parent chain never reaches the root (broken reference or a
+  // stored cycle) render once at the bottom so they stay manageable.
+  const renderedIDs = new Set<string>()
   for (const folder of props.folders) {
-    if (rendered.has(folder.id)) continue
-    rows.push(...renderLevel(folder.parent_id ?? null, 0))
+    if (renderedIDs.has(folder.id)) continue
+    let cursor: Folder | undefined = folder
+    const chain: string[] = []
+    while (cursor && cursor.parent_id && !renderedIDs.has(cursor.id) && !chain.includes(cursor.id)) {
+      chain.push(cursor.id)
+      cursor = folderByID.get(cursor.parent_id)
+    }
+    if (cursor && !cursor.parent_id) {
+      // Reachable from the root — already rendered by renderLevel(null).
+      for (const id of chain) renderedIDs.add(id)
+      continue
+    }
+    rows.push(...renderLevel(folder.parent_id ?? null, 0, []))
+    for (const orphan of childrenByParent.get(folder.parent_id ?? null) ?? []) {
+      renderedIDs.add(orphan.id)
+    }
   }
-  return <>{rows}</>
+
+  const rootIndicator = dropIndicator?.id === "root" ? dropIndicator.position : null
+  return (
+    <div
+      className={rootIndicator ? "folder-tree folder-tree--drop-target" : "folder-tree"}
+      onDragOver={(event) => {
+        if (!dragging) return
+        const target = event.target as HTMLElement
+        if (target.closest(".folder-tree-row") || target.closest(".feed-row--nested")) return
+        allowDrop(event)
+        setDropIndicator({ id: "root", position: "inside" })
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node)) return
+        setDropIndicator(null)
+      }}
+      onDrop={(event) => {
+        const source = dragPayload(event)
+        if (!source) return
+        event.preventDefault()
+        clearDragState()
+        if (source.type === "subscription") {
+          const item = props.subscriptions.find((entry) => entry.feed_id === source.id)
+          if (item?.folder_id) props.onMoveFeed(source.id, null)
+          return
+        }
+        const item = folderByID.get(source.id)
+        if (item?.parent_id) props.onMoveFolder(source.id, null)
+      }}
+    >
+      {rows}
+    </div>
+  )
 }

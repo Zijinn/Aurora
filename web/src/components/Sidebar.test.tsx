@@ -14,6 +14,15 @@ const folder: Folder = {
   updated_at: "2026-07-21T00:00:00Z",
 }
 
+const nestedFolder: Folder = {
+  id: "folder-2",
+  parent_id: "folder-1",
+  name: "Papers",
+  position: 0,
+  created_at: "2026-07-21T00:00:00Z",
+  updated_at: "2026-07-21T00:00:00Z",
+}
+
 const subscription: Subscription = {
   id: "subscription-1",
   feed_id: "feed-1",
@@ -66,7 +75,7 @@ describe("Sidebar rename menus", () => {
 })
 
 describe("Sidebar folder interactions", () => {
-  it("toggles a folder when its main row is clicked", () => {
+  it("selects a folder without collapsing it when its main row is clicked", () => {
     const onScopeChange = vi.fn()
     renderSidebar({ onScopeChange })
 
@@ -79,34 +88,166 @@ describe("Sidebar folder interactions", () => {
       id: "folder-1",
       title: "Research",
     })
-    expect(screen.queryByRole("button", { name: "Example feed2" })).not.toBeInTheDocument()
-    fireEvent.click(folderRow)
+    // Clicking the row only selects — the tree stays expanded.
     expect(screen.getByRole("button", { name: "Example feed2" })).toBeInTheDocument()
+  })
+
+  it("collapses and expands via the toggle button only", () => {
+    renderSidebar({})
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse folder" }))
+    expect(screen.queryByRole("button", { name: "Example feed2" })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Expand folder" }))
+    expect(screen.getByRole("button", { name: "Example feed2" })).toBeInTheDocument()
+  })
+
+  it("hides children of a collapsed folder instead of leaking them at the bottom", () => {
+    useReaderStore.setState({ openFolders: { "folder-1": false } })
+    renderSidebar({})
+
+    expect(screen.getByRole("button", { name: "Research2" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Example feed2" })).not.toBeInTheDocument()
+  })
+
+  it("deletes a folder from its context menu", () => {
+    const onDeleteFolder = vi.fn()
+    vi.spyOn(window, "confirm").mockReturnValue(true)
+    renderSidebar({ onDeleteFolder })
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Research2" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete folder" }))
+
+    expect(onDeleteFolder).toHaveBeenCalledWith("folder-1")
+  })
+
+  it("marks a whole folder read from its context menu", () => {
+    const onMarkFolderRead = vi.fn()
+    renderSidebar({ onMarkFolderRead })
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Research2" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all read" }))
+
+    expect(onMarkFolderRead).toHaveBeenCalledWith("folder-1")
+  })
+
+  it("creates a subfolder from the folder context menu", () => {
+    const onCreateSubfolder = vi.fn()
+    vi.spyOn(window, "prompt").mockReturnValue("Papers")
+    renderSidebar({ onCreateSubfolder })
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Research2" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "New subfolder" }))
+
+    expect(onCreateSubfolder).toHaveBeenCalledWith("folder-1", "Papers")
+  })
+})
+
+describe("Sidebar drag and drop", () => {
+  const dataTransfer = () => {
+    const store = new Map<string, string>()
+    return {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: (mime: string, value: string) => store.set(mime, value),
+      getData: (mime: string) => store.get(mime) ?? "",
+    }
+  }
+
+  it("nests a folder into another folder when dropped on its middle", () => {
+    const onMoveFolder = vi.fn()
+    renderSidebar({ onMoveFolder, folders: [folder, nestedFolder] })
+    const transfer = dataTransfer()
+
+    const target = screen.getByRole("button", { name: "Research2" }).closest(".folder-tree-row")!
+    fireEvent.dragStart(screen.getByRole("button", { name: "Papers0" }).closest(".folder-tree-row")!, {
+      dataTransfer: transfer,
+    })
+    // Middle of the row => "inside" drop zone.
+    vi.spyOn(target as HTMLElement, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      height: 36,
+    } as DOMRect)
+    fireEvent.dragOver(target, { dataTransfer: transfer, clientY: 18 })
+    fireEvent.drop(target, { dataTransfer: transfer, clientY: 18 })
+
+    expect(onMoveFolder).toHaveBeenCalledWith("folder-2", "folder-1")
+  })
+
+  it("blocks dropping a folder onto its own descendant", () => {
+    const onMoveFolder = vi.fn()
+    const onReorderFolder = vi.fn()
+    const { container } = renderSidebar({
+      onMoveFolder,
+      onReorderFolder,
+      folders: [folder, nestedFolder],
+    })
+    const transfer = dataTransfer()
+
+    const descendant = screen.getByRole("button", { name: "Papers0" }).closest(".folder-tree-row")!
+    vi.spyOn(descendant as HTMLElement, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      height: 36,
+    } as DOMRect)
+    fireEvent.dragStart(screen.getByRole("button", { name: "Research2" }).closest(".folder-tree-row")!, {
+      dataTransfer: transfer,
+    })
+    fireEvent.dragOver(descendant, { dataTransfer: transfer, clientY: 18 })
+    fireEvent.drop(descendant, { dataTransfer: transfer, clientY: 18 })
+
+    expect(onMoveFolder).not.toHaveBeenCalled()
+    expect(onReorderFolder).not.toHaveBeenCalled()
+    expect(container.querySelector(".library-drop-target")).toBeNull()
+  })
+
+  it("moves a subscription into a folder when dropped on it", () => {
+    const onMoveFeed = vi.fn()
+    renderSidebar({ onMoveFeed })
+    const transfer = dataTransfer()
+
+    const target = screen.getByRole("button", { name: "Research2" }).closest(".folder-tree-row")!
+    fireEvent.dragStart(screen.getByRole("button", { name: "Example feed2" }), {
+      dataTransfer: transfer,
+    })
+    fireEvent.dragOver(target, { dataTransfer: transfer })
+    fireEvent.drop(target, { dataTransfer: transfer })
+
+    expect(onMoveFeed).toHaveBeenCalledWith("feed-1", "folder-1")
   })
 })
 
 function renderSidebar(overrides: {
+  folders?: Folder[]
   onRenameFeed?: (feedID: string, name: string) => void
   onRenameFolder?: (folderID: string, name: string) => void
   onScopeChange?: (scope: LibraryScope) => void
+  onDeleteFolder?: (folderID: string) => void
+  onMarkFolderRead?: (folderID: string) => void
+  onCreateSubfolder?: (parentID: string, name: string) => void
+  onMoveFolder?: (folderID: string, parentID: string | null) => void
+  onMoveFeed?: (feedID: string, folderID: string | null) => void
+  onReorderFolder?: (folderID: string, targetID: string, before: boolean) => void
 }) {
   return render(
     <Sidebar
       scope={{ kind: "all", title: "All feeds" }}
       subscriptions={[subscription]}
-      folders={[folder]}
+      folders={overrides.folders ?? [folder]}
       tags={[]}
       savedFilters={[]}
       onScopeChange={overrides.onScopeChange ?? vi.fn()}
       onAdd={vi.fn()}
       onOrganizeLibrary={vi.fn()}
       onMarkFeedRead={vi.fn()}
+      onMarkFolderRead={overrides.onMarkFolderRead ?? vi.fn()}
       onRefreshFeed={vi.fn()}
-      onMoveFeed={vi.fn()}
+      onMoveFeed={overrides.onMoveFeed ?? vi.fn()}
       onRenameFeed={overrides.onRenameFeed ?? vi.fn()}
       onRenameFolder={overrides.onRenameFolder ?? vi.fn()}
+      onCreateSubfolder={overrides.onCreateSubfolder ?? vi.fn()}
+      onDeleteFolder={overrides.onDeleteFolder ?? vi.fn()}
+      onMoveFolder={overrides.onMoveFolder ?? vi.fn()}
       onMergeFeeds={vi.fn()}
-      onReorderFolder={vi.fn()}
+      onReorderFolder={overrides.onReorderFolder ?? vi.fn()}
       onReorderFeed={vi.fn()}
       onDeleteFeed={vi.fn()}
       onChangeFeedView={vi.fn()}

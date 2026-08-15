@@ -1,4 +1,4 @@
-import { FolderOpen, PencilSimple } from "@phosphor-icons/react"
+import { Check, FolderOpen, FolderPlus, PencilSimple, Trash } from "@phosphor-icons/react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
@@ -10,6 +10,9 @@ interface FolderContextMenuProps {
   position: { x: number; y: number }
   onClose: () => void
   onRename: () => void
+  onNewSubfolder: () => void
+  onMarkAllRead: () => void
+  onDelete: () => void
 }
 
 export function FolderContextMenu(props: FolderContextMenuProps) {
@@ -45,6 +48,11 @@ export function FolderContextMenu(props: FolderContextMenuProps) {
     })
   }, [props.position])
 
+  const run = (action: () => void) => {
+    action()
+    props.onClose()
+  }
+
   const menu = (
     <div
       ref={menuRef}
@@ -64,13 +72,38 @@ export function FolderContextMenu(props: FolderContextMenuProps) {
         className="subscription-context-menu__item"
         type="button"
         role="menuitem"
-        onClick={() => {
-          props.onRename()
-          props.onClose()
-        }}
+        onClick={() => run(props.onRename)}
       >
         <PencilSimple aria-hidden="true" />
         <span>{t("rename")}</span>
+      </button>
+      <button
+        className="subscription-context-menu__item"
+        type="button"
+        role="menuitem"
+        onClick={() => run(props.onNewSubfolder)}
+      >
+        <FolderPlus aria-hidden="true" />
+        <span>{t("newSubfolder")}</span>
+      </button>
+      <button
+        className="subscription-context-menu__item"
+        type="button"
+        role="menuitem"
+        onClick={() => run(props.onMarkAllRead)}
+      >
+        <Check aria-hidden="true" />
+        <span>{t("markAllRead")}</span>
+      </button>
+      <div className="subscription-context-menu__separator" />
+      <button
+        className="subscription-context-menu__item subscription-context-menu__item--danger"
+        type="button"
+        role="menuitem"
+        onClick={() => run(props.onDelete)}
+      >
+        <Trash aria-hidden="true" />
+        <span>{t("deleteFolder")}</span>
       </button>
     </div>
   )
