@@ -2,11 +2,28 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 
-import type { EntryDetail, Tag } from "../api/types"
+import type { AIProfile, EntryDetail, Tag } from "../api/types"
 import { useReaderStore } from "../store/reader"
 import { ReaderPane } from "./ReaderPane"
 
 afterEach(() => cleanup())
+
+const aiProfile: AIProfile = {
+  id: "profile-1",
+  provider: "openai_compatible",
+  name: "Test AI",
+  endpoint: "https://ai.example.com",
+  model: "test-model",
+  enabled: true,
+  allow_private_network: false,
+  remote_content_approved: true,
+  is_default: true,
+  last_used_at: null,
+  last_error_code: null,
+  last_error_message: null,
+  created_at: "2026-07-17T00:00:00Z",
+  updated_at: "2026-07-17T00:00:00Z",
+}
 
 const detail: EntryDetail = {
   id: "entry-1",
@@ -259,6 +276,204 @@ it("creates a persistent highlight from selected article text", async () => {
   await waitFor(() =>
     expect(document.querySelector(".reader-annotation--highlight")).toHaveTextContent("Article"),
   )
+})
+
+it("runs AI quick actions from the toolbar menu without opening the panel", async () => {
+  let summaryPosted = false
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
+    if (url.includes("/entries/entry-1/ai/summary") && init?.method === "POST") {
+      summaryPosted = true
+      return Promise.resolve(
+        jsonResponse({
+          result: {
+            id: "result-1",
+            ai_profile_id: "profile-1",
+            entry_id: "entry-1",
+            operation: "summary",
+            language: "English",
+            input_hash: "hash",
+            result_text: "A concise summary.",
+            usage: { total_tokens: 12 },
+            created_at: "2026-08-15T00:00:00Z",
+          },
+          job: null,
+        }),
+      )
+    }
+    return Promise.resolve(jsonResponse({ items: [] }))
+  })
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
+  })
+  const onToggleAI = vi.fn()
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <ReaderPane
+        summary={detail}
+        detail={detail}
+        isLoading={false}
+        error={null}
+        mutationPending={false}
+        readabilityPending={false}
+        aiProfiles={[aiProfile]}
+        tags={[]}
+        onBack={vi.fn()}
+        onRetry={vi.fn()}
+        onStateChange={vi.fn()}
+        onTagsChange={vi.fn()}
+        onFetchReadability={vi.fn()}
+        onConfigureAI={vi.fn()}
+        onToggleAI={onToggleAI}
+      />
+    </QueryClientProvider>,
+  )
+
+  fireEvent.click(screen.getByRole("button", { name: "AI assistant" }))
+  fireEvent.click(screen.getByRole("menuitem", { name: "Summary" }))
+  await waitFor(() => expect(summaryPosted).toBe(true))
+  expect(onToggleAI).not.toHaveBeenCalled()
+  fetchMock.mockRestore()
+})
+
+it("shows key point results in a toast instead of opening the panel", async () => {
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
+    if (url.includes("/entries/entry-1/ai/key-points") && init?.method === "POST") {
+      return Promise.resolve(
+        jsonResponse({
+          result: {
+            id: "result-2",
+            ai_profile_id: "profile-1",
+            entry_id: "entry-1",
+            operation: "key_points",
+            language: "English",
+            input_hash: "hash",
+            result_text: "Point one\nPoint two",
+            usage: { total_tokens: 20 },
+            created_at: "2026-08-15T00:00:00Z",
+          },
+          job: null,
+        }),
+      )
+    }
+    return Promise.resolve(jsonResponse({ items: [] }))
+  })
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
+  })
+  const onToggleAI = vi.fn()
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <ReaderPane
+        summary={detail}
+        detail={detail}
+        isLoading={false}
+        error={null}
+        mutationPending={false}
+        readabilityPending={false}
+        aiProfiles={[aiProfile]}
+        tags={[]}
+        onBack={vi.fn()}
+        onRetry={vi.fn()}
+        onStateChange={vi.fn()}
+        onTagsChange={vi.fn()}
+        onFetchReadability={vi.fn()}
+        onConfigureAI={vi.fn()}
+        onToggleAI={onToggleAI}
+      />
+    </QueryClientProvider>,
+  )
+
+  fireEvent.click(screen.getByRole("button", { name: "AI assistant" }))
+  fireEvent.click(screen.getByRole("menuitem", { name: "Key points" }))
+  expect(await screen.findByRole("status")).toHaveTextContent("Point one")
+  expect(onToggleAI).not.toHaveBeenCalled()
+  fetchMock.mockRestore()
+})
+
+it("opens the AI panel only from the chat menu item", () => {
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
+  })
+  const onToggleAI = vi.fn()
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <ReaderPane
+        summary={detail}
+        detail={detail}
+        isLoading={false}
+        error={null}
+        mutationPending={false}
+        readabilityPending={false}
+        aiProfiles={[aiProfile]}
+        tags={[]}
+        onBack={vi.fn()}
+        onRetry={vi.fn()}
+        onStateChange={vi.fn()}
+        onTagsChange={vi.fn()}
+        onFetchReadability={vi.fn()}
+        onConfigureAI={vi.fn()}
+        onToggleAI={onToggleAI}
+      />
+    </QueryClientProvider>,
+  )
+
+  fireEvent.click(screen.getByRole("button", { name: "AI assistant" }))
+  expect(screen.getByRole("menuitem", { name: "Summary" })).toBeInTheDocument()
+  expect(onToggleAI).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole("menuitem", { name: "Chat" }))
+  expect(onToggleAI).toHaveBeenCalledTimes(1)
+})
+
+it("asks for AI configuration when no profile is enabled", () => {
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
+  })
+  const onConfigureAI = vi.fn()
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <ReaderPane
+        summary={detail}
+        detail={detail}
+        isLoading={false}
+        error={null}
+        mutationPending={false}
+        readabilityPending={false}
+        aiProfiles={[]}
+        tags={[]}
+        onBack={vi.fn()}
+        onRetry={vi.fn()}
+        onStateChange={vi.fn()}
+        onTagsChange={vi.fn()}
+        onFetchReadability={vi.fn()}
+        onConfigureAI={onConfigureAI}
+        onToggleAI={vi.fn()}
+      />
+    </QueryClientProvider>,
+  )
+
+  fireEvent.click(screen.getByRole("button", { name: "AI assistant" }))
+  fireEvent.click(screen.getByRole("menuitem", { name: "Summary" }))
+  expect(onConfigureAI).toHaveBeenCalledTimes(1)
 })
 
 function renderReader() {

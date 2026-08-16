@@ -4,7 +4,6 @@ import {
   ChatCircle,
   CircleNotch,
   ListBullets,
-  Sparkle,
   Stop,
   Tag,
   TextAlignLeft,
@@ -23,7 +22,9 @@ import {
   startAILibraryChat,
 } from "../api/client"
 import type { AIChatSession, AIOperation, AIProfile, AIResult, ListResponse } from "../api/types"
+import { formatAIResult } from "../lib/ai"
 import { useTranslation } from "../lib/i18n"
+import { AIIcon } from "./AIIcon"
 
 interface AIWorkbenchProps {
   entryID?: string
@@ -31,6 +32,7 @@ interface AIWorkbenchProps {
   profiles: AIProfile[]
   width: number
   contextLabel: string
+  initialMode?: AIOperation | "chat"
   onWidthChange: (width: number) => void
   onClose: () => void
   onConfigure: () => void
@@ -47,7 +49,9 @@ export function AIWorkbench(props: AIWorkbenchProps) {
   const { locale, t } = useTranslation()
   const queryClient = useQueryClient()
   const articleMode = Boolean(props.entryID)
-  const [mode, setMode] = useState<AIOperation | "chat">(articleMode ? "summary" : "chat")
+  const [mode, setMode] = useState<AIOperation | "chat">(
+    props.initialMode ?? (articleMode ? "summary" : "chat"),
+  )
   const [profileID, setProfileID] = useState("")
   const [language, setLanguage] = useState(() => (locale === "zh-CN" ? "Chinese" : "English"))
   const [pendingJobID, setPendingJobID] = useState("")
@@ -210,7 +214,7 @@ export function AIWorkbench(props: AIWorkbenchProps) {
         <div className="ai-workbench__header">
           <span className="ai-workbench__identity">
             <i>
-              <Sparkle weight="fill" />
+              <AIIcon />
             </i>
             <span>
               <strong>Aurora Insight</strong>
@@ -395,18 +399,3 @@ export function AIWorkbench(props: AIWorkbenchProps) {
   )
 }
 
-function formatAIResult(result: AIResult) {
-  if (result.operation !== "academic_tags") return result.result_text
-  try {
-    const value = JSON.parse(result.result_text) as unknown
-    const tags = Array.isArray(value)
-      ? value
-      : value && typeof value === "object" && Array.isArray((value as { tags?: unknown }).tags)
-        ? (value as { tags: unknown[] }).tags
-        : []
-    const names = tags.filter((tag): tag is string => typeof tag === "string")
-    return names.length > 0 ? names.join(" / ") : result.result_text
-  } catch {
-    return result.result_text
-  }
-}

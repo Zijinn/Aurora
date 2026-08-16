@@ -1049,6 +1049,55 @@ button:disabled {
 .reader-back {
   display: none;
 }
+/* Quick AI actions: compact glass menu anchored to the toolbar button. */
+.reader-ai-menu {
+  position: relative;
+}
+.reader-ai-picker {
+  display: grid;
+  width: 200px;
+  gap: 2px;
+}
+.reader-ai-option {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.reader-ai-option:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+.reader-ai-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.reader-ai-option svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent-strong);
+}
+.reader-ai-picker__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+.reader-toast--ai {
+  max-height: 40vh;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
 .reader-scroll {
   min-height: 0;
   flex: 1;
@@ -1408,7 +1457,8 @@ button:disabled {
   inset: 0;
   z-index: 80;
   background: rgb(15 20 18 / 0.34);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(6px) saturate(1.15);
+  -webkit-backdrop-filter: blur(6px) saturate(1.15);
   animation: fade-in 140ms ease-out;
 }
 .dialog-content {
@@ -4337,6 +4387,9 @@ button:disabled {
   max-height: none;
   overflow: hidden;
   background: transparent;
+  border-color: color-mix(in srgb, var(--glass-border) 62%, var(--border-strong));
+  border-radius: 18px;
+  box-shadow: var(--glass-shadow);
 }
 .preferences-layout {
   display: grid;
@@ -4444,7 +4497,9 @@ button:disabled {
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  background: color-mix(in srgb, var(--glass-panel) 92%, var(--surface-raised));
+  background: color-mix(in srgb, var(--glass-panel) 84%, transparent);
+  backdrop-filter: blur(30px) saturate(1.6);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
 }
 .preferences-header {
   min-height: 82px;

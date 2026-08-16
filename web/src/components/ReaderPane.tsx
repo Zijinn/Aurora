@@ -5,10 +5,12 @@ import {
   BookmarkSimple,
   Books,
   Brain,
+  ChatCircle,
   CheckCircle,
   CircleNotch,
   ClockCountdown,
   HighlighterCircle,
+  ListBullets,
   Minus,
   NotePencil,
   Plus,
@@ -35,11 +37,22 @@ import {
   useState,
 } from "react"
 
-import type { AIProfile, Entry, EntryDetail, EntryState, Tag } from "../api/types"
+import type {
+  AIOperation,
+  AIProfile,
+  AIResult,
+  Entry,
+  EntryDetail,
+  EntryState,
+  ListResponse,
+  Tag,
+} from "../api/types"
 import {
   getEntryZoteroStatus,
+  getJob,
   getZoteroStatus,
   listAIResults,
+  runAIOperation,
   saveEntryToZotero,
 } from "../api/client"
 import {
@@ -48,14 +61,24 @@ import {
   type AnnotationStyle,
   type SerializedSelection,
 } from "../lib/annotations"
+import { formatAIResult } from "../lib/ai"
 import { useTranslation } from "../lib/i18n"
 import { formatAuthors, summaryDuplicatesContent } from "../lib/metadata"
 import { useReaderStore } from "../store/reader"
+import { AIIcon } from "./AIIcon"
 
 interface PendingSelection extends SerializedSelection {
   left: number
   top: number
 }
+
+// Quick AI actions run straight from the toolbar menu; only chat opens the panel.
+const aiQuickOperations: Array<{ id: AIOperation; labelKey: string; icon: typeof Brain }> = [
+  { id: "summary", labelKey: "summary", icon: TextAlignLeft },
+  { id: "translation", labelKey: "translate", icon: Translate },
+  { id: "key_points", labelKey: "keyPoints", icon: ListBullets },
+  { id: "academic_tags", labelKey: "automaticTags", icon: TagIcon },
+]
 
 interface ReaderPaneProps {
   summary: Entry | null
@@ -88,6 +111,12 @@ export function ReaderPane(props: ReaderPaneProps) {
   const [lastEntryID, setLastEntryID] = useState<string | undefined>(undefined)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
+  const [aiMenuOpen, setAIMenuOpen] = useState(false)
+  const [aiPendingJobID, setAIPendingJobID] = useState("")
+  const [aiPendingOperation, setAIPendingOperation] = useState<AIOperation | null>(null)
+  const [aiFlash, setAIFlash] = useState<string | null>(null)
+  const aiMenuRef = useRef<HTMLDivElement>(null)
+  const aiFlashTimer = useRef<number | undefined>(undefined)
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null)
   const [noteEditorOpen, setNoteEditorOpen] = useState(false)
   const [noteDraft, setNoteDraft] = useState("")
@@ -128,6 +157,95 @@ export function ReaderPane(props: ReaderPaneProps) {
       queryClient.setQueryData(["zotero-status"], result.target)
     },
   })
+  const activeAIProfile =
+    props.aiProfiles.find((profile) => profile.is_default && profile.enabled) ??
+    props.aiProfiles.find((profile) => profile.enabled)
+  const flashAIResult = useCallback(
+    (operation: AIOperation) => {
+      if (!entry) return
+      const latest = queryClient
+        .getQueryData<ListResponse<AIResult>>(["ai-results", entry.id])
+        ?.items.find((item) => item.operation === operation)
+      if (!latest) return
+      window.clearTimeout(aiFlashTimer.current)
+      setAIFlash(formatAIResult(latest))
+      aiFlashTimer.current = window.setTimeout(() => setAIFlash(null), 12000)
+    },
+    [entry, queryClient],
+  )
+  const aiOperationMutation = useMutation({
+    mutationFn: (operation: AIOperation) =>
+      runAIOperation(entry!.id, operation, activeAIProfile?.id ?? "", translationLanguage),
+    onSuccess: (response, operation) => {
+      setAIPendingOperation(response.job ? operation : null)
+      setAIPendingJobID(response.job?.id ?? "")
+      if (response.result && entry) {
+        queryClient.setQueryData<ListResponse<AIResult>>(["ai-results", entry.id], (current) => ({
+          items: [
+            response.result!,
+            ...(current?.items.filter((item) => item.id !== response.result!.id) ?? []),
+          ],
+        }))
+        void queryClient.invalidateQueries({ queryKey: ["entries"] })
+        void queryClient.invalidateQueries({ queryKey: ["entry", entry.id] })
+        if (operation === "academic_tags") {
+          void queryClient.invalidateQueries({ queryKey: ["tags"] })
+        }
+        if (operation === "key_points" || operation === "academic_tags") {
+          flashAIResult(operation)
+        }
+      }
+    },
+  })
+  const aiJob = useQuery({
+    queryKey: ["job", aiPendingJobID],
+    queryFn: ({ signal }) => getJob(aiPendingJobID, signal),
+    enabled: aiPendingJobID !== "",
+    refetchInterval: (query) =>
+      query.state.data?.state === "queued" || query.state.data?.state === "running" ? 700 : false,
+  })
+  const aiJobActive = aiJob.data?.state === "queued" || aiJob.data?.state === "running"
+  useEffect(() => {
+    if (!aiPendingJobID || !aiJob.data || aiJobActive || aiJob.data.state !== "succeeded") return
+    const operation = aiPendingOperation
+    void (async () => {
+      await queryClient.invalidateQueries({ queryKey: ["ai-results", entry?.id] })
+      void queryClient.invalidateQueries({ queryKey: ["entries"] })
+      void queryClient.invalidateQueries({ queryKey: ["entry", entry?.id] })
+      void queryClient.invalidateQueries({ queryKey: ["ai-usage"] })
+      if (operation === "academic_tags") {
+        void queryClient.invalidateQueries({ queryKey: ["tags"] })
+      }
+      setAIPendingJobID("")
+      setAIPendingOperation(null)
+      if (operation === "key_points" || operation === "academic_tags") {
+        flashAIResult(operation)
+      }
+    })()
+  }, [aiJob.data, aiJobActive, aiPendingJobID, aiPendingOperation, entry?.id, queryClient, flashAIResult])
+  const aiBusy = aiOperationMutation.isPending || aiJobActive
+  const aiError =
+    aiOperationMutation.error ??
+    (aiJob.data?.state === "failed"
+      ? new Error(aiJob.data.error_message ?? t("aiTaskFailed"))
+      : null)
+  const startAIOperation = (operation: AIOperation) => {
+    setAIMenuOpen(false)
+    if (!activeAIProfile) {
+      props.onConfigureAI()
+      return
+    }
+    aiOperationMutation.mutate(operation)
+  }
+  useEffect(() => {
+    if (!aiMenuOpen) return
+    const closeOnOutsidePress = (event: globalThis.PointerEvent) => {
+      if (!aiMenuRef.current?.contains(event.target as Node)) setAIMenuOpen(false)
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePress)
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePress)
+  }, [aiMenuOpen])
+  useEffect(() => () => window.clearTimeout(aiFlashTimer.current), [])
   const translatedContent = aiResults.data?.items.find(
     (result) => result.operation === "translation" && result.language === translationLanguage,
   )?.result_text
@@ -289,16 +407,54 @@ export function ReaderPane(props: ReaderPaneProps) {
           <ArrowLeft />
         </button>
         <div className="reader-toolbar__spacer" />
-        <button
-          className={props.aiOpen ? "icon-button icon-button--active" : "icon-button"}
-          type="button"
-          aria-label={t("aiAssistant")}
-          title={t("aiAssistant")}
-          aria-expanded={props.aiOpen}
-          onClick={props.onToggleAI}
-        >
-          <Brain />
-        </button>
+        <div className="reader-ai-menu" ref={aiMenuRef}>
+          <button
+            className={
+              aiMenuOpen || props.aiOpen ? "icon-button icon-button--active" : "icon-button"
+            }
+            type="button"
+            aria-label={t("aiAssistant")}
+            title={t("aiAssistant")}
+            aria-haspopup="menu"
+            aria-expanded={aiMenuOpen}
+            onClick={() => setAIMenuOpen((open) => !open)}
+          >
+            {aiBusy ? <CircleNotch className="spin" /> : <AIIcon />}
+          </button>
+          {aiMenuOpen && (
+            <div className="reader-tag-picker reader-ai-picker" role="menu" aria-label={t("aiAssistant")}>
+              {aiQuickOperations.map((operation) => {
+                const Icon = operation.icon
+                return (
+                  <button
+                    className="reader-ai-option"
+                    type="button"
+                    role="menuitem"
+                    key={operation.id}
+                    disabled={aiBusy}
+                    onClick={() => startAIOperation(operation.id)}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{t(operation.labelKey)}</span>
+                  </button>
+                )
+              })}
+              <div className="reader-ai-picker__divider" role="separator" />
+              <button
+                className="reader-ai-option"
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setAIMenuOpen(false)
+                  props.onToggleAI?.()
+                }}
+              >
+                <ChatCircle aria-hidden="true" />
+                <span>{t("chat")}</span>
+              </button>
+            </div>
+          )}
+        </div>
         <button
           className={appearanceOpen ? "icon-button icon-button--active" : "icon-button"}
           type="button"
@@ -453,6 +609,16 @@ export function ReaderPane(props: ReaderPaneProps) {
       {zoteroMutation.error && (
         <div className="reader-toast reader-toast--error" role="alert">
           {zoteroMutation.error.message}
+        </div>
+      )}
+      {aiFlash && (
+        <div className="reader-toast reader-toast--ai" role="status">
+          {aiFlash}
+        </div>
+      )}
+      {aiError && (
+        <div className="reader-toast reader-toast--error" role="alert">
+          {aiError.message}
         </div>
       )}
       {appearanceOpen && (

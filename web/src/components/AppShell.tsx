@@ -1028,6 +1028,7 @@ export function AppShell() {
                 profiles={aiProfiles.data?.items ?? []}
                 width={aiPanelWidth}
                 contextLabel={selectedEntryID ? t("privateToArticle") : t("currentLibraryContext")}
+                initialMode="chat"
                 onWidthChange={setAIPanelWidth}
                 onClose={() => setAIOpen(false)}
                 onConfigure={() => setAIProfileOpen(true)}

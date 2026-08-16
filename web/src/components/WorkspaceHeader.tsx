@@ -1,5 +1,4 @@
 import {
-  Brain,
   GearSix,
   MagnifyingGlass,
   Minus,
@@ -15,6 +14,7 @@ import type { LibraryScope } from "../api/types"
 import { controlDesktopWindow, desktopPlatform } from "../lib/desktop"
 import { localizedScopeTitle, useTranslation } from "../lib/i18n"
 import type { ThemeMode } from "../store/reader"
+import { AIIcon } from "./AIIcon"
 
 interface WorkspaceHeaderProps {
   scope: LibraryScope
@@ -73,7 +73,7 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps) {
           aria-expanded={props.aiOpen}
           onClick={props.onAI}
         >
-          <Brain />
+          <AIIcon />
         </button>
         <button
           className="icon-button"
