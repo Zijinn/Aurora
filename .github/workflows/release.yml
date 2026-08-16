@@ -137,8 +137,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/dmg"
           cp -R dist/Aurora.app "$RUNNER_TEMP/dmg/"
           ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
-          hdiutil create -volname Aurora -srcfolder "$RUNNER_TEMP/dmg" -ov -format UDZO "dist/Aurora-$VERSION-macos-universal.dmg"
-          if [[ -n "$MACOS_SIGNING_IDENTITY" ]]; then codesign --timestamp --sign "$MACOS_SIGNING_IDENTITY" "dist/Aurora-$VERSION-macos-universal.dmg"; fi
+          DMG="dist/Aurora-$VERSION-macos-universal.dmg"
+          # hdiutil intermittently fails with "Resource busy" on CI runners; retry a few times.
+          for attempt in 1 2 3 4; do
+            if hdiutil create -volname Aurora -srcfolder "$RUNNER_TEMP/dmg" -ov -format UDZO "$DMG"; then
+              break
+            fi
+            echo "hdiutil create failed (attempt $attempt), retrying in 10s"
+            hdiutil detach /Volumes/Aurora 2>/dev/null || true
+            sleep 10
+          done
+          test -f "$DMG"
+          if [[ -n "$MACOS_SIGNING_IDENTITY" ]]; then codesign --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"; fi
       - uses: actions/upload-artifact@v4
         with:
           name: Aurora-${{ env.VERSION }}-macos-universal
