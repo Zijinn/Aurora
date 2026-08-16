@@ -1,10 +1,46 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { importOPML, restoreBackup } from "./client"
+import { importOPML, markEntriesRead, restoreBackup } from "./client"
 
 afterEach(() => {
   vi.restoreAllMocks()
   localStorage.clear()
+})
+
+describe("markEntriesRead", () => {
+  it("passes the trimmed search query through to the backend filter", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ updated: 3 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+
+    await markEntriesRead({ kind: "unread", title: "Unread" }, "  electron  ")
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/entries/mark-read",
+      expect.objectContaining({
+        body: JSON.stringify({ state: "unread", query: "electron" }),
+      }),
+    )
+  })
+
+  it("omits the query filter when the search box is empty", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ updated: 1 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+
+    await markEntriesRead({ kind: "today", title: "Today" }, "   ")
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as Record<string, string>
+    expect(body.query).toBeUndefined()
+    expect(body.since).toBeDefined()
+  })
 })
 
 describe("desktop file uploads", () => {

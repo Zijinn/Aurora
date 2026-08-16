@@ -59,7 +59,7 @@ func TestFolderCycleAndAutomationRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ApplyRulesToFeed(ctx, db, domain.DefaultProfileID, feed.ID); err != nil {
+	if err := ApplyRulesToFeed(ctx, db, domain.DefaultProfileID, feed.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	page, err := ListEntries(ctx, db, domain.EntryFilter{ProfileID: domain.DefaultProfileID, FeedID: feed.ID, Limit: 10})

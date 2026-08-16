@@ -226,9 +226,12 @@ func MarkSyncStarted(ctx context.Context, db *sql.DB, accountID string, startedA
 }
 
 func CompleteSync(ctx context.Context, db *sql.DB, accountID, cursor string, completedAt time.Time) error {
+	// next_sync_at must stay RFC3339: datetime() emits a space-separated value
+	// that sorts before every RFC3339 string on the same date, which makes the
+	// account immediately due again after every successful sync.
 	result, err := db.ExecContext(ctx, `
 		UPDATE sync_accounts SET cursor_json = ?, last_sync_at = ?,
-			next_sync_at = datetime(?, '+' || sync_interval_minutes || ' minutes'),
+			next_sync_at = strftime('%Y-%m-%dT%H:%M:%fZ', ?, '+' || sync_interval_minutes || ' minutes'),
 			last_error_code = NULL, last_error_message = NULL, updated_at = ?
 		WHERE id = ?`, cursor, formatTime(completedAt), formatTime(completedAt), formatTime(completedAt), accountID)
 	if err != nil {

@@ -7,7 +7,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import type { Entry, LibraryScope, Subscription, ViewMode } from "../api/types"
 import { localizedScopeTitle, useTranslation, type Locale, type Translator } from "../lib/i18n"
@@ -59,7 +59,14 @@ export function TimelinePane(props: TimelinePaneProps) {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => (viewMode === "compact" ? 64 : 104),
     overscan: 7,
+    getItemKey: (index) => props.entries[index]?.id ?? index,
   })
+  // Keep the selected row in view when j/k (or any other source) moves the
+  // selection somewhere off screen.
+  useEffect(() => {
+    const index = props.entries.findIndex((entry) => entry.id === props.selectedEntryID)
+    if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" })
+  }, [props.entries, props.selectedEntryID, virtualizer])
   const virtualItems = virtualizer.getVirtualItems()
   const onScroll = () => {
     const element = scrollRef.current
@@ -263,6 +270,11 @@ function TimelineEntry({
           </p>
         )}
         {displayAuthors && <span className="timeline-entry__author">{displayAuthors}</span>}
+        {entry.doi && (
+          <span className="timeline-entry__doi" title={entry.doi}>
+            DOI
+          </span>
+        )}
       </button>
       <button
         className={entry.state.is_starred ? "entry-star entry-star--active" : "entry-star"}

@@ -124,6 +124,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.jobs.StartFeedScheduler(ctx, time.Minute)
+	s.jobs.StartCleanupScheduler(ctx, 24*time.Hour)
 	if s.syncs != nil {
 		s.jobs.StartSyncScheduler(ctx, time.Minute)
 	}
@@ -132,6 +133,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 func (s *Server) ConfigureSync(box *secretbox.Box) {
 	syncService := service.NewSyncService(s.db, s.feeds, box)
+	syncService.SetMaintenance(s.jobs)
 	s.syncs = syncService
 	s.jobs.Register("sync.account", func(ctx context.Context, current domain.Job, progress job.ProgressFunc) error {
 		var payload struct {
@@ -144,7 +146,7 @@ func (s *Server) ConfigureSync(box *secretbox.Box) {
 		if payload.AccountID == "" {
 			return errors.New("sync account ID is required")
 		}
-		result, err := syncService.Run(ctx, payload.AccountID, service.SyncProgressFunc(progress), payload.Mode)
+		result, err := syncService.Run(service.WithSyncJobID(ctx, current.ID), payload.AccountID, service.SyncProgressFunc(progress), payload.Mode)
 		if err == nil {
 			s.events.Publish("sync.completed", map[string]any{"account_id": payload.AccountID, "result": result})
 			if result.Action == "pull" {
@@ -285,7 +287,7 @@ func (s *Server) web(w http.ResponseWriter, r *http.Request) {
 func (s *Server) requestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := r.Header.Get("X-Request-ID")
-		if requestID == "" || len(requestID) > 128 {
+		if requestID == "" || len(requestID) > 128 || !validRequestID(requestID) {
 			var bytes [16]byte
 			if _, err := rand.Read(bytes[:]); err != nil {
 				requestID = time.Now().UTC().Format("20060102150405.000000000")
@@ -297,6 +299,16 @@ func (s *Server) requestID(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), requestIDKey{}, requestID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func validRequestID(value string) bool {
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (s *Server) requestLog(next http.Handler) http.Handler {

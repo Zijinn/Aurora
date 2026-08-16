@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Zijinn/Aurora/internal/domain"
+	"github.com/Zijinn/Aurora/internal/job"
 	feedcore "github.com/Zijinn/Aurora/internal/feed"
 	"github.com/Zijinn/Aurora/internal/opml"
 	"github.com/Zijinn/Aurora/internal/service"
@@ -34,9 +35,15 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/entries", s.listEntries)
 	mux.HandleFunc("POST /api/v1/entries/mark-read", s.markEntriesRead)
 	mux.HandleFunc("GET /api/v1/entries/{entryID}", s.getEntry)
+	mux.HandleFunc("GET /api/v1/preferences", s.listPreferences)
+	mux.HandleFunc("PUT /api/v1/preferences/{key}", s.putPreference)
 	mux.HandleFunc("PATCH /api/v1/entries/{entryID}/state", s.updateEntryState)
 	mux.HandleFunc("POST /api/v1/entries/{entryID}/readability", s.fetchReadability)
 	mux.HandleFunc("PUT /api/v1/entries/{entryID}/tags", s.setEntryTags)
+	mux.HandleFunc("GET /api/v1/entries/{entryID}/annotations", s.listEntryAnnotations)
+	mux.HandleFunc("POST /api/v1/entries/{entryID}/annotations", s.createEntryAnnotation)
+	mux.HandleFunc("PATCH /api/v1/entries/{entryID}/annotations/{annotationID}", s.updateEntryAnnotation)
+	mux.HandleFunc("DELETE /api/v1/entries/{entryID}/annotations/{annotationID}", s.deleteEntryAnnotation)
 	mux.HandleFunc("GET /api/v1/tags", s.listTags)
 	mux.HandleFunc("POST /api/v1/tags", s.createTag)
 	mux.HandleFunc("DELETE /api/v1/tags/{tagID}", s.deleteTag)
@@ -234,7 +241,7 @@ func (s *Server) refreshFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	queued, err := s.jobs.EnqueueFeedRefresh(r.Context(), r.PathValue("feedID"))
 	if err != nil {
-		if strings.Contains(err.Error(), "already queued") {
+		if errors.Is(err, job.ErrJobAlreadyQueued) {
 			writeProblem(w, r, http.StatusConflict, "refresh_pending", "Refresh already pending", err.Error())
 			return
 		}
@@ -277,22 +284,30 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_state", "Invalid state filter", "State must be all, unread, starred, or read_later.")
 		return
 	}
+	contentKind := r.URL.Query().Get("content_kind")
+	switch contentKind {
+	case "", domain.ContentKindGeneral, domain.ContentKindLiterature, domain.ContentKindVideo, domain.ContentKindSocial:
+	default:
+		writeProblem(w, r, http.StatusBadRequest, "invalid_content_kind", "Invalid content kind", "Content kind must be general, literature, video, or social.")
+		return
+	}
 	since, err := parseSince(r.URL.Query().Get("since"))
 	if err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_since", "Invalid time boundary", err.Error())
 		return
 	}
 	page, err := storage.ListEntries(r.Context(), s.db, domain.EntryFilter{
-		ProfileID:  domain.DefaultProfileID,
-		FeedID:     r.URL.Query().Get("feed_id"),
-		FolderID:   r.URL.Query().Get("folder_id"),
-		TagID:      r.URL.Query().Get("tag_id"),
-		State:      state,
-		Query:      r.URL.Query().Get("query"),
-		Cursor:     r.URL.Query().Get("cursor"),
-		Limit:      limit,
-		Since:      since,
-		AILanguage: r.URL.Query().Get("ai_language"),
+		ProfileID:   domain.DefaultProfileID,
+		FeedID:      r.URL.Query().Get("feed_id"),
+		FolderID:    r.URL.Query().Get("folder_id"),
+		TagID:       r.URL.Query().Get("tag_id"),
+		State:       state,
+		Query:       r.URL.Query().Get("query"),
+		ContentKind: contentKind,
+		Cursor:      r.URL.Query().Get("cursor"),
+		Limit:       limit,
+		Since:       since,
+		AILanguage:  r.URL.Query().Get("ai_language"),
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "cursor") {
@@ -307,12 +322,13 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) markEntriesRead(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		FeedID   string     `json:"feed_id"`
-		FolderID string     `json:"folder_id"`
-		TagID    string     `json:"tag_id"`
-		State    string     `json:"state"`
-		Query    string     `json:"query"`
-		Since    *time.Time `json:"since"`
+		FeedID      string     `json:"feed_id"`
+		FolderID    string     `json:"folder_id"`
+		TagID       string     `json:"tag_id"`
+		State       string     `json:"state"`
+		Query       string     `json:"query"`
+		ContentKind string     `json:"content_kind"`
+		Since       *time.Time `json:"since"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
@@ -324,7 +340,7 @@ func (s *Server) markEntriesRead(w http.ResponseWriter, r *http.Request) {
 	}
 	count, err := storage.MarkEntriesRead(r.Context(), s.db, domain.EntryFilter{
 		ProfileID: domain.DefaultProfileID, FeedID: request.FeedID, FolderID: request.FolderID,
-		TagID: request.TagID, State: request.State, Query: request.Query, Since: request.Since,
+		TagID: request.TagID, State: request.State, Query: request.Query, ContentKind: request.ContentKind, Since: request.Since,
 	})
 	if err != nil {
 		s.internalError(w, r, err)
@@ -370,6 +386,104 @@ func (s *Server) updateEntryState(w http.ResponseWriter, r *http.Request) {
 	}
 	s.events.Publish("entry.state", map[string]any{"entry_id": r.PathValue("entryID"), "state": state})
 	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) listPreferences(w http.ResponseWriter, r *http.Request) {
+	items, err := storage.ListPreferences(r.Context(), s.db, domain.DefaultProfileID)
+	if err != nil {
+		s.storageError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) putPreference(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	if !storage.IsPreferenceKey(key) {
+		writeProblem(w, r, http.StatusBadRequest, "unknown_preference", "Unknown preference", "This preference key is not supported.")
+		return
+	}
+	var value json.RawMessage
+	if err := decodeJSON(w, r, &value); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		return
+	}
+	if key == storage.PreferenceRetentionDays {
+		var days int
+		if err := json.Unmarshal(value, &days); err != nil || days < 0 || days > 3650 {
+			writeProblem(w, r, http.StatusBadRequest, "invalid_preference", "Invalid preference", "retention_days must be an integer between 0 (keep forever) and 3650.")
+			return
+		}
+	}
+	if err := storage.SetPreference(r.Context(), s.db, domain.DefaultProfileID, key, value); err != nil {
+		s.storageError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]json.RawMessage{key: value})
+}
+
+func (s *Server) listEntryAnnotations(w http.ResponseWriter, r *http.Request) {
+	annotations, err := storage.ListEntryAnnotations(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("entryID"))
+	if err != nil {
+		s.storageError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": annotations})
+}
+
+func (s *Server) createEntryAnnotation(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Style  string `json:"style"`
+		Quote  string `json:"quote"`
+		Prefix string `json:"prefix"`
+		Suffix string `json:"suffix"`
+		Note   string `json:"note"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		return
+	}
+	if request.Style == "" {
+		request.Style = "highlight"
+	}
+	annotation, err := storage.CreateEntryAnnotation(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("entryID"), domain.EntryAnnotation{
+		Style: request.Style, Quote: request.Quote, Prefix: request.Prefix, Suffix: request.Suffix, Note: request.Note,
+	})
+	if err != nil {
+		s.storageError(w, r, err)
+		return
+	}
+	s.events.Publish("entry.annotations", map[string]any{"entry_id": r.PathValue("entryID")})
+	writeJSON(w, http.StatusCreated, annotation)
+}
+
+func (s *Server) updateEntryAnnotation(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Style *string `json:"style"`
+		Note  *string `json:"note"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		return
+	}
+	annotation, err := storage.UpdateEntryAnnotation(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("entryID"), r.PathValue("annotationID"), domain.EntryAnnotationPatch{
+		Style: request.Style, Note: request.Note,
+	})
+	if err != nil {
+		s.storageError(w, r, err)
+		return
+	}
+	s.events.Publish("entry.annotations", map[string]any{"entry_id": r.PathValue("entryID")})
+	writeJSON(w, http.StatusOK, annotation)
+}
+
+func (s *Server) deleteEntryAnnotation(w http.ResponseWriter, r *http.Request) {
+	if err := storage.DeleteEntryAnnotation(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("entryID"), r.PathValue("annotationID")); err != nil {
+		s.storageError(w, r, err)
+		return
+	}
+	s.events.Publish("entry.annotations", map[string]any{"entry_id": r.PathValue("entryID")})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) fetchReadability(w http.ResponseWriter, r *http.Request) {
@@ -487,12 +601,17 @@ func (s *Server) exportBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 512<<20)
 	decoder := json.NewDecoder(r.Body)
 	var document storage.BackupDocument
 	if err := decoder.Decode(&document); err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_backup", "Invalid backup", err.Error())
 		return
 	}
+	// Quiesce the job manager so in-flight refreshes and AI tasks do not write
+	// into tables being replaced.
+	s.jobs.EnterMaintenance("")
+	defer s.jobs.ExitMaintenance()
 	if err := storage.RestoreBackup(r.Context(), s.db, document); err != nil {
 		writeProblem(w, r, http.StatusUnprocessableEntity, "restore_failed", "Backup could not be restored", err.Error())
 		return
@@ -579,6 +698,11 @@ func parseSince(raw string) (*time.Time, error) {
 func (s *Server) storageError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, storage.ErrNotFound) {
 		writeProblem(w, r, http.StatusNotFound, "not_found", "Resource not found", "The requested resource does not exist.")
+		return
+	}
+	var annotationValidation *storage.AnnotationValidationError
+	if errors.As(err, &annotationValidation) {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_annotation", "Invalid annotation", annotationValidation.Reason)
 		return
 	}
 	s.internalError(w, r, err)

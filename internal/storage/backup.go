@@ -37,7 +37,7 @@ type BackupValue struct {
 
 var backupTables = []string{
 	"profiles", "devices", "folders", "feeds", "subscriptions", "entries",
-	"entry_contents", "entry_states", "tags", "feed_tags", "entry_tags",
+	"entry_contents", "entry_states", "entry_annotations", "tags", "feed_tags", "entry_tags",
 	"jobs", "job_attempts", "rules", "sync_accounts", "sync_mappings",
 	"ai_profiles", "ai_results", "ai_chat_sessions", "ai_chat_messages",
 	"ai_usage",
@@ -45,26 +45,37 @@ var backupTables = []string{
 }
 
 func ExportBackup(ctx context.Context, db *sql.DB) (BackupDocument, error) {
+	// A single read transaction gives every table the same snapshot; without
+	// it, concurrent feed/job writes could leak dangling references into the
+	// backup.
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return BackupDocument{}, fmt.Errorf("begin backup snapshot: %w", err)
+	}
+	defer tx.Rollback()
 	document := BackupDocument{
 		Format: BackupFormat, Version: 1, CreatedAt: time.Now().UTC(),
 		Tables: make([]BackupTable, 0, len(backupTables)),
 	}
-	if err := db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&document.SchemaVersion); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&document.SchemaVersion); err != nil {
 		return BackupDocument{}, fmt.Errorf("read schema version: %w", err)
 	}
 	for _, tableName := range backupTables {
-		exists, err := tableExists(ctx, db, tableName)
+		exists, err := tableExists(ctx, tx, tableName)
 		if err != nil {
 			return BackupDocument{}, err
 		}
 		if !exists {
 			continue
 		}
-		table, err := exportTable(ctx, db, tableName)
+		table, err := exportTable(ctx, tx, tableName)
 		if err != nil {
 			return BackupDocument{}, err
 		}
 		document.Tables = append(document.Tables, table)
+	}
+	if err := tx.Commit(); err != nil {
+		return BackupDocument{}, fmt.Errorf("commit backup snapshot: %w", err)
 	}
 	return document, nil
 }
@@ -179,13 +190,33 @@ func RestoreBackup(ctx context.Context, db *sql.DB, document BackupDocument) err
 		formatTime(time.Now().UTC()), formatTime(time.Now().UTC())); err != nil {
 		return fmt.Errorf("recover restored jobs: %w", err)
 	}
+	violations, err := countForeignKeyViolations(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if violations > 0 {
+		return fmt.Errorf("backup restore would leave %d foreign key violations", violations)
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit backup restore: %w", err)
 	}
 	return nil
 }
 
-func exportTable(ctx context.Context, db *sql.DB, name string) (BackupTable, error) {
+func countForeignKeyViolations(ctx context.Context, tx *sql.Tx) (int, error) {
+	rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return 0, fmt.Errorf("foreign key check: %w", err)
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		count++
+	}
+	return count, rows.Err()
+}
+
+func exportTable(ctx context.Context, db queryer, name string) (BackupTable, error) {
 	columns, err := tableColumns(ctx, db, name)
 	if err != nil {
 		return BackupTable{}, err
@@ -268,7 +299,12 @@ func (value BackupValue) decode() (any, error) {
 	}
 }
 
-func tableColumns(ctx context.Context, db *sql.DB, name string) ([]string, error) {
+type queryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func tableColumns(ctx context.Context, db queryer, name string) ([]string, error) {
 	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+quoteIdentifier(name)+")")
 	if err != nil {
 		return nil, err
@@ -300,7 +336,7 @@ func scanTableColumns(rows *sql.Rows, name string) ([]string, error) {
 	return columns, rows.Err()
 }
 
-func tableExists(ctx context.Context, db *sql.DB, name string) (bool, error) {
+func tableExists(ctx context.Context, db queryer, name string) (bool, error) {
 	var exists bool
 	err := db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?)", name).Scan(&exists)
 	return exists, err

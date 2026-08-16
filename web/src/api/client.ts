@@ -30,6 +30,7 @@ import type {
   EntryZoteroStatus,
 } from "./types"
 import { entryDetailCacheKey, entryPageCacheKey, readCache, writeCache } from "../offline/database"
+import type { ReaderAnnotation } from "../lib/annotations"
 
 interface Problem {
   title?: string
@@ -488,6 +489,83 @@ export function setEntryTags(entryID: string, tagIDs: string[]): Promise<{ tag_i
   })
 }
 
+interface ServerAnnotation {
+  id: string
+  entry_id: string
+  style: ReaderAnnotation["style"]
+  quote: string
+  prefix: string
+  suffix: string
+  note: string
+  created_at: string
+  updated_at: string
+}
+
+function toReaderAnnotation(annotation: ServerAnnotation): ReaderAnnotation {
+  return {
+    id: annotation.id,
+    entryID: annotation.entry_id,
+    style: annotation.style,
+    quote: annotation.quote,
+    prefix: annotation.prefix,
+    suffix: annotation.suffix,
+    note: annotation.note,
+    createdAt: annotation.created_at,
+  }
+}
+
+export async function listEntryAnnotations(
+  entryID: string,
+  signal?: AbortSignal,
+): Promise<ReaderAnnotation[]> {
+  const response = await request<ListResponse<ServerAnnotation>>(
+    `/api/v1/entries/${encodeURIComponent(entryID)}/annotations`,
+    { signal },
+  )
+  return response.items.map(toReaderAnnotation)
+}
+
+export async function createEntryAnnotation(
+  entryID: string,
+  input: { style: ReaderAnnotation["style"]; quote: string; prefix: string; suffix: string; note?: string },
+): Promise<ReaderAnnotation> {
+  const created = await request<ServerAnnotation>(
+    `/api/v1/entries/${encodeURIComponent(entryID)}/annotations`,
+    { method: "POST", body: JSON.stringify(input) },
+  )
+  return toReaderAnnotation(created)
+}
+
+export async function updateEntryAnnotation(
+  entryID: string,
+  annotationID: string,
+  patch: { style?: ReaderAnnotation["style"]; note?: string },
+): Promise<ReaderAnnotation> {
+  const updated = await request<ServerAnnotation>(
+    `/api/v1/entries/${encodeURIComponent(entryID)}/annotations/${encodeURIComponent(annotationID)}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  )
+  return toReaderAnnotation(updated)
+}
+
+export function deleteEntryAnnotation(entryID: string, annotationID: string): Promise<void> {
+  return request<void>(
+    `/api/v1/entries/${encodeURIComponent(entryID)}/annotations/${encodeURIComponent(annotationID)}`,
+    { method: "DELETE" },
+  )
+}
+
+export function listPreferences(signal?: AbortSignal): Promise<{ items: Record<string, unknown> }> {
+  return request<{ items: Record<string, unknown> }>("/api/v1/preferences", { signal })
+}
+
+export function putPreference(key: string, value: unknown): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(`/api/v1/preferences/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify(value),
+  })
+}
+
 export function addFeed(input: { url: string; folder_id?: string | null }): Promise<Feed> {
   return request<Feed>("/api/v1/feeds", { method: "POST", body: JSON.stringify(input) })
 }
@@ -523,10 +601,12 @@ export function updateFeed(
   })
 }
 
-export function markEntriesRead(scope: LibraryScope): Promise<{ updated: number }> {
+export function markEntriesRead(scope: LibraryScope, query = ""): Promise<{ updated: number }> {
+  const filters = libraryScopeFilters(scope)
+  if (query.trim()) filters.query = query.trim()
   return request<{ updated: number }>("/api/v1/entries/mark-read", {
     method: "POST",
-    body: JSON.stringify(libraryScopeFilters(scope)),
+    body: JSON.stringify(filters),
   })
 }
 
@@ -536,6 +616,8 @@ function libraryScopeFilters(scope: LibraryScope): Record<string, string> {
       return { since: startOfToday().toISOString() }
     case "unread":
       return { state: "unread" }
+    case "literature":
+      return { content_kind: "literature" }
     case "saved":
       return { state: "starred" }
     case "feed":

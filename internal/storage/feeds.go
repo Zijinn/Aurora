@@ -15,7 +15,7 @@ var ErrNotFound = errors.New("not found")
 
 const feedColumns = `
 	id, url, canonical_url, site_url, title, description, icon_url, format,
-	etag, last_modified, last_checked_at, last_success_at, next_check_at,
+	content_kind, etag, last_modified, last_checked_at, last_success_at, next_check_at,
 	failure_count, last_error_code, last_error_message, created_at, updated_at`
 
 func GetFeed(ctx context.Context, db *sql.DB, feedID string) (domain.Feed, error) {
@@ -83,12 +83,13 @@ func SaveNewFeed(
 	feedID := uuid.NewString()
 	now := time.Now().UTC()
 	nextCheck := now.Add(30 * time.Minute)
+	contentKind := domain.DetectContentKind(canonicalURL, parsed.SiteURL, parsed.Entries)
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO feeds (
 			id, url, canonical_url, site_url, title, description, icon_url, format,
-			etag, last_modified, last_checked_at, last_success_at, next_check_at,
+			content_kind, etag, last_modified, last_checked_at, last_success_at, next_check_at,
 			failure_count, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 		ON CONFLICT(canonical_url) DO UPDATE SET
 			url = excluded.url,
 			site_url = excluded.site_url,
@@ -96,6 +97,7 @@ func SaveNewFeed(
 			description = excluded.description,
 			icon_url = excluded.icon_url,
 			format = excluded.format,
+			content_kind = CASE WHEN excluded.content_kind != 'general' THEN excluded.content_kind ELSE feeds.content_kind END,
 			etag = excluded.etag,
 			last_modified = excluded.last_modified,
 			last_checked_at = excluded.last_checked_at,
@@ -107,7 +109,7 @@ func SaveNewFeed(
 			updated_at = excluded.updated_at`,
 		feedID, sourceURL, canonicalURL, nullable(parsed.SiteURL), parsed.Title,
 		nullable(parsed.Description), nullable(parsed.IconURL), parsed.Format,
-		nullable(etag), nullable(lastModified), formatTime(now), formatTime(now), formatTime(nextCheck),
+		contentKind, nullable(etag), nullable(lastModified), formatTime(now), formatTime(now), formatTime(nextCheck),
 		formatTime(now), formatTime(now),
 	)
 	if err != nil {
@@ -152,42 +154,45 @@ func SaveFeedRefresh(
 	parsed domain.ParsedFeed,
 	etag *string,
 	lastModified *string,
-) (int, error) {
+) ([]string, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin refresh transaction: %w", err)
+		return nil, fmt.Errorf("begin refresh transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	now := time.Now().UTC()
 	nextCheck, err := nextFeedCheck(ctx, tx, feedID, now)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
+	contentKind := domain.DetectContentKind("", parsed.SiteURL, parsed.Entries)
 	result, err := tx.ExecContext(ctx, `
 		UPDATE feeds SET
 			site_url = ?, title = ?, description = ?, icon_url = ?, format = ?,
+			content_kind = CASE WHEN ? != 'general' THEN ? ELSE content_kind END,
 			etag = ?, last_modified = ?, last_checked_at = ?, last_success_at = ?,
 			next_check_at = ?, failure_count = 0, last_error_code = NULL,
 			last_error_message = NULL, updated_at = ?
 		WHERE id = ?`,
 		nullable(parsed.SiteURL), parsed.Title, nullable(parsed.Description), nullable(parsed.IconURL), parsed.Format,
+		contentKind, contentKind,
 		nullable(etag), nullable(lastModified), formatTime(now), formatTime(now), formatTime(nextCheck), formatTime(now), feedID,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("update feed refresh: %w", err)
+		return nil, fmt.Errorf("update feed refresh: %w", err)
 	}
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
-		return 0, ErrNotFound
+		return nil, ErrNotFound
 	}
 
 	inserted, err := upsertEntries(ctx, tx, profileID, feedID, parsed.Entries, now)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit feed refresh: %w", err)
+		return nil, fmt.Errorf("commit feed refresh: %w", err)
 	}
 	return inserted, nil
 }
@@ -271,15 +276,15 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 	rows, err := db.QueryContext(ctx, `
 		SELECT s.id, s.profile_id, s.feed_id, s.folder_id, s.position,
 			COALESCE(s.title_override, f.title), f.icon_url, f.url, f.site_url,
-			COUNT(CASE WHEN e.id IS NOT NULL AND COALESCE(es.is_read, 0) = 0 THEN 1 END),
+			(SELECT COUNT(*) FROM entries e
+				LEFT JOIN entry_states es ON es.entry_id = e.id AND es.profile_id = s.profile_id
+				WHERE e.feed_id = s.feed_id AND COALESCE(es.is_read, 0) = 0),
 			s.view_mode, s.refresh_policy, s.refresh_interval_minutes,
+			f.failure_count, f.last_error_code, f.last_error_message, f.last_success_at,
 			s.hide_from_timeline, s.created_at, s.updated_at
 		FROM subscriptions s
 		JOIN feeds f ON f.id = s.feed_id
-		LEFT JOIN entries e ON e.feed_id = f.id
-		LEFT JOIN entry_states es ON es.entry_id = e.id AND es.profile_id = s.profile_id
 		WHERE s.profile_id = ?
-		GROUP BY s.id
 		ORDER BY COALESCE(s.folder_id, ''), s.position, COALESCE(s.title_override, f.title) COLLATE NOCASE, s.id`, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("list subscriptions: %w", err)
@@ -289,7 +294,7 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 	items := make([]domain.Subscription, 0)
 	for rows.Next() {
 		var item domain.Subscription
-		var folderID, iconURL, siteURL sql.NullString
+		var folderID, iconURL, siteURL, lastErrorCode, lastErrorMessage, lastSuccessAt sql.NullString
 		var feedURL string
 		var hidden int
 		var createdAt, updatedAt string
@@ -297,6 +302,7 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 			&item.ID, &item.ProfileID, &item.FeedID, &folderID, &item.Position,
 			&item.Title, &iconURL, &feedURL, &siteURL, &item.UnreadCount,
 			&item.ViewMode, &item.RefreshPolicy, &item.RefreshIntervalMinutes,
+			&item.FailureCount, &lastErrorCode, &lastErrorMessage, &lastSuccessAt,
 			&hidden, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan subscription: %w", err)
@@ -305,6 +311,9 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 		item.IconURL = stringPointer(iconURL)
 		item.FeedURL = feedURL
 		item.SiteURL = stringPointer(siteURL)
+		item.LastErrorCode = stringPointer(lastErrorCode)
+		item.LastErrorMessage = stringPointer(lastErrorMessage)
+		item.LastSuccessAt = stringPointer(lastSuccessAt)
 		item.HideFromTimeline = hidden == 1
 		item.CreatedAt = parseTime(createdAt)
 		item.UpdatedAt = parseTime(updatedAt)
@@ -371,8 +380,8 @@ func ListDueFeeds(ctx context.Context, db *sql.DB, limit int) ([]domain.Feed, er
 	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT `+feedColumns+` FROM feeds
-		WHERE next_check_at IS NULL OR next_check_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-		ORDER BY COALESCE(next_check_at, created_at), id LIMIT ?`, limit)
+		WHERE next_check_at IS NULL OR next_check_at <= ?
+		ORDER BY COALESCE(next_check_at, created_at), id LIMIT ?`, formatTime(time.Now().UTC()), limit)
 	if err != nil {
 		return nil, fmt.Errorf("list due feeds: %w", err)
 	}
@@ -433,14 +442,45 @@ func rescheduleFeed(ctx context.Context, queryer interface {
 	return nil
 }
 
-func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, entries []domain.ParsedEntry, now time.Time) (int, error) {
-	inserted := 0
+func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, entries []domain.ParsedEntry, now time.Time) ([]string, error) {
+	inserted := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		entryID, exists, err := findEntryID(ctx, tx, feedID, entry)
 		if err != nil {
-			return 0, err
+			return nil, err
+		}
+		if exists {
+			// Skip the write/FTS churn when nothing meaningful changed; the
+			// content hash covers guid, canonical URL, title and body text.
+			var storedHash, storedPublished string
+			var storedAuthor, storedSummary sql.NullString
+			err := tx.QueryRowContext(ctx,
+				"SELECT content_hash, author, summary, published_at FROM entries WHERE id = ?", entryID).
+				Scan(&storedHash, &storedAuthor, &storedSummary, &storedPublished)
+			if err != nil {
+				return nil, fmt.Errorf("read stored entry: %w", err)
+			}
+			if storedHash == entry.ContentHash &&
+				nullStringEqual(storedAuthor, entry.Author) &&
+				nullStringEqual(storedSummary, entry.Summary) &&
+				storedPublished == formatTime(entry.PublishedAt) {
+				continue
+			}
 		}
 		if !exists {
+			// The same paper can arrive through several feeds (journal +
+			// aggregator); DOI identity wins over per-feed identity, so keep
+			// only the first copy.
+			if entry.DOI != nil && *entry.DOI != "" {
+				var existingDOIEntry string
+				lookupErr := tx.QueryRowContext(ctx, "SELECT id FROM entries WHERE doi = ? LIMIT 1", *entry.DOI).Scan(&existingDOIEntry)
+				if lookupErr == nil {
+					continue
+				}
+				if !errors.Is(lookupErr, sql.ErrNoRows) {
+					return nil, fmt.Errorf("check entry DOI: %w", lookupErr)
+				}
+			}
 			entryID = uuid.NewString()
 			_, err = tx.ExecContext(ctx, `
 				INSERT INTO entries (
@@ -454,15 +494,15 @@ func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, en
 				nullable(entry.Language), nullable(entry.DOI), formatTime(now), formatTime(now),
 			)
 			if err != nil {
-				return 0, fmt.Errorf("insert entry: %w", err)
+				return nil, fmt.Errorf("insert entry: %w", err)
 			}
 			_, err = tx.ExecContext(ctx, `
 				INSERT INTO entry_states (profile_id, entry_id, updated_at) VALUES (?, ?, ?)`,
 				profileID, entryID, formatTime(now))
 			if err != nil {
-				return 0, fmt.Errorf("insert entry state: %w", err)
+				return nil, fmt.Errorf("insert entry state: %w", err)
 			}
-			inserted++
+			inserted = append(inserted, entryID)
 		} else {
 			_, err = tx.ExecContext(ctx, `
 				UPDATE entries SET guid = ?, canonical_url = ?, title = ?, author = ?, summary = ?,
@@ -473,7 +513,7 @@ func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, en
 				nullable(entry.VideoURL), nullable(entry.Language), nullable(entry.DOI), formatTime(now), entryID,
 			)
 			if err != nil {
-				return 0, fmt.Errorf("update entry: %w", err)
+				return nil, fmt.Errorf("update entry: %w", err)
 			}
 		}
 
@@ -486,12 +526,12 @@ func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, en
 			entryID, entry.SourceHTML, entry.SanitizedHTML, entry.PlainText, formatTime(now),
 		)
 		if err != nil {
-			return 0, fmt.Errorf("upsert entry content: %w", err)
+			return nil, fmt.Errorf("upsert entry content: %w", err)
 		}
 		_, err = tx.ExecContext(ctx, `
 			DELETE FROM entries_fts WHERE entry_id = ?`, entryID)
 		if err != nil {
-			return 0, fmt.Errorf("delete entry search row: %w", err)
+			return nil, fmt.Errorf("delete entry search row: %w", err)
 		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO entries_fts (entry_id, title, author, summary, plain_text)
@@ -499,10 +539,17 @@ func upsertEntries(ctx context.Context, tx *sql.Tx, profileID, feedID string, en
 			entryID, entry.Title, valueOrEmpty(entry.Author), valueOrEmpty(entry.Summary), entry.PlainText,
 		)
 		if err != nil {
-			return 0, fmt.Errorf("upsert entry search row: %w", err)
+			return nil, fmt.Errorf("upsert entry search row: %w", err)
 		}
 	}
 	return inserted, nil
+}
+
+func nullStringEqual(stored sql.NullString, incoming *string) bool {
+	if incoming == nil {
+		return !stored.Valid
+	}
+	return stored.Valid && stored.String == *incoming
 }
 
 func findEntryID(ctx context.Context, tx *sql.Tx, feedID string, entry domain.ParsedEntry) (string, bool, error) {
@@ -546,7 +593,7 @@ func scanFeed(row scanner) (domain.Feed, error) {
 	var createdAt, updatedAt string
 	err := row.Scan(
 		&feed.ID, &feed.URL, &feed.CanonicalURL, &siteURL, &feed.Title, &description, &iconURL, &format,
-		&etag, &lastModified, &lastChecked, &lastSuccess, &nextCheck,
+		&feed.ContentKind, &etag, &lastModified, &lastChecked, &lastSuccess, &nextCheck,
 		&feed.FailureCount, &lastErrorCode, &lastErrorMessage, &createdAt, &updatedAt,
 	)
 	if err != nil {
@@ -571,7 +618,7 @@ func scanFeed(row scanner) (domain.Feed, error) {
 func qualifiedFeedColumns(alias string) string {
 	return alias + `.id, ` + alias + `.url, ` + alias + `.canonical_url, ` + alias + `.site_url, ` +
 		alias + `.title, ` + alias + `.description, ` + alias + `.icon_url, ` + alias + `.format, ` +
-		alias + `.etag, ` + alias + `.last_modified, ` + alias + `.last_checked_at, ` +
+		alias + `.content_kind, ` + alias + `.etag, ` + alias + `.last_modified, ` + alias + `.last_checked_at, ` +
 		alias + `.last_success_at, ` + alias + `.next_check_at, ` + alias + `.failure_count, ` +
 		alias + `.last_error_code, ` + alias + `.last_error_message, ` + alias + `.created_at, ` + alias + `.updated_at`
 }

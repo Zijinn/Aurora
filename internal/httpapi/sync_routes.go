@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Zijinn/Aurora/internal/job"
 	"github.com/Zijinn/Aurora/internal/service"
 	"github.com/Zijinn/Aurora/internal/storage"
 	"github.com/Zijinn/Aurora/internal/syncadapter"
@@ -194,7 +195,7 @@ func (s *Server) runSyncAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	queued, err := s.jobs.EnqueueAccountSync(r.Context(), r.PathValue("accountID"), mode)
 	if err != nil {
-		if strings.Contains(err.Error(), "already queued") {
+		if errors.Is(err, job.ErrJobAlreadyQueued) {
 			writeProblem(w, r, http.StatusConflict, "sync_pending", "Sync already pending", err.Error())
 			return
 		}

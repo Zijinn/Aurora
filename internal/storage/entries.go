@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Zijinn/Aurora/internal/domain"
 )
@@ -45,6 +46,10 @@ func ListEntries(ctx context.Context, db *sql.DB, filter domain.EntryFilter) (do
 		conditions = append(conditions, "EXISTS (SELECT 1 FROM entry_tags et WHERE et.entry_id = e.id AND et.tag_id = ?)")
 		args = append(args, filter.TagID)
 	}
+	if filter.ContentKind != "" {
+		conditions = append(conditions, "f.content_kind = ?")
+		args = append(args, filter.ContentKind)
+	}
 	if filter.Since != nil {
 		conditions = append(conditions, "e.published_at >= ?")
 		args = append(args, formatTime(*filter.Since))
@@ -58,9 +63,7 @@ func ListEntries(ctx context.Context, db *sql.DB, filter domain.EntryFilter) (do
 		conditions = append(conditions, "COALESCE(es.is_read_later, 0) = 1")
 	}
 	if strings.TrimSpace(filter.Query) != "" {
-		joins += " JOIN entries_fts ON entries_fts.entry_id = e.id "
-		conditions = append(conditions, "entries_fts MATCH ?")
-		args = append(args, escapeFTSQuery(filter.Query))
+		joins, conditions, args = appendSearchFilter(filter.Query, joins, conditions, args)
 	}
 	if filter.Cursor != "" {
 		cursor, err := decodeEntryCursor(filter.Cursor)
@@ -133,7 +136,7 @@ func MarkEntriesRead(ctx context.Context, db *sql.DB, filter domain.EntryFilter)
 		filter.ProfileID = domain.DefaultProfileID
 	}
 	args := []any{filter.ProfileID}
-	conditions := []string{"s.profile_id = ?", "COALESCE(es.is_read, 0) = 0"}
+	conditions := []string{"s.profile_id = ?", "s.hide_from_timeline = 0", "COALESCE(es.is_read, 0) = 0"}
 	if filter.FeedID != "" {
 		conditions = append(conditions, "e.feed_id = ?")
 		args = append(args, filter.FeedID)
@@ -145,6 +148,10 @@ func MarkEntriesRead(ctx context.Context, db *sql.DB, filter domain.EntryFilter)
 	if filter.TagID != "" {
 		conditions = append(conditions, "EXISTS (SELECT 1 FROM entry_tags et WHERE et.entry_id = e.id AND et.tag_id = ?)")
 		args = append(args, filter.TagID)
+	}
+	if filter.ContentKind != "" {
+		conditions = append(conditions, "f.content_kind = ?")
+		args = append(args, filter.ContentKind)
 	}
 	if filter.Since != nil {
 		conditions = append(conditions, "e.published_at >= ?")
@@ -158,55 +165,34 @@ func MarkEntriesRead(ctx context.Context, db *sql.DB, filter domain.EntryFilter)
 	}
 	joins := ""
 	if strings.TrimSpace(filter.Query) != "" {
-		joins = " JOIN entries_fts ON entries_fts.entry_id = e.id "
-		conditions = append(conditions, "entries_fts MATCH ?")
-		args = append(args, escapeFTSQuery(filter.Query))
+		joins, conditions, args = appendSearchFilter(filter.Query, joins, conditions, args)
 	}
 
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("begin bulk read update: %w", err)
-	}
-	defer tx.Rollback()
+	// One statement instead of one upsert per row: with a large library the
+	// per-row loop held a single write transaction long enough for other
+	// writers to hit busy_timeout.
+	now := formatTime(time.Now().UTC())
 	query := `
-		SELECT e.id FROM entries e
+		INSERT INTO entry_states (profile_id, entry_id, is_read, read_at, updated_at)
+		SELECT ?, e.id, 1, ?, ?
+		FROM entries e
+		JOIN feeds f ON f.id = e.feed_id
 		JOIN subscriptions s ON s.feed_id = e.feed_id
 		LEFT JOIN entry_states es ON es.entry_id = e.id AND es.profile_id = s.profile_id
 		` + joins + `
-		WHERE ` + strings.Join(conditions, " AND ")
-	rows, err := tx.QueryContext(ctx, query, args...)
+		WHERE ` + strings.Join(conditions, " AND ") + `
+		ON CONFLICT(profile_id, entry_id) DO UPDATE SET
+			is_read = 1, read_at = COALESCE(entry_states.read_at, excluded.read_at),
+			updated_at = excluded.updated_at`
+	result, err := db.ExecContext(ctx, query, append([]any{filter.ProfileID, now, now}, args...)...)
 	if err != nil {
-		return 0, fmt.Errorf("select entries to mark read: %w", err)
+		return 0, fmt.Errorf("mark entries read: %w", err)
 	}
-	entryIDs := make([]string, 0)
-	for rows.Next() {
-		var entryID string
-		if err := rows.Scan(&entryID); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		entryIDs = append(entryIDs, entryID)
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("mark entries read count: %w", err)
 	}
-	if err := rows.Close(); err != nil {
-		return 0, err
-	}
-	now := time.Now().UTC()
-	for _, entryID := range entryIDs {
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO entry_states (profile_id, entry_id, is_read, read_at, updated_at)
-			VALUES (?, ?, 1, ?, ?)
-			ON CONFLICT(profile_id, entry_id) DO UPDATE SET
-				is_read = 1, read_at = COALESCE(entry_states.read_at, excluded.read_at),
-				updated_at = excluded.updated_at`,
-			filter.ProfileID, entryID, formatTime(now), formatTime(now))
-		if err != nil {
-			return 0, fmt.Errorf("mark entry read: %w", err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit bulk read update: %w", err)
-	}
-	return int64(len(entryIDs)), nil
+	return affected, nil
 }
 
 func SaveReadabilityContent(ctx context.Context, db *sql.DB, entryID, sanitizedHTML, plainText string) error {
@@ -347,6 +333,56 @@ func UpdateEntryState(ctx context.Context, db *sql.DB, profileID, entryID string
 	return state, nil
 }
 
+// PruneProcessedMutations removes idempotency records older than the cutoff;
+// mutation IDs only need to be remembered long enough for offline clients to
+// replay their outbox.
+func PruneProcessedMutations(ctx context.Context, db *sql.DB, olderThan time.Time) (int64, error) {
+	result, err := db.ExecContext(ctx, "DELETE FROM processed_mutations WHERE processed_at < ?", formatTime(olderThan))
+	if err != nil {
+		return 0, fmt.Errorf("prune processed mutations: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return affected, nil
+}
+
+// PruneReadEntries applies the retention policy: read entries published before
+// the cutoff are deleted, while starred, read-later, and annotated entries are
+// always kept. The FTS index has no foreign keys, so its rows go first.
+func PruneReadEntries(ctx context.Context, db *sql.DB, profileID string, publishedBefore time.Time) (int64, error) {
+	const selection = `
+		SELECT e.id FROM entries e
+		JOIN subscriptions s ON s.feed_id = e.feed_id AND s.profile_id = ?
+		LEFT JOIN entry_states es ON es.entry_id = e.id AND es.profile_id = s.profile_id
+		WHERE e.published_at < ?
+			AND COALESCE(es.is_read, 0) = 1
+			AND COALESCE(es.is_starred, 0) = 0
+			AND COALESCE(es.is_read_later, 0) = 0
+			AND NOT EXISTS (SELECT 1 FROM entry_annotations a WHERE a.entry_id = e.id)`
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin retention prune: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, "DELETE FROM entries_fts WHERE entry_id IN ("+selection+")", profileID, formatTime(publishedBefore)); err != nil {
+		return 0, fmt.Errorf("prune search index: %w", err)
+	}
+	result, err := tx.ExecContext(ctx, "DELETE FROM entries WHERE id IN ("+selection+")", profileID, formatTime(publishedBefore))
+	if err != nil {
+		return 0, fmt.Errorf("prune read entries: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit retention prune: %w", err)
+	}
+	return affected, nil
+}
+
 func getEntryState(ctx context.Context, tx *sql.Tx, profileID, entryID string) (domain.EntryState, error) {
 	var state domain.EntryState
 	var isRead, isStarred, isReadLater int
@@ -468,6 +504,40 @@ func escapeFTSQuery(value string) string {
 		quoted = append(quoted, `"`+strings.ReplaceAll(word, `"`, `""`)+`"`)
 	}
 	return strings.Join(quoted, " AND ")
+}
+
+// appendSearchFilter routes full-text search through entries_fts, falling back
+// to LIKE when any word is shorter than three runes: the trigram tokenizer
+// cannot index or match tokens below three characters.
+func appendSearchFilter(query, joins string, conditions []string, args []any) (string, []string, []any) {
+	words := strings.Fields(query)
+	useFTS := len(words) > 0
+	for _, word := range words {
+		if utf8.RuneCountInString(word) < 3 {
+			useFTS = false
+			break
+		}
+	}
+	if useFTS {
+		joins += " JOIN entries_fts ON entries_fts.entry_id = e.id "
+		conditions = append(conditions, "entries_fts MATCH ?")
+		args = append(args, escapeFTSQuery(query))
+		return joins, conditions, args
+	}
+	for _, word := range words {
+		like := "%" + escapeLikePattern(word) + "%"
+		conditions = append(conditions,
+			`(e.title LIKE ? ESCAPE '\' OR e.author LIKE ? ESCAPE '\' OR e.summary LIKE ? ESCAPE '\')`)
+		args = append(args, like, like, like)
+	}
+	return joins, conditions, args
+}
+
+func escapeLikePattern(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `%`, `\%`)
+	value = strings.ReplaceAll(value, `_`, `\_`)
+	return value
 }
 
 func boolValue(value *bool, fallback bool) int {

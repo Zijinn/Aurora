@@ -166,6 +166,7 @@ export interface Feed {
   description: string | null
   icon_url: string | null
   format: "rss" | "atom" | "json" | null
+  content_kind: "general" | "literature" | "video" | "social"
   last_checked_at: string | null
   last_success_at: string | null
   next_check_at: string | null
@@ -186,6 +187,10 @@ export interface Subscription {
   feed_url: string
   site_url: string | null
   unread_count: number
+  failure_count: number
+  last_error_code: string | null
+  last_error_message: string | null
+  last_success_at: string | null
   view_mode: ViewMode
   refresh_policy: "inherit" | "fixed" | "intelligent" | "never"
   refresh_interval_minutes: number
@@ -291,6 +296,7 @@ export interface ListResponse<T> {
 export type LibraryScope =
   | { kind: "today"; title: "Today" }
   | { kind: "unread"; title: "Unread" }
+  | { kind: "literature"; title: "Literature" }
   | { kind: "saved"; title: "Saved" }
   | { kind: "all"; title: "All feeds" }
   | { kind: "feed"; id: string; title: string }

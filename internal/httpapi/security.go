@@ -20,6 +20,15 @@ type deviceContextKey struct{}
 
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// DNS-rebinding guard: a web page served from an attacker-controlled
+		// domain can rebind it to 127.0.0.1, after which its same-origin
+		// requests arrive from a loopback peer with the attacker's Host header
+		// and would otherwise inherit loopback trust (no device auth, CORS
+		// origin == Host). The loopback listener only serves loopback hosts.
+		if isLoopbackRemote(r.RemoteAddr) && !isLoopbackHostHeader(r.Host) {
+			writeProblem(w, r, http.StatusForbidden, "host_not_allowed", "Host not allowed", "The loopback listener only accepts requests addressed to a loopback host.")
+			return
+		}
 		if !s.security.RequireDeviceAuth || !strings.HasPrefix(r.URL.Path, "/api/") || publicAPIPath(r.URL.Path) || isLoopbackRemote(r.RemoteAddr) {
 			next.ServeHTTP(w, r)
 			return
@@ -98,6 +107,19 @@ func isLoopbackRemote(remoteAddress string) bool {
 		return false
 	}
 	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
+}
+
+func isLoopbackHostHeader(hostHeader string) bool {
+	host := hostHeader
+	if h, _, err := net.SplitHostPort(hostHeader); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.Trim(strings.TrimSpace(host), "[]"))
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
 }
 

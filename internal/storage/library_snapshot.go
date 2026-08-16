@@ -17,7 +17,7 @@ const LibrarySnapshotFormat = "aurora-library-snapshot"
 
 var librarySnapshotTables = []string{
 	"folders", "feeds", "subscriptions", "entries", "entry_contents", "entry_states",
-	"tags", "feed_tags", "entry_tags", "rules", "saved_filters", "preferences",
+	"entry_annotations", "tags", "feed_tags", "entry_tags", "rules", "saved_filters", "preferences",
 }
 
 // ExportLibrarySnapshot intentionally excludes device tokens, background jobs,

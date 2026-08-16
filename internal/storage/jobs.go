@@ -96,6 +96,19 @@ func RecoverRunningJobs(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
+// RequeueJob returns a claimed job to the queue, used when the dispatcher
+// claims a job but cannot hand it to a worker (shutdown, maintenance).
+func RequeueJob(ctx context.Context, db *sql.DB, jobID string) error {
+	now := time.Now().UTC()
+	_, err := db.ExecContext(ctx, `
+		UPDATE jobs SET state = 'queued', started_at = NULL, updated_at = ?
+		WHERE id = ? AND state = 'running'`, formatTime(now), jobID)
+	if err != nil {
+		return fmt.Errorf("requeue job: %w", err)
+	}
+	return nil
+}
+
 func UpdateJobProgress(ctx context.Context, db *sql.DB, jobID string, current, total int) error {
 	if current < 0 || total < 0 || (total > 0 && current > total) {
 		return errors.New("invalid job progress")

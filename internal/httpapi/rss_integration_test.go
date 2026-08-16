@@ -205,7 +205,11 @@ func waitForJobState(t *testing.T, baseURL, jobID, wanted string) {
 			return
 		}
 		if current.State == "failed" {
-			t.Fatalf("job failed: %v", current.ErrorMessage)
+			message := ""
+			if current.ErrorMessage != nil {
+				message = *current.ErrorMessage
+			}
+			t.Fatalf("job failed: %s", message)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}

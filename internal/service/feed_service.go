@@ -107,7 +107,7 @@ func (s *FeedService) AddFeed(ctx context.Context, input AddFeedInput) (domain.F
 	if err != nil {
 		return domain.Feed{}, err
 	}
-	if err := storage.ApplyRulesToFeed(ctx, s.db, domain.DefaultProfileID, stored.ID); err != nil {
+	if err := storage.ApplyRulesToFeed(ctx, s.db, domain.DefaultProfileID, stored.ID, nil); err != nil {
 		return domain.Feed{}, err
 	}
 	return stored, nil
@@ -151,10 +151,10 @@ func (s *FeedService) RefreshFeed(ctx context.Context, feedID string) (int, erro
 	if err != nil {
 		return 0, err
 	}
-	if err := storage.ApplyRulesToFeed(ctx, s.db, domain.DefaultProfileID, feedID); err != nil {
-		return inserted, err
+	if err := storage.ApplyRulesToFeed(ctx, s.db, domain.DefaultProfileID, feedID, inserted); err != nil {
+		return len(inserted), err
 	}
-	return inserted, nil
+	return len(inserted), nil
 }
 
 func (s *FeedService) ImportOPML(ctx context.Context, data []byte, progress ImportProgress) (int, error) {

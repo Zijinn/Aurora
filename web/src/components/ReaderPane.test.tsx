@@ -220,18 +220,31 @@ it("restores saved highlights and notes for the current article", async () => {
     locale: "en-US",
     theme: "system",
     readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
-    annotations: [
-      {
-        id: "annotation-1",
-        entryID: detail.id,
-        quote: "Article body",
-        prefix: "",
-        suffix: "",
-        style: "highlight",
-        note: "Return to this idea",
-        createdAt: "2026-07-18T00:00:00Z",
-      },
-    ],
+    annotations: [],
+  })
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
+    if (url.includes("/entries/entry-1/annotations")) {
+      return Promise.resolve(
+        jsonResponse({
+          items: [
+            {
+              id: "annotation-1",
+              entry_id: detail.id,
+              quote: "Article body",
+              prefix: "",
+              suffix: "",
+              style: "highlight",
+              note: "Return to this idea",
+              created_at: "2026-07-18T00:00:00Z",
+              updated_at: "2026-07-18T00:00:00Z",
+            },
+          ],
+        }),
+      )
+    }
+    return Promise.resolve(jsonResponse({ items: [] }))
   })
   renderReader()
 
@@ -244,6 +257,7 @@ it("restores saved highlights and notes for the current article", async () => {
     "title",
     "Return to this idea",
   )
+  fetchMock.mockRestore()
 })
 
 it("creates a persistent highlight from selected article text", async () => {
@@ -252,6 +266,34 @@ it("creates a persistent highlight from selected article text", async () => {
     theme: "system",
     readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
     annotations: [],
+  })
+  let postedBody: Record<string, unknown> | null = null
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
+    if (url.includes("/entries/entry-1/annotations") && init?.method === "POST") {
+      postedBody = JSON.parse(init.body as string) as Record<string, unknown>
+      return Promise.resolve(
+        jsonResponse(
+          {
+            id: "annotation-new",
+            entry_id: detail.id,
+            quote: postedBody.quote,
+            prefix: postedBody.prefix ?? "",
+            suffix: postedBody.suffix ?? "",
+            style: postedBody.style,
+            note: postedBody.note ?? "",
+            created_at: "2026-08-16T00:00:00Z",
+            updated_at: "2026-08-16T00:00:00Z",
+          },
+          201,
+        ),
+      )
+    }
+    if (url.includes("/entries/entry-1/annotations")) {
+      return Promise.resolve(jsonResponse({ items: [] }))
+    }
+    return Promise.resolve(jsonResponse({ items: [] }))
   })
   renderReader()
 
@@ -267,15 +309,15 @@ it("creates a persistent highlight from selected article text", async () => {
   fireEvent.pointerUp(paragraph)
 
   fireEvent.click(await screen.findByRole("button", { name: "Highlight" }))
-  expect(useReaderStore.getState().annotations).toHaveLength(1)
-  expect(useReaderStore.getState().annotations[0]).toMatchObject({
-    entryID: detail.id,
+  await waitFor(() => expect(postedBody).not.toBeNull())
+  expect(postedBody).toMatchObject({
     quote: "Article",
     style: "highlight",
   })
   await waitFor(() =>
     expect(document.querySelector(".reader-annotation--highlight")).toHaveTextContent("Article"),
   )
+  fetchMock.mockRestore()
 })
 
 it("runs AI quick actions from the toolbar menu without opening the panel", async () => {

@@ -8,6 +8,7 @@ import type { ReaderAnnotation } from "../lib/annotations"
 export type ShortcutAction =
   "palette" | "search" | "next" | "previous" | "toggleStar" | "toggleRead"
 export type ThemeMode = "system" | "light" | "dark"
+export type SSEState = "live" | "reconnecting"
 
 export const defaultShortcuts: Record<ShortcutAction, string> = {
   palette: "mod+k",
@@ -61,6 +62,7 @@ interface ReaderStore {
   autoAcademicTags: boolean
   autoAcademicTagFolderIDs: string[]
   autoAcademicTagFeedIDs: string[]
+  sseState: SSEState
   setScope: (scope: LibraryScope) => void
   selectEntry: (entryID: string | null) => void
   setSearch: (search: string) => void
@@ -74,6 +76,7 @@ interface ReaderStore {
   setReaderAppearance: (appearance: Partial<ReaderAppearance>) => void
   addAnnotation: (annotation: ReaderAnnotation) => void
   removeAnnotation: (annotationID: string) => void
+  clearAnnotations: () => void
   setShortcut: (action: ShortcutAction, shortcut: string) => void
   resetShortcuts: () => void
   setAlwaysTranslateTitles: (enabled: boolean) => void
@@ -81,6 +84,7 @@ interface ReaderStore {
   setAutoAcademicTags: (enabled: boolean) => void
   setAutoAcademicTagFolderIDs: (folderIDs: string[]) => void
   setAutoAcademicTagFeedIDs: (feedIDs: string[]) => void
+  setSSEState: (sseState: SSEState) => void
 }
 
 export const useReaderStore = create<ReaderStore>()(
@@ -105,6 +109,7 @@ export const useReaderStore = create<ReaderStore>()(
       autoAcademicTags: false,
       autoAcademicTagFolderIDs: [],
       autoAcademicTagFeedIDs: [],
+      sseState: "live",
       setScope: (scope) =>
         set({ scope, readerReturnScope: null, selectedEntryID: null, mobileReaderOpen: false }),
       selectEntry: (selectedEntryID) =>
@@ -138,6 +143,7 @@ export const useReaderStore = create<ReaderStore>()(
         set((state) => ({
           annotations: state.annotations.filter((annotation) => annotation.id !== annotationID),
         })),
+      clearAnnotations: () => set({ annotations: [] }),
       setShortcut: (action, shortcut) =>
         set((state) => ({ shortcuts: { ...state.shortcuts, [action]: shortcut } })),
       resetShortcuts: () => set({ shortcuts: defaultShortcuts }),
@@ -148,6 +154,7 @@ export const useReaderStore = create<ReaderStore>()(
         set({ autoAcademicTagFolderIDs: Array.from(new Set(autoAcademicTagFolderIDs)) }),
       setAutoAcademicTagFeedIDs: (autoAcademicTagFeedIDs) =>
         set({ autoAcademicTagFeedIDs: Array.from(new Set(autoAcademicTagFeedIDs)) }),
+      setSSEState: (sseState) => set({ sseState }),
     }),
     {
       name: "cairn-reader-preferences",

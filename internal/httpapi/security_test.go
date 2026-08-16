@@ -23,6 +23,7 @@ func TestLANModeRequiresPairedDeviceToken(t *testing.T) {
 	codeResponse := httptest.NewRecorder()
 	codeRequest := httptest.NewRequest(http.MethodPost, "/api/v1/devices/pairing-code", nil)
 	codeRequest.RemoteAddr = "127.0.0.1:40001"
+	codeRequest.Host = "127.0.0.1:7381"
 	server.Handler().ServeHTTP(codeResponse, codeRequest)
 	if codeResponse.Code != http.StatusCreated {
 		t.Fatalf("create pairing code: %d %s", codeResponse.Code, codeResponse.Body.String())
@@ -77,6 +78,32 @@ func TestOriginValidationRejectsUntrustedWebsites(t *testing.T) {
 	server.Handler().ServeHTTP(allowed, request)
 	if allowed.Code != http.StatusNoContent || allowed.Header().Get("Access-Control-Allow-Origin") != "https://reader.example" {
 		t.Fatalf("expected allowed preflight, got %d %+v", allowed.Code, allowed.Header())
+	}
+}
+
+func TestLoopbackListenerRejectsForeignHostHeaders(t *testing.T) {
+	server := newTestServer(t)
+
+	for _, host := range []string{"evil.example", "evil.example:7381", "192.168.1.10:7381", "10.0.0.5"} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/feeds", nil)
+		request.RemoteAddr = "127.0.0.1:41000"
+		request.Host = host
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("host %q from loopback peer: expected 403, got %d", host, response.Code)
+		}
+	}
+
+	for _, host := range []string{"127.0.0.1:7381", "localhost:7381", "[::1]:7381", "localhost"} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
+		request.RemoteAddr = "127.0.0.1:41001"
+		request.Host = host
+		server.Handler().ServeHTTP(response, request)
+		if response.Code == http.StatusForbidden {
+			t.Fatalf("loopback host %q should be accepted, got %d", host, response.Code)
+		}
 	}
 }
 

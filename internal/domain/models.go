@@ -16,6 +16,7 @@ type Feed struct {
 	Description      *string    `json:"description"`
 	IconURL          *string    `json:"icon_url"`
 	Format           *string    `json:"format"`
+	ContentKind      string     `json:"content_kind"`
 	ETag             *string    `json:"etag,omitempty"`
 	LastModified     *string    `json:"last_modified,omitempty"`
 	LastCheckedAt    *time.Time `json:"last_checked_at"`
@@ -39,6 +40,10 @@ type Subscription struct {
 	FeedURL                string    `json:"feed_url"`
 	SiteURL                *string   `json:"site_url"`
 	UnreadCount            int       `json:"unread_count"`
+	FailureCount           int       `json:"failure_count"`
+	LastErrorCode          *string   `json:"last_error_code"`
+	LastErrorMessage       *string   `json:"last_error_message"`
+	LastSuccessAt          *string   `json:"last_success_at"`
 	ViewMode               string    `json:"view_mode"`
 	RefreshPolicy          string    `json:"refresh_policy"`
 	RefreshIntervalMinutes int       `json:"refresh_interval_minutes"`
@@ -91,22 +96,40 @@ type EntryState struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+type EntryAnnotation struct {
+	ID        string    `json:"id"`
+	EntryID   string    `json:"entry_id"`
+	Style     string    `json:"style"`
+	Quote     string    `json:"quote"`
+	Prefix    string    `json:"prefix"`
+	Suffix    string    `json:"suffix"`
+	Note      string    `json:"note"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type EntryAnnotationPatch struct {
+	Style *string
+	Note  *string
+}
+
 type EntryPage struct {
 	Items      []Entry `json:"items"`
 	NextCursor *string `json:"next_cursor"`
 }
 
 type EntryFilter struct {
-	ProfileID  string
-	FeedID     string
-	FolderID   string
-	TagID      string
-	State      string
-	Query      string
-	Cursor     string
-	Limit      int
-	Since      *time.Time
-	AILanguage string
+	ProfileID   string
+	FeedID      string
+	FolderID    string
+	TagID       string
+	State       string
+	Query       string
+	ContentKind string
+	Cursor      string
+	Limit       int
+	Since       *time.Time
+	AILanguage  string
 }
 
 type EntryStatePatch struct {

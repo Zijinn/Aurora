@@ -1,4 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import type { InfiniteData } from "@tanstack/react-query"
 import {
   lazy,
   Suspense,
@@ -15,6 +16,7 @@ import {
   addFeed,
   APIError,
   createAIProfile,
+  createEntryAnnotation,
   createFolder,
   createRule,
   createSavedFilter,
@@ -62,9 +64,11 @@ import {
 } from "../api/client"
 import type {
   Entry,
+  EntryPage,
   EntryState,
   Folder,
   LibraryScope,
+  ListResponse,
   Subscription,
   SyncAccount,
   SyncProvider,
@@ -72,13 +76,15 @@ import type {
 } from "../api/types"
 import { useTranslation } from "../lib/i18n"
 import { keyboardChord } from "../lib/shortcuts"
-import { enqueueStateMutation, flushMutationOutbox } from "../offline/database"
+import { enqueueStateMutation, flushMutationOutbox, queueStateMutation } from "../offline/database"
 import { useReaderStore, type PaneLayout } from "../store/reader"
+import { toast } from "../store/toast"
 import { Sidebar } from "./Sidebar"
 import { TimelinePane } from "./TimelinePane"
 import { MobileNav } from "./MobileNav"
 import { MobileLibraryDialog } from "./MobileLibraryDialog"
 import { PaneDivider } from "./PaneDivider"
+import { Toaster } from "./Toaster"
 import { WorkspaceHeader } from "./WorkspaceHeader"
 import { AIWorkbench } from "./AIWorkbench"
 
@@ -118,6 +124,8 @@ const BUILT_IN_CLOUD_PROVIDERS: SyncProvider[] = [
   { id: "webdav", name: "WebDAV" },
   { id: "icloud", name: "iCloud Drive" },
 ]
+// Guards the legacy-annotation upload against StrictMode's double effect run.
+let legacyAnnotationsMigrated = false
 
 export function AppShell() {
   const queryClient = useQueryClient()
@@ -142,6 +150,7 @@ export function AppShell() {
   const autoAcademicTags = useReaderStore((state) => state.autoAcademicTags)
   const autoAcademicTagFolderIDs = useReaderStore((state) => state.autoAcademicTagFolderIDs)
   const autoAcademicTagFeedIDs = useReaderStore((state) => state.autoAcademicTagFeedIDs)
+  const setSSEState = useReaderStore((state) => state.setSSEState)
   const { locale, t } = useTranslation()
   const deferredSearch = useDeferredValue(search)
   const [addOpen, setAddOpen] = useState(false)
@@ -188,6 +197,37 @@ export function AppShell() {
       document.documentElement.style.colorScheme = theme
     }
   }, [theme])
+
+  // One-time migration: highlights used to live in localStorage only. Upload
+  // any legacy annotations, then clear the local copy so the server becomes
+  // the source of truth and annotations sync across devices.
+  useEffect(() => {
+    if (legacyAnnotationsMigrated) return
+    legacyAnnotationsMigrated = true
+    const legacy = useReaderStore.getState().annotations
+    if (legacy.length === 0) return
+    void (async () => {
+      for (const annotation of legacy) {
+        try {
+          await createEntryAnnotation(annotation.entryID, {
+            style: annotation.style,
+            quote: annotation.quote,
+            prefix: annotation.prefix,
+            suffix: annotation.suffix,
+            note: annotation.note,
+          })
+        } catch (error) {
+          // Entries pruned since the highlight was made answer 404; drop those
+          // but keep the rest queued for the next launch on transient errors.
+          if (error instanceof APIError && error.status === 404) continue
+          legacyAnnotationsMigrated = false
+          return
+        }
+      }
+      useReaderStore.getState().clearAnnotations()
+      void queryClient.invalidateQueries({ queryKey: ["annotations"] })
+    })()
+  }, [queryClient])
 
   useEffect(() => {
     const update = () => setViewportWidth(window.innerWidth)
@@ -496,12 +536,59 @@ export function AppShell() {
       queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
     ])
   }, [queryClient])
-  const stateMutation = useMutation({
-    mutationFn: async ({ entry, patch }: { entry: Entry; patch: Partial<EntryState> }) => {
+  // Apply a confirmed state patch directly to the caches instead of refetching
+  // the whole library: the entry stays visible in the current list (e.g. the
+  // Unread scope) until the next natural refetch, and SSE bursts no longer
+  // double-refetch every article open.
+  const applyEntryStateToCache = useCallback(
+    (entry: Entry, state: EntryState) => {
+      queryClient.setQueriesData<InfiniteData<EntryPage>>(
+        { queryKey: ["entries"] },
+        (current) =>
+          current
+            ? {
+                ...current,
+                pages: current.pages.map((page) => ({
+                  ...page,
+                  items: page.items.map((item) =>
+                    item.id === entry.id ? { ...item, state } : item,
+                  ),
+                })),
+              }
+            : current,
+      )
+      queryClient.setQueriesData<Entry>({ queryKey: ["entry", entry.id] }, (current) =>
+        current ? { ...current, state } : current,
+      )
+      if (state.is_read !== entry.state.is_read) {
+        const delta = state.is_read ? -1 : 1
+        queryClient.setQueriesData<ListResponse<Subscription>>(
+          { queryKey: ["subscriptions"] },
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  items: current.items.map((subscription) =>
+                    subscription.feed_id === entry.feed_id
+                      ? {
+                          ...subscription,
+                          unread_count: Math.max(0, subscription.unread_count + delta),
+                        }
+                      : subscription,
+                  ),
+                }
+              : current,
+        )
+      }
+    },
+    [queryClient],
+  )
+  const stateMutationFn = useCallback(
+    async ({ entry, patch }: { entry: Entry; patch: Partial<EntryState> }) => {
       const mutationID = crypto.randomUUID()
       const deviceTime = new Date().toISOString()
       try {
-        return await updateEntryState(entry.id, patch, mutationID)
+        return await queueStateMutation(() => updateEntryState(entry.id, patch, mutationID))
       } catch (error) {
         if (error instanceof APIError) throw error
         await enqueueStateMutation({
@@ -514,16 +601,29 @@ export function AppShell() {
         return { ...entry.state, ...patch, updated_at: deviceTime }
       }
     },
-    onSuccess: invalidateLibrary,
+    [],
+  )
+  const stateMutation = useMutation({
+    mutationFn: stateMutationFn,
+    onSuccess: (state, { entry }) => applyEntryStateToCache(entry, state),
+    onError: () => toast(t("stateUpdateFailed")),
+  })
+  // The automatic mark-read on article open runs through its own mutation so
+  // reader action buttons don't flash disabled every time an article opens.
+  const autoReadMutation = useMutation({
+    mutationFn: stateMutationFn,
+    onSuccess: (state, { entry }) => applyEntryStateToCache(entry, state),
   })
   const tagMutation = useMutation({
     mutationFn: ({ entryID, tagIDs }: { entryID: string; tagIDs: string[] }) =>
       setEntryTags(entryID, tagIDs),
     onSuccess: invalidateLibrary,
+    onError: () => toast(t("tagUpdateFailed")),
   })
   const mutateEntryState = stateMutation.mutate
+  const mutateAutoRead = autoReadMutation.mutate
   const markReadMutation = useMutation({
-    mutationFn: () => markEntriesRead(scope),
+    mutationFn: () => markEntriesRead(scope, deferredSearch),
     onSuccess: invalidateLibrary,
   })
   const refreshMutation = useMutation({
@@ -566,7 +666,12 @@ export function AppShell() {
   })
   const feedDeleteMutation = useMutation({
     mutationFn: deleteFeed,
-    onSuccess: invalidateLibrary,
+    onSuccess: async (_result, feedID) => {
+      if (scope.kind === "feed" && scope.id === feedID) {
+        setScope({ kind: "today", title: "Today" })
+      }
+      await invalidateLibrary()
+    },
   })
   const readabilityMutation = useMutation({
     mutationFn: (entryID: string) => fetchReadability(entryID),
@@ -589,6 +694,7 @@ export function AppShell() {
     onSuccess: (job) => {
       setImportJobID(job.id)
     },
+    onError: () => toast(t("opmlImportFailed")),
   })
   useEffect(() => {
     const state = importJob.data?.state
@@ -656,6 +762,7 @@ export function AppShell() {
     mutationFn: ({ accountID, mode }: { accountID: string; mode: "auto" | "push" | "pull" }) =>
       runSyncAccount(accountID, mode),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sync-accounts"] }),
+    onError: () => toast(t("syncRunFailed")),
   })
   const deleteSyncMutation = useMutation({
     mutationFn: deleteSyncAccount,
@@ -667,7 +774,10 @@ export function AppShell() {
   })
   const deleteFolderMutation = useMutation({
     mutationFn: deleteFolder,
-    onSuccess: async () => {
+    onSuccess: async (_result, folderID) => {
+      if (scope.kind === "folder" && scope.id === folderID) {
+        setScope({ kind: "today", title: "Today" })
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["folders"] }),
         queryClient.invalidateQueries({ queryKey: ["subscriptions"] }),
@@ -815,11 +925,30 @@ export function AppShell() {
   useEffect(() => {
     if (!libraryEnabled || !("EventSource" in window)) return
     const source = new EventSource("/api/v1/events")
-    const refresh = () => void invalidateLibrary()
+    let hasOpened = false
+    // Coalesce bursts of SSE events (e.g. an entry.state storm) into a single
+    // trailing invalidation per query key.
+    const debounceTimers = new Map<string, number>()
+    const scheduleInvalidate = (queryKey: string[]) => {
+      const id = queryKey.join("")
+      window.clearTimeout(debounceTimers.get(id))
+      debounceTimers.set(
+        id,
+        window.setTimeout(() => {
+          debounceTimers.delete(id)
+          void queryClient.invalidateQueries({ queryKey })
+        }, 300),
+      )
+    }
+    const refresh = () => {
+      scheduleInvalidate(["entries"])
+      scheduleInvalidate(["entry"])
+      scheduleInvalidate(["subscriptions"])
+    }
     const subscriptionRefresh = () => {
-      void queryClient.invalidateQueries({ queryKey: ["subscriptions"] })
-      void queryClient.invalidateQueries({ queryKey: ["folders"] })
-      void queryClient.invalidateQueries({ queryKey: ["entries"] })
+      scheduleInvalidate(["subscriptions"])
+      scheduleInvalidate(["folders"])
+      scheduleInvalidate(["entries"])
     }
     for (const eventName of [
       "feed.updated",
@@ -832,33 +961,72 @@ export function AppShell() {
       source.addEventListener(eventName, refresh)
     }
     source.addEventListener("subscriptions.updated", subscriptionRefresh)
+    source.addEventListener("entry.annotations", () => scheduleInvalidate(["annotations"]))
+    source.addEventListener("job.failed", () => {
+      // Feed refresh failures surface through subscription error state.
+      scheduleInvalidate(["subscriptions"])
+      void queryClient.invalidateQueries({ queryKey: ["job"] })
+    })
     source.addEventListener(
       "sync.completed",
       () => void queryClient.invalidateQueries({ queryKey: ["sync-accounts"] }),
     )
     const aiRefresh = () => {
-      void queryClient.invalidateQueries({ queryKey: ["ai-results"] })
-      void queryClient.invalidateQueries({ queryKey: ["entries"] })
-      void queryClient.invalidateQueries({ queryKey: ["entry"] })
-      void queryClient.invalidateQueries({ queryKey: ["ai-chat"] })
-      void queryClient.invalidateQueries({ queryKey: ["ai-profiles"] })
-      void queryClient.invalidateQueries({ queryKey: ["ai-usage"] })
-      void queryClient.invalidateQueries({ queryKey: ["tags"] })
+      scheduleInvalidate(["ai-results"])
+      scheduleInvalidate(["entries"])
+      scheduleInvalidate(["entry"])
+      scheduleInvalidate(["ai-chat"])
+      scheduleInvalidate(["ai-profiles"])
+      scheduleInvalidate(["ai-usage"])
+      scheduleInvalidate(["tags"])
     }
     source.addEventListener("ai.result", aiRefresh)
     source.addEventListener("ai.chat", aiRefresh)
-    return () => source.close()
-  }, [invalidateLibrary, libraryEnabled, queryClient])
+    source.addEventListener("open", () => {
+      setSSEState("live")
+      if (!hasOpened) {
+        hasOpened = true
+        return
+      }
+      // A re-open means events may have been dropped while disconnected.
+      void invalidateLibrary()
+      void flushMutationOutbox().then((completed) => {
+        if (completed > 0) void invalidateLibrary()
+      })
+    })
+    source.addEventListener("error", () => {
+      if (source.readyState !== EventSource.CLOSED) setSSEState("reconnecting")
+    })
+    return () => {
+      source.close()
+      for (const timer of debounceTimers.values()) window.clearTimeout(timer)
+    }
+  }, [invalidateLibrary, libraryEnabled, queryClient, setSSEState])
 
   useEffect(() => {
     if (!online) return
-    void flushMutationOutbox().then((completed) => {
-      if (completed > 0) void invalidateLibrary()
-    })
+    const flush = () => {
+      void flushMutationOutbox().then((completed) => {
+        if (completed > 0) void invalidateLibrary()
+      })
+    }
+    flush()
+    window.addEventListener("focus", flush)
+    // Server restarts and flaky networks never fire the browser "online"
+    // event; poll on an interval so queued mutations cannot sit forever.
+    const interval = window.setInterval(flush, 60_000)
+    return () => {
+      window.removeEventListener("focus", flush)
+      window.clearInterval(interval)
+    }
   }, [invalidateLibrary, online])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // A modal dialog owns the keyboard while it is open: Escape must close
+      // the dialog, not the mobile reader behind it, and article shortcuts
+      // must not fire through it.
+      if (document.querySelector('[role="dialog"][data-state="open"]')) return
       const chord = keyboardChord(event)
       if (chord === shortcuts.palette) {
         event.preventDefault()
@@ -1010,6 +1178,7 @@ export function AppShell() {
                   onBack={closeMobileReader}
                   onRetry={() => void entryDetail.refetch()}
                   onStateChange={mutateState}
+                  onAutoMarkRead={(entry) => mutateAutoRead({ entry, patch: { is_read: true } })}
                   onTagsChange={(entryID, tagIDs) => tagMutation.mutate({ entryID, tagIDs })}
                   onFetchReadability={(entryID) => readabilityMutation.mutate(entryID)}
                   onConfigureAI={() => setAIProfileOpen(true)}
@@ -1072,6 +1241,7 @@ export function AppShell() {
           onScopeChange={setScope}
         />
         {!online && <div className="offline-banner">{t("offlineMode")}</div>}
+        <Toaster />
         {addOpen && (
           <Suspense fallback={null}>
             <AddFeedDialog

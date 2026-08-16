@@ -163,6 +163,18 @@ describe("Aurora reading experience", () => {
     expect(screen.getByPlaceholderText("Type a command")).toBeInTheDocument()
   })
 
+  it("does not fire global shortcuts while a dialog is open", async () => {
+    renderApp()
+    act(() => useReaderStore.getState().selectEntry("entry-1"))
+    expect(useReaderStore.getState().mobileReaderOpen).toBe(true)
+    const addButtons = await screen.findAllByRole("button", { name: "Add feed" })
+    fireEvent.click(addButtons[0]!)
+    expect(await screen.findByRole("dialog")).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: "Escape" })
+    expect(useReaderStore.getState().selectedEntryID).toBe("entry-1")
+    expect(useReaderStore.getState().mobileReaderOpen).toBe(true)
+  })
+
   it("rejects conflicting shortcut assignments before saving", async () => {
     renderApp()
     fireEvent.click(await screen.findByRole("button", { name: "Preferences" }))

@@ -56,6 +56,7 @@ export function AIWorkbench(props: AIWorkbenchProps) {
   const [language, setLanguage] = useState(() => (locale === "zh-CN" ? "Chinese" : "English"))
   const [pendingJobID, setPendingJobID] = useState("")
   const [pendingOperation, setPendingOperation] = useState<AIOperation | null>(null)
+  const [jobFailure, setJobFailure] = useState<string | null>(null)
   const [sessionID, setSessionID] = useState("")
   const [message, setMessage] = useState("")
   const activeProfile =
@@ -84,21 +85,45 @@ export function AIWorkbench(props: AIWorkbenchProps) {
   })
 
   useEffect(() => {
-    if (!pendingJobID || !job.data || jobActive || job.data.state === "failed") return
-    if (job.data.state === "succeeded") {
-      if (pendingOperation && props.entryID) {
-        void queryClient.invalidateQueries({ queryKey: ["ai-results", props.entryID] })
-        void queryClient.invalidateQueries({ queryKey: ["entries"] })
-        void queryClient.invalidateQueries({ queryKey: ["entry", props.entryID] })
-        if (pendingOperation === "academic_tags") {
-          void queryClient.invalidateQueries({ queryKey: ["tags"] })
+    if (!pendingJobID || !job.data || jobActive) return
+    const state = job.data
+    const operation = pendingOperation
+    void (async () => {
+      if (state.state === "succeeded") {
+        if (operation && props.entryID) {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["ai-results", props.entryID] }),
+            queryClient.invalidateQueries({ queryKey: ["entries"] }),
+            queryClient.invalidateQueries({ queryKey: ["entry", props.entryID] }),
+            queryClient.invalidateQueries({ queryKey: ["ai-usage"] }),
+            ...(operation === "academic_tags"
+              ? [queryClient.invalidateQueries({ queryKey: ["tags"] })]
+              : []),
+          ])
+        } else {
+          await Promise.all([
+            ...(sessionID ? [queryClient.invalidateQueries({ queryKey: ["ai-chat", sessionID] })] : []),
+            queryClient.invalidateQueries({ queryKey: ["ai-usage"] }),
+          ])
         }
-      } else if (sessionID) {
-        void queryClient.invalidateQueries({ queryKey: ["ai-chat", sessionID] })
+      } else if (state.state === "failed") {
+        setJobFailure(state.error_message ?? t("aiTaskFailed"))
       }
-      void queryClient.invalidateQueries({ queryKey: ["ai-usage"] })
-    }
-  }, [job.data, jobActive, pendingJobID, pendingOperation, props.entryID, queryClient, sessionID])
+      // The job reached a terminal state; stop tracking it so the polling
+      // query unmounts and a later run starts from a clean slate.
+      setPendingJobID("")
+      setPendingOperation(null)
+    })()
+  }, [
+    job.data,
+    jobActive,
+    pendingJobID,
+    pendingOperation,
+    props.entryID,
+    queryClient,
+    sessionID,
+    t,
+  ])
 
   const operationMutation = useMutation({
     mutationFn: ({
@@ -152,13 +177,14 @@ export function AIWorkbench(props: AIWorkbenchProps) {
     operationMutation.error ??
     chatMutation.error ??
     cancelMutation.error ??
-    (job.data?.state === "failed" ? new Error(job.data.error_message ?? t("aiTaskFailed")) : null)
+    (jobFailure ? new Error(jobFailure) : null)
 
   const startOperation = (operation: AIOperation) => {
     if (!activeProfileID) {
       props.onConfigure()
       return
     }
+    setJobFailure(null)
     operationMutation.mutate({ operation, profile: activeProfileID, targetLanguage: language })
   }
   const submitChat = (event: FormEvent) => {
@@ -169,6 +195,7 @@ export function AIWorkbench(props: AIWorkbenchProps) {
     }
     if (!message.trim() || jobActive || (!props.entryID && (props.entryIDs?.length ?? 0) === 0))
       return
+    setJobFailure(null)
     chatMutation.mutate({ profile: activeProfileID, text: message.trim() })
   }
   const startResize = (event: PointerEvent<HTMLButtonElement>) => {

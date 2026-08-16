@@ -31,6 +31,7 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 
 	reconcileEntries := false
+	reconcileDOIs := false
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
@@ -56,9 +57,17 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		if version == 6 {
 			reconcileEntries = true
 		}
+		if version == 13 {
+			reconcileDOIs = true
+		}
 	}
 	if reconcileEntries {
 		if err := ReconcileEntryIdentities(ctx, db); err != nil {
+			return err
+		}
+	}
+	if reconcileDOIs {
+		if err := ReconcileEntryDOIs(ctx, db); err != nil {
 			return err
 		}
 	}

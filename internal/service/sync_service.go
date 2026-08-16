@@ -77,11 +77,38 @@ type SyncResult struct {
 type SyncProgressFunc func(current, total int)
 type syncClientFactory func(allowPrivate bool) *http.Client
 
+// MaintenanceController pauses and resumes background work so a library
+// restore can replace tables without racing in-flight jobs.
+type MaintenanceController interface {
+	EnterMaintenance(exceptJobID string)
+	ExitMaintenance()
+}
+
+type syncJobContextKey struct{}
+
+// WithSyncJobID records the running job ID so a library restore triggered by
+// a sync job can exempt that job from maintenance cancellation.
+func WithSyncJobID(ctx context.Context, jobID string) context.Context {
+	return context.WithValue(ctx, syncJobContextKey{}, jobID)
+}
+
+func syncJobIDFromContext(ctx context.Context) string {
+	jobID, _ := ctx.Value(syncJobContextKey{}).(string)
+	return jobID
+}
+
 type SyncService struct {
 	db            *sql.DB
 	feeds         *FeedService
 	box           *secretbox.Box
 	clientFactory syncClientFactory
+	maintenance   MaintenanceController
+}
+
+// SetMaintenance wires the job manager used to quiesce background work
+// around library restores.
+func (s *SyncService) SetMaintenance(maintenance MaintenanceController) {
+	s.maintenance = maintenance
 }
 
 func NewSyncService(db *sql.DB, feeds *FeedService, box *secretbox.Box) *SyncService {

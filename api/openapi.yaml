@@ -246,6 +246,41 @@ paths:
           description: Folder deleted.
         "404":
           $ref: "#/components/responses/Problem"
+  /api/v1/preferences:
+    get:
+      operationId: listPreferences
+      tags: [preferences]
+      responses:
+        "200":
+          description: All stored preferences keyed by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: object
+                    additionalProperties: true
+  /api/v1/preferences/{key}:
+    put:
+      operationId: putPreference
+      tags: [preferences]
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [retention_days]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: true
+      responses:
+        "200":
+          description: Preference stored.
   /api/v1/entries:
     get:
       operationId: listEntries
@@ -282,6 +317,12 @@ paths:
           schema:
             type: string
             enum: [all, unread, starred, read_later]
+        - name: content_kind
+          in: query
+          description: Restrict to feeds of one content kind (e.g. literature for academic sources).
+          schema:
+            type: string
+            enum: [general, literature, video, social]
         - name: query
           in: query
           schema:
@@ -432,6 +473,88 @@ paths:
                     items:
                       type: string
                       format: uuid
+  /api/v1/entries/{entryId}/annotations:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+    get:
+      operationId: listEntryAnnotations
+      tags: [entries, annotations]
+      responses:
+        "200":
+          description: Annotations anchored in the entry, ordered by creation time.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EntryAnnotation"
+    post:
+      operationId: createEntryAnnotation
+      tags: [entries, annotations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quote]
+              properties:
+                style:
+                  type: string
+                  enum: [highlight, underline, wavy]
+                  default: highlight
+                quote:
+                  type: string
+                  minLength: 1
+                prefix:
+                  type: string
+                suffix:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "201":
+          description: Annotation created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryAnnotation"
+  /api/v1/entries/{entryId}/annotations/{annotationId}:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+      - $ref: "#/components/parameters/AnnotationId"
+    patch:
+      operationId: updateEntryAnnotation
+      tags: [entries, annotations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                style:
+                  type: string
+                  enum: [highlight, underline, wavy]
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Annotation updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryAnnotation"
+    delete:
+      operationId: deleteEntryAnnotation
+      tags: [entries, annotations]
+      responses:
+        "204":
+          description: Annotation deleted.
   /api/v1/tags:
     get:
       operationId: listTags
@@ -1183,6 +1306,13 @@ components:
       schema:
         type: string
         format: uuid
+    AnnotationId:
+      name: annotationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     SyncAccountId:
       name: accountId
       in: path
@@ -1288,6 +1418,9 @@ components:
           format: uri
         title:
           type: string
+        content_kind:
+          type: string
+          enum: [general, literature, video, social]
         description:
           type: [string, "null"]
         icon_url:
@@ -1388,6 +1521,16 @@ components:
         unread_count:
           type: integer
           minimum: 0
+        failure_count:
+          type: integer
+          minimum: 0
+        last_error_code:
+          type: [string, "null"]
+        last_error_message:
+          type: [string, "null"]
+        last_success_at:
+          type: [string, "null"]
+          format: date-time
         view_mode:
           type: string
           enum: [compact, standard, card, magazine, image]
@@ -1484,6 +1627,33 @@ components:
           type: boolean
         is_read_later:
           type: boolean
+        updated_at:
+          type: string
+          format: date-time
+    EntryAnnotation:
+      type: object
+      required: [id, entry_id, style, quote, prefix, suffix, note, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        entry_id:
+          type: string
+          format: uuid
+        style:
+          type: string
+          enum: [highlight, underline, wavy]
+        quote:
+          type: string
+        prefix:
+          type: string
+        suffix:
+          type: string
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
         updated_at:
           type: string
           format: date-time

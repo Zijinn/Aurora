@@ -106,9 +106,13 @@ func AuthenticateDevice(ctx context.Context, db *sql.DB, token string) (domain.D
 	device.LastSeenAt = timePointer(lastSeen)
 	device.CreatedAt = parseTime(createdAt.String)
 	device.RevokedAt = timePointer(revokedAt)
+	// Throttle the bookkeeping write: one update per minute per device instead
+	// of a write transaction per authenticated request.
 	now := time.Now().UTC()
-	_, _ = db.ExecContext(ctx, "UPDATE devices SET last_seen_at = ? WHERE id = ?", formatTime(now), device.ID)
-	device.LastSeenAt = &now
+	if device.LastSeenAt == nil || now.Sub(*device.LastSeenAt) > time.Minute {
+		_, _ = db.ExecContext(ctx, "UPDATE devices SET last_seen_at = ? WHERE id = ?", formatTime(now), device.ID)
+		device.LastSeenAt = &now
+	}
 	return device, nil
 }
 

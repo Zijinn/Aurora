@@ -43,8 +43,8 @@ func TestFeedEntryDedupSearchAndMutationIdempotency(t *testing.T) {
 		SanitizedHTML: "<p>Updated body</p>", PlainText: "needle content",
 	}}
 	inserted, err := SaveFeedRefresh(ctx, db, domain.DefaultProfileID, created.ID, updated, nil, nil)
-	if err != nil || inserted != 0 {
-		t.Fatalf("expected deduplicated update, inserted=%d err=%v", inserted, err)
+	if err != nil || len(inserted) != 0 {
+		t.Fatalf("expected deduplicated update, inserted=%v err=%v", inserted, err)
 	}
 	var count int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM entries WHERE feed_id = ?", created.ID).Scan(&count); err != nil || count != 1 {
@@ -99,8 +99,8 @@ func TestFeedEntryIdentityHashDeduplicatesEntriesWithoutStableGUIDOrURL(t *testi
 			SanitizedHTML: "<p>After</p>", PlainText: "After",
 		}},
 	}, nil, nil)
-	if err != nil || inserted != 0 {
-		t.Fatalf("expected identity-hash deduplication, inserted=%d err=%v", inserted, err)
+	if err != nil || len(inserted) != 0 {
+		t.Fatalf("expected identity-hash deduplication, inserted=%v err=%v", inserted, err)
 	}
 	var count int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM entries WHERE feed_id = ?", created.ID).Scan(&count); err != nil || count != 1 {

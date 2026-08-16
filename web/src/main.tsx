@@ -12,6 +12,32 @@ import App from "./App"
 import { applyDesktopPlatform } from "./lib/desktop"
 
 applyDesktopPlatform()
+applyPersistedTheme()
+
+// Apply the persisted theme before first paint so a dark/light preference does
+// not flash the wrong palette while React boots. The AppShell effect owns the
+// attribute once mounted; "system" is resolved here via matchMedia and the
+// effect restores the media-query-driven behavior on mount.
+function applyPersistedTheme() {
+  let theme: unknown
+  try {
+    theme = (
+      JSON.parse(localStorage.getItem("cairn-reader-preferences") ?? "null") as {
+        state?: { theme?: unknown }
+      } | null
+    )?.state?.theme
+  } catch {
+    theme = undefined
+  }
+  const resolved =
+    theme === "light" || theme === "dark"
+      ? theme
+      : (window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false)
+        ? "dark"
+        : "light"
+  document.documentElement.dataset.theme = resolved
+  document.documentElement.style.colorScheme = resolved
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -300,12 +300,28 @@ type ruleActions struct {
 	AddTagIDs []string `json:"add_tag_ids"`
 }
 
-func ApplyRulesToFeed(ctx context.Context, db *sql.DB, profileID, feedID string) error {
+// ApplyRulesToFeed evaluates enabled rules against the feed's entries. When
+// entryIDs is non-nil only those entries are considered; an empty non-nil
+// slice short-circuits, so refresh cycles without new entries cost nothing.
+func ApplyRulesToFeed(ctx context.Context, db *sql.DB, profileID, feedID string, entryIDs []string) error {
 	rules, err := ListRules(ctx, db, profileID)
 	if err != nil || len(rules) == 0 {
 		return err
 	}
-	rows, err := db.QueryContext(ctx, "SELECT id, title, COALESCE(author, '') FROM entries WHERE feed_id = ?", feedID)
+	if entryIDs != nil && len(entryIDs) == 0 {
+		return nil
+	}
+	query := "SELECT id, title, COALESCE(author, '') FROM entries WHERE feed_id = ?"
+	args := []any{feedID}
+	if entryIDs != nil {
+		placeholders := make([]string, len(entryIDs))
+		for index, id := range entryIDs {
+			placeholders[index] = "?"
+			args = append(args, id)
+		}
+		query += " AND id IN (" + strings.Join(placeholders, ",") + ")"
+	}
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -344,6 +360,10 @@ func ApplyRulesToFeed(ctx context.Context, db *sql.DB, profileID, feedID string)
 				continue
 			}
 			if actions.MarkRead || actions.Star || actions.ReadLater {
+				// updated_at only moves when a flag actually changes; bumping it
+				// unconditionally made every rule-matched entry look locally
+				// modified, which breaks sync conflict detection and re-pushes
+				// the whole feed on every sync.
 				_, err := tx.ExecContext(ctx, `
 					INSERT INTO entry_states (profile_id, entry_id, is_read, is_starred, is_read_later, read_at, updated_at)
 					VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 1 THEN ? ELSE NULL END, ?)
@@ -351,7 +371,14 @@ func ApplyRulesToFeed(ctx context.Context, db *sql.DB, profileID, feedID string)
 						is_read = MAX(entry_states.is_read, excluded.is_read),
 						is_starred = MAX(entry_states.is_starred, excluded.is_starred),
 						is_read_later = MAX(entry_states.is_read_later, excluded.is_read_later),
-						read_at = COALESCE(entry_states.read_at, excluded.read_at), updated_at = excluded.updated_at`,
+						read_at = COALESCE(entry_states.read_at, excluded.read_at),
+						updated_at = CASE
+							WHEN entry_states.is_read <> MAX(entry_states.is_read, excluded.is_read)
+								OR entry_states.is_starred <> MAX(entry_states.is_starred, excluded.is_starred)
+								OR entry_states.is_read_later <> MAX(entry_states.is_read_later, excluded.is_read_later)
+							THEN excluded.updated_at
+							ELSE entry_states.updated_at
+						END`,
 					profileID, item.id, boolInt(actions.MarkRead), boolInt(actions.Star), boolInt(actions.ReadLater), boolInt(actions.MarkRead), now, now)
 				if err != nil {
 					return err

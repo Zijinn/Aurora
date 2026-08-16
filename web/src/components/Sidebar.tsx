@@ -2,14 +2,17 @@ import {
   Books,
   CaretDown,
   CaretRight,
+  CircleNotch,
   Funnel,
   FolderOpen,
   FolderSimplePlus,
+  GraduationCap,
   Plus,
   Sparkle,
   Star,
   Tag as TagIcon,
   Tray,
+  WarningCircle,
 } from "@phosphor-icons/react"
 import { useState, type DragEvent, type MouseEvent, type ReactNode } from "react"
 
@@ -52,6 +55,7 @@ interface SidebarProps {
 
 const workspaceScopes: Array<{ scope: LibraryScope; icon: typeof Sparkle }> = [
   { scope: { kind: "today", title: "Today" }, icon: Sparkle },
+  { scope: { kind: "literature", title: "Literature" }, icon: GraduationCap },
   { scope: { kind: "all", title: "All feeds" }, icon: Books },
   { scope: { kind: "unread", title: "Unread" }, icon: Tray },
   { scope: { kind: "saved", title: "Saved" }, icon: Star },
@@ -61,6 +65,7 @@ export function Sidebar(props: SidebarProps) {
   const { locale, t } = useTranslation()
   const openFolders = useReaderStore((state) => state.openFolders)
   const toggleFolder = useReaderStore((state) => state.toggleFolder)
+  const sseState = useReaderStore((state) => state.sseState)
   const [contextMenu, setContextMenu] = useState<
     | {
         kind: "subscription"
@@ -219,6 +224,14 @@ export function Sidebar(props: SidebarProps) {
           </div>
         </div>
       </section>
+      {sseState === "reconnecting" && (
+        <footer className="sidebar__footer" role="status">
+          <span className="server-state">
+            <CircleNotch className="spin server-state__indicator" aria-hidden="true" />
+            <strong>{t("reconnecting")}</strong>
+          </span>
+        </footer>
+      )}
       {contextMenu?.kind === "subscription" && (
         <SubscriptionContextMenu
           subscription={contextMenu.subscription}
@@ -430,6 +443,20 @@ function FolderTree(props: {
           )}
         </span>
         <span className="feed-row__title">{subscription.title}</span>
+        {subscription.failure_count > 0 && (
+          <span
+            className="feed-row__alert"
+            role="img"
+            aria-label={t("feedFailing")}
+            title={`${t("feedFailing")} ×${subscription.failure_count}${
+              subscription.last_error_message
+                ? ` · ${t("feedFailingDetail")}: ${subscription.last_error_message}`
+                : ""
+            }`}
+          >
+            <WarningCircle weight="fill" />
+          </span>
+        )}
         <span className="feed-row__count">{subscription.unread_count}</span>
       </button>
     )

@@ -17,10 +17,14 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("resolve database path: %w", err)
 	}
 
+	// _txlock=immediate makes every write transaction take the write lock at
+	// BEGIN, where busy_timeout applies; a deferred transaction that upgrades
+	// mid-flight fails instantly with SQLITE_BUSY_SNAPSHOT (517) whenever
+	// another writer committed after its read snapshot.
 	dsn := (&url.URL{
 		Scheme:   "file",
 		Path:     absPath,
-		RawQuery: "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=synchronous(NORMAL)",
+		RawQuery: "_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=synchronous(NORMAL)",
 	}).String()
 
 	db, err := sql.Open("sqlite", dsn)

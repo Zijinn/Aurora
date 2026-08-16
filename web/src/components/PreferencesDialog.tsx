@@ -1,4 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowCounterClockwise,
   ArrowsClockwise,
@@ -35,6 +36,7 @@ import type {
   ViewMode,
 } from "../api/types"
 import { useTranslation, type Locale, type Translator } from "../lib/i18n"
+import { listPreferences, putPreference } from "../api/client"
 import { displayShortcut, keyboardChord } from "../lib/shortcuts"
 import {
   defaultShortcuts,
@@ -118,6 +120,20 @@ const shortcutLabelKeys: Record<ShortcutAction, string> = {
 
 export function PreferencesDialog(props: PreferencesDialogProps) {
   const { locale, t } = useTranslation()
+  const queryClient = useQueryClient()
+  const preferencesQuery = useQuery({
+    queryKey: ["preferences"],
+    queryFn: ({ signal }) => listPreferences(signal),
+    enabled: props.open,
+  })
+  const retentionMutation = useMutation({
+    mutationFn: (days: number) => putPreference("retention_days", days),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["preferences"] }),
+  })
+  const retentionDays =
+    typeof preferencesQuery.data?.items?.retention_days === "number"
+      ? preferencesQuery.data.items.retention_days
+      : 0
   const viewMode = useReaderStore((state) => state.viewMode)
   const setViewMode = useReaderStore((state) => state.setViewMode)
   const setLocale = useReaderStore((state) => state.setLocale)
@@ -166,7 +182,9 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
     event.preventDefault()
     event.stopPropagation()
     const chord = keyboardChord(event)
-    if (!chord || chord === "mod" || chord === "alt" || chord === "shift") return
+    // Bare Escape stays reserved for dismissing dialogs.
+    if (!chord || chord === "mod" || chord === "alt" || chord === "shift" || chord === "escape")
+      return
     const duplicate = (Object.entries(shortcuts) as Array<[ShortcutAction, string]>).find(
       ([candidate, value]) => candidate !== action && value === chord,
     )
@@ -688,6 +706,25 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                           {t("export")}
                         </a>
                       </div>
+                    </section>
+                    <section className="preference-section preference-section--row">
+                      <div>
+                        <h2>{t("retentionTitle")}</h2>
+                        <p>{t("retentionDescription")}</p>
+                      </div>
+                      <select
+                        className="select-input preference-language"
+                        aria-label={t("retentionTitle")}
+                        value={String(retentionDays)}
+                        disabled={retentionMutation.isPending}
+                        onChange={(event) => retentionMutation.mutate(Number(event.target.value))}
+                      >
+                        <option value="0">{t("retentionForever")}</option>
+                        <option value="30">{t("retentionDays30")}</option>
+                        <option value="90">{t("retentionDays90")}</option>
+                        <option value="180">{t("retentionDays180")}</option>
+                        <option value="365">{t("retentionDays365")}</option>
+                      </select>
                     </section>
                     <section className="preference-section preference-section--row">
                       <div>

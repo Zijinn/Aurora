@@ -48,10 +48,13 @@ import type {
   Tag,
 } from "../api/types"
 import {
+  createEntryAnnotation,
+  deleteEntryAnnotation,
   getEntryZoteroStatus,
   getJob,
   getZoteroStatus,
   listAIResults,
+  listEntryAnnotations,
   runAIOperation,
   saveEntryToZotero,
 } from "../api/client"
@@ -59,12 +62,15 @@ import {
   applyAnnotations,
   serializeSelection,
   type AnnotationStyle,
+  type ReaderAnnotation,
   type SerializedSelection,
 } from "../lib/annotations"
+import { formatBibTeX, formatGBT7714 } from "../lib/citation"
 import { formatAIResult } from "../lib/ai"
 import { useTranslation } from "../lib/i18n"
 import { formatAuthors, summaryDuplicatesContent } from "../lib/metadata"
 import { useReaderStore } from "../store/reader"
+import { toast } from "../store/toast"
 import { AIIcon } from "./AIIcon"
 
 interface PendingSelection extends SerializedSelection {
@@ -93,6 +99,7 @@ interface ReaderPaneProps {
   onBack: () => void
   onRetry: () => void
   onStateChange: (entry: Entry, patch: Partial<EntryState>) => void
+  onAutoMarkRead?: (entry: Entry) => void
   onTagsChange: (entryID: string, tagIDs: string[]) => void
   onFetchReadability: (entryID: string) => void
   onConfigureAI: () => void
@@ -103,7 +110,7 @@ interface ReaderPaneProps {
 export function ReaderPane(props: ReaderPaneProps) {
   const { locale, t } = useTranslation()
   const queryClient = useQueryClient()
-  const { detail, onStateChange } = props
+  const { detail, onStateChange, onAutoMarkRead } = props
   // Feed content wins by default. Readability has no paywall detection, so on a
   // journal landing page it stores nav and citation furniture and would show
   // that instead of the abstract. Fetching opts in explicitly.
@@ -126,16 +133,18 @@ export function ReaderPane(props: ReaderPaneProps) {
   const contentRef = useRef<HTMLDivElement>(null)
   const readerAppearance = useReaderStore((state) => state.readerAppearance)
   const setReaderAppearance = useReaderStore((state) => state.setReaderAppearance)
-  const annotations = useReaderStore((state) => state.annotations)
-  const addAnnotation = useReaderStore((state) => state.addAnnotation)
-  const removeAnnotation = useReaderStore((state) => state.removeAnnotation)
   const alwaysTranslateContent = useReaderStore((state) => state.alwaysTranslateContent)
   const entry = props.detail ?? props.summary
   const translationLanguage = locale === "zh-CN" ? "Chinese" : "English"
+  // Manual "Translate" runs keep the results query alive for the session even
+  // when always-translate is off, so the result actually renders.
+  const [manualTranslation, setManualTranslation] = useState(false)
   const aiResults = useQuery({
     queryKey: ["ai-results", entry?.id],
     queryFn: ({ signal }) => listAIResults(entry!.id, signal),
-    enabled: Boolean(entry && alwaysTranslateContent && props.aiProfiles.length > 0),
+    enabled: Boolean(
+      entry && (alwaysTranslateContent || manualTranslation) && props.aiProfiles.length > 0,
+    ),
   })
   const zoteroStatus = useQuery({
     queryKey: ["zotero-status"],
@@ -235,6 +244,7 @@ export function ReaderPane(props: ReaderPaneProps) {
       props.onConfigureAI()
       return
     }
+    if (operation === "translation") setManualTranslation(true)
     aiOperationMutation.mutate(operation)
   }
   useEffect(() => {
@@ -255,10 +265,38 @@ export function ReaderPane(props: ReaderPaneProps) {
       : props.feedIconURL && !sourceIconFailed
         ? { url: props.feedIconURL, kind: "icon" as const }
         : null
+  const annotationsQuery = useQuery({
+    queryKey: ["annotations", entry?.id],
+    queryFn: ({ signal }) => listEntryAnnotations(entry!.id, signal),
+    enabled: Boolean(entry),
+  })
   const entryAnnotations = useMemo(
-    () => annotations.filter((annotation) => annotation.entryID === entry?.id),
-    [annotations, entry?.id],
+    () => annotationsQuery.data ?? [],
+    [annotationsQuery.data],
   )
+  const createAnnotationMutation = useMutation({
+    mutationFn: (input: {
+      style: AnnotationStyle
+      quote: string
+      prefix: string
+      suffix: string
+      note: string
+    }) => createEntryAnnotation(entry!.id, input),
+    onSuccess: (created) => {
+      queryClient.setQueryData<ReaderAnnotation[]>(["annotations", entry?.id], (current) => [
+        ...(current ?? []),
+        created,
+      ])
+    },
+  })
+  const deleteAnnotationMutation = useMutation({
+    mutationFn: (annotationID: string) => deleteEntryAnnotation(entry!.id, annotationID),
+    onSuccess: (_result, annotationID) => {
+      queryClient.setQueryData<ReaderAnnotation[]>(["annotations", entry?.id], (current) =>
+        (current ?? []).filter((annotation) => annotation.id !== annotationID),
+      )
+    },
+  })
   const safeHTML = useMemo(
     () =>
       DOMPurify.sanitize(
@@ -272,14 +310,16 @@ export function ReaderPane(props: ReaderPaneProps) {
   const displayAuthors = formatAuthors(entry?.author)
   // Abstract-only feeds repeat the abstract in both fields; the body already
   // shows it, so the header copy would duplicate the whole thing.
-  const bodyShowsSummary = !safeHTML && !(alwaysTranslateContent && translatedContent)
+  const bodyShowsSummary = !safeHTML && !translatedContent
   const showHeaderSummary = Boolean(
     entry?.ai_summary ??
       (entry?.summary && !bodyShowsSummary && !summaryDuplicatesContent(entry.summary, safeHTML)),
   )
   useEffect(() => {
-    if (detail && !detail.state.is_read) onStateChange(detail, { is_read: true })
-  }, [detail, onStateChange])
+    if (!detail || detail.state.is_read) return
+    if (onAutoMarkRead) onAutoMarkRead(detail)
+    else onStateChange(detail, { is_read: true })
+  }, [detail, onStateChange, onAutoMarkRead])
   // Reset the readability preference when the article changes. Adjusting during
   // render rather than in an effect keeps the first render of a new entry from
   // briefly reusing the previous entry's choice.
@@ -320,15 +360,12 @@ export function ReaderPane(props: ReaderPaneProps) {
 
   const createAnnotation = (style: AnnotationStyle, note = "") => {
     if (!entry || !pendingSelection) return
-    addAnnotation({
-      id: window.crypto.randomUUID?.() ?? `${entry.id}-${Date.now()}`,
-      entryID: entry.id,
+    createAnnotationMutation.mutate({
       quote: pendingSelection.quote,
       prefix: pendingSelection.prefix,
       suffix: pendingSelection.suffix,
       style,
       note: note.trim(),
-      createdAt: new Date().toISOString(),
     })
     setPendingSelection(null)
     setNoteEditorOpen(false)
@@ -697,6 +734,36 @@ export function ReaderPane(props: ReaderPaneProps) {
               <TextAlignLeft />
             </span>
           </section>
+          <section className="reader-inspector__section">
+            <h2>{t("citation")}</h2>
+            <div className="reader-citation-actions">
+              <button
+                type="button"
+                className="button button--secondary"
+                onClick={() => {
+                  if (!entry) return
+                  void navigator.clipboard
+                    .writeText(formatBibTeX(entry))
+                    .then(() => toast(t("citationCopied")))
+                }}
+              >
+                BibTeX
+              </button>
+              <button
+                type="button"
+                className="button button--secondary"
+                onClick={() => {
+                  if (!entry) return
+                  void navigator.clipboard
+                    .writeText(formatGBT7714(entry))
+                    .then(() => toast(t("citationCopied")))
+                }}
+              >
+                GB/T 7714
+              </button>
+            </div>
+            {entry?.doi && <p className="reader-citation-doi">DOI: {entry.doi}</p>}
+          </section>
           <section className="reader-inspector__section reader-annotation-list">
             <h2>{t("annotations")}</h2>
             {entryAnnotations.map((annotation) => (
@@ -713,7 +780,7 @@ export function ReaderPane(props: ReaderPaneProps) {
                   type="button"
                   aria-label={t("deleteAnnotation")}
                   title={t("deleteAnnotation")}
-                  onClick={() => removeAnnotation(annotation.id)}
+                  onClick={() => deleteAnnotationMutation.mutate(annotation.id)}
                 >
                   <Trash />
                 </button>
@@ -793,7 +860,7 @@ export function ReaderPane(props: ReaderPaneProps) {
             </div>
           )}
         </header>
-        {alwaysTranslateContent && translatedContent && (
+        {translatedContent && (
           <div className="article-translation-switch" role="status">
             <span>
               <Translate />
@@ -808,7 +875,7 @@ export function ReaderPane(props: ReaderPaneProps) {
             </button>
           </div>
         )}
-        {alwaysTranslateContent && translatedContent && !showOriginalContent ? (
+        {translatedContent && !showOriginalContent ? (
           <div ref={contentRef} className="article-content article-content--translation">
             {translatedContent}
           </div>

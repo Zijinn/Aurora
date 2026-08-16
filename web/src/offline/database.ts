@@ -46,7 +46,32 @@ export async function enqueueStateMutation(record: StateMutationRecord): Promise
   await updateCachedEntryState(database, record.entryID, record.patch, record.deviceTime)
 }
 
-export async function flushMutationOutbox(): Promise<number> {
+// All network state mutations — live updates and offline replays alike — chain
+// onto this queue so a replay can never interleave with a live PATCH for the
+// same entry and reorder the final state.
+let mutationQueue: Promise<unknown> = Promise.resolve()
+
+export function queueStateMutation<T>(task: () => Promise<T>): Promise<T> {
+  const run = mutationQueue.then(task, task)
+  mutationQueue = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
+
+let activeFlush: Promise<number> | null = null
+
+export function flushMutationOutbox(): Promise<number> {
+  // Flushes are triggered from several places (mount, online, focus, SSE
+  // reconnect, interval); coalesce overlapping runs into one pass.
+  activeFlush ??= flushMutationOutboxInner().finally(() => {
+    activeFlush = null
+  })
+  return activeFlush
+}
+
+async function flushMutationOutboxInner(): Promise<number> {
   const database = await openDatabase()
   if (!database) return 0
   const request = database
@@ -57,43 +82,51 @@ export async function flushMutationOutbox(): Promise<number> {
   records.sort((left, right) => left.createdAt - right.createdAt)
   let completed = 0
   for (const record of records) {
-    let response: Response
-    try {
-      const headers = new Headers({
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      })
-      const token = localStorage.getItem("cairn-device-token")
-      if (token) headers.set("Authorization", `Bearer ${token}`)
-      response = await fetch(`/api/v1/entries/${encodeURIComponent(record.entryID)}/state`, {
-        method: "PATCH",
-        headers,
-        credentials: "same-origin",
-        body: JSON.stringify({
-          mutation_id: record.mutationID,
-          device_time: record.deviceTime,
-          ...record.patch,
-        }),
-      })
-    } catch {
-      break
-    }
-    if (
-      response.ok ||
-      (response.status >= 400 &&
-        response.status < 500 &&
-        response.status !== 401 &&
-        response.status !== 429)
-    ) {
-      await transactionPromise(database, outboxStore, "readwrite", (store) =>
-        store.delete(record.mutationID),
-      )
-      completed++
-      continue
-    }
-    break
+    const replayed = await queueStateMutation(() => replayStateMutation(database, record))
+    if (!replayed) break
+    completed++
   }
   return completed
+}
+
+async function replayStateMutation(
+  database: IDBDatabase,
+  record: StateMutationRecord,
+): Promise<boolean> {
+  let response: Response
+  try {
+    const headers = new Headers({
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    })
+    const token = localStorage.getItem("cairn-device-token")
+    if (token) headers.set("Authorization", `Bearer ${token}`)
+    response = await fetch(`/api/v1/entries/${encodeURIComponent(record.entryID)}/state`, {
+      method: "PATCH",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        mutation_id: record.mutationID,
+        device_time: record.deviceTime,
+        ...record.patch,
+      }),
+    })
+  } catch {
+    return false
+  }
+  if (
+    response.ok ||
+    (response.status >= 400 &&
+      response.status < 500 &&
+      response.status !== 401 &&
+      response.status !== 429)
+  ) {
+    await transactionPromise(database, outboxStore, "readwrite", (store) =>
+      store.delete(record.mutationID),
+    )
+    return true
+  }
+  return false
 }
 
 export function entryPageCacheKey(scopeKey: string, query: string, cursor?: string, variant = "") {

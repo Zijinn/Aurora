@@ -96,6 +96,12 @@ func (s *SyncService) runLibrarySync(
 		if !remoteExists {
 			return SyncResult{}, &syncadapter.Error{Code: "remote_missing", Err: errors.New("the remote Aurora snapshot does not exist")}
 		}
+		// Pause dispatch and cancel other in-flight jobs before replacing
+		// tables; this job keeps running via its own ID exemption.
+		if s.maintenance != nil {
+			s.maintenance.EnterMaintenance(syncJobIDFromContext(ctx))
+			defer s.maintenance.ExitMaintenance()
+		}
 		if err := storage.RestoreLibrarySnapshot(ctx, s.db, remote); err != nil {
 			return SyncResult{}, err
 		}
@@ -150,16 +156,22 @@ func chooseLibrarySyncAction(local storage.BackupDocument, localHash string, rem
 func (s *SyncService) readRemoteSnapshot(ctx context.Context, record storage.SyncAccountRecord, credentials syncadapter.Credentials) (storage.BackupDocument, bool, error) {
 	var body []byte
 	if record.Account.Provider == "icloud" {
-		var err error
+		info, err := os.Stat(record.Account.Endpoint)
+		if errors.Is(err, os.ErrNotExist) {
+			return storage.BackupDocument{}, false, nil
+		}
+		if err != nil {
+			return storage.BackupDocument{}, false, fmt.Errorf("stat iCloud snapshot: %w", err)
+		}
+		if info.Size() > maxLibrarySnapshotBytes {
+			return storage.BackupDocument{}, false, errors.New("iCloud snapshot is too large")
+		}
 		body, err = os.ReadFile(record.Account.Endpoint)
 		if errors.Is(err, os.ErrNotExist) {
 			return storage.BackupDocument{}, false, nil
 		}
 		if err != nil {
 			return storage.BackupDocument{}, false, fmt.Errorf("read iCloud snapshot: %w", err)
-		}
-		if int64(len(body)) > maxLibrarySnapshotBytes {
-			return storage.BackupDocument{}, false, errors.New("iCloud snapshot is too large")
 		}
 	} else {
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, record.Account.Endpoint, nil)
