@@ -315,8 +315,15 @@ export function ReaderPane(props: ReaderPaneProps) {
     entry?.ai_summary ??
       (entry?.summary && !bodyShowsSummary && !summaryDuplicatesContent(entry.summary, safeHTML)),
   )
+  // Fire at most once per entry: if the callback prop identity changes while
+  // the PATCH is still in flight (the parent re-renders on every mutation
+  // state change), the deps below re-run this effect and re-arm the mutation
+  // until React aborts the whole tree with "Maximum update depth exceeded".
+  const autoMarkedEntryRef = useRef<string | null>(null)
   useEffect(() => {
     if (!detail || detail.state.is_read) return
+    if (autoMarkedEntryRef.current === detail.id) return
+    autoMarkedEntryRef.current = detail.id
     if (onAutoMarkRead) onAutoMarkRead(detail)
     else onStateChange(detail, { is_read: true })
   }, [detail, onStateChange, onAutoMarkRead])

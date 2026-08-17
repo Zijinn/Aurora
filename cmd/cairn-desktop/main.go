@@ -65,13 +65,19 @@ func main() {
 		}(),
 	})
 
+	windowWidth, windowHeight := 1280, 820
+	const minWindowWidth, minWindowHeight = 920, 620
+	restoredSize, hasRestoredSize := loadWindowState(cfg.DataDir, minWindowWidth, minWindowHeight)
+	if hasRestoredSize {
+		windowWidth, windowHeight = restoredSize.Width, restoredSize.Height
+	}
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "aurora-main-window",
 		Title:            "Aurora",
-		Width:            1280,
-		Height:           820,
-		MinWidth:         920,
-		MinHeight:        620,
+		Width:            windowWidth,
+		Height:           windowHeight,
+		MinWidth:         minWindowWidth,
+		MinHeight:        minWindowHeight,
 		URL:              "/",
 		Frameless:        runtime.GOOS == "windows",
 		BackgroundColour: application.NewRGB(255, 255, 255),
@@ -107,6 +113,7 @@ func main() {
 		},
 	})
 	window.Center()
+	persistWindowSizeOnResize(window, cfg.DataDir)
 
 	if err := app.Run(); err != nil {
 		logger.Error("run desktop application", "error", err)

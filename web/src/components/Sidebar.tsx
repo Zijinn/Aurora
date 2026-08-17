@@ -6,7 +6,6 @@ import {
   Funnel,
   FolderOpen,
   FolderSimplePlus,
-  GraduationCap,
   Plus,
   Sparkle,
   Star,
@@ -55,7 +54,6 @@ interface SidebarProps {
 
 const workspaceScopes: Array<{ scope: LibraryScope; icon: typeof Sparkle }> = [
   { scope: { kind: "today", title: "Today" }, icon: Sparkle },
-  { scope: { kind: "literature", title: "Literature" }, icon: GraduationCap },
   { scope: { kind: "all", title: "All feeds" }, icon: Books },
   { scope: { kind: "unread", title: "Unread" }, icon: Tray },
   { scope: { kind: "saved", title: "Saved" }, icon: Star },

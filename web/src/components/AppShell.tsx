@@ -239,14 +239,9 @@ export function AppShell() {
     () => constrainPaneLayout(paneLayout, viewportWidth),
     [paneLayout, viewportWidth],
   )
-  useEffect(() => {
-    if (
-      constrainedPaneLayout.sidebarWidth !== paneLayout.sidebarWidth ||
-      constrainedPaneLayout.timelineWidth !== paneLayout.timelineWidth
-    ) {
-      setPaneLayout(constrainedPaneLayout)
-    }
-  }, [constrainedPaneLayout, paneLayout, setPaneLayout])
+  // The constrained layout is display-only: it must never be written back to
+  // the persisted store, or temporarily shrinking the window would erase the
+  // pane widths the user chose.
 
   const applyPaneLayout = useCallback((next: PaneLayout) => {
     shellRef.current?.style.setProperty("--sidebar-width", `${next.sidebarWidth}px`)
@@ -921,6 +916,15 @@ export function AppShell() {
     },
     [mutateEntryState],
   )
+  // Must stay referentially stable: ReaderPane's auto-mark-read effect lists
+  // this prop in its deps, and a fresh closure per render makes the effect
+  // re-fire on every mutation state change, looping until React aborts.
+  const autoMarkRead = useCallback(
+    (entry: Entry) => {
+      mutateAutoRead({ entry, patch: { is_read: true } })
+    },
+    [mutateAutoRead],
+  )
 
   useEffect(() => {
     if (!libraryEnabled || !("EventSource" in window)) return
@@ -1178,7 +1182,7 @@ export function AppShell() {
                   onBack={closeMobileReader}
                   onRetry={() => void entryDetail.refetch()}
                   onStateChange={mutateState}
-                  onAutoMarkRead={(entry) => mutateAutoRead({ entry, patch: { is_read: true } })}
+                  onAutoMarkRead={autoMarkRead}
                   onTagsChange={(entryID, tagIDs) => tagMutation.mutate({ entryID, tagIDs })}
                   onFetchReadability={(entryID) => readabilityMutation.mutate(entryID)}
                   onConfigureAI={() => setAIProfileOpen(true)}
