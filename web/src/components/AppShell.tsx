@@ -81,6 +81,7 @@ import { useReaderStore, type PaneLayout } from "../store/reader"
 import { toast } from "../store/toast"
 import { Sidebar } from "./Sidebar"
 import { TimelinePane } from "./TimelinePane"
+import { ConfirmDialog } from "./ConfirmDialog"
 import { MobileNav } from "./MobileNav"
 import { MobileLibraryDialog } from "./MobileLibraryDialog"
 import { PaneDivider } from "./PaneDivider"
@@ -163,6 +164,10 @@ export function AppShell() {
   const [organizationOpen, setOrganizationOpen] = useState(false)
   const [organizationMode, setOrganizationMode] = useState<"all" | "folders">("all")
   const [dialogReturnTarget, setDialogReturnTarget] = useState<"preferences" | null>(null)
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    message: string
+    action: () => void
+  } | null>(null)
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false)
   const [aiOpen, setAIOpen] = useState(false)
   const [importJobID, setImportJobID] = useState<string | null>(null)
@@ -183,6 +188,9 @@ export function AppShell() {
     },
     [dialogReturnTarget],
   )
+  const requestConfirmation = useCallback((message: string, action: () => void) => {
+    setPendingConfirmation({ message, action })
+  }, [])
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -537,20 +545,16 @@ export function AppShell() {
   // double-refetch every article open.
   const applyEntryStateToCache = useCallback(
     (entry: Entry, state: EntryState) => {
-      queryClient.setQueriesData<InfiniteData<EntryPage>>(
-        { queryKey: ["entries"] },
-        (current) =>
-          current
-            ? {
-                ...current,
-                pages: current.pages.map((page) => ({
-                  ...page,
-                  items: page.items.map((item) =>
-                    item.id === entry.id ? { ...item, state } : item,
-                  ),
-                })),
-              }
-            : current,
+      queryClient.setQueriesData<InfiniteData<EntryPage>>({ queryKey: ["entries"] }, (current) =>
+        current
+          ? {
+              ...current,
+              pages: current.pages.map((page) => ({
+                ...page,
+                items: page.items.map((item) => (item.id === entry.id ? { ...item, state } : item)),
+              })),
+            }
+          : current,
       )
       queryClient.setQueriesData<Entry>({ queryKey: ["entry", entry.id] }, (current) =>
         current ? { ...current, state } : current,
@@ -1108,20 +1112,22 @@ export function AppShell() {
           onCreateSubfolder={(parentID, name) =>
             createFolderMutation.mutate({ name, parent_id: parentID })
           }
-          onDeleteFolder={(folderID) => {
-            if (window.confirm(t("deleteFolderConfirmation"))) deleteFolderMutation.mutate(folderID)
-          }}
-          onMoveFolder={(folderID, parentID) =>
-            moveFolderMutation.mutate({ folderID, parentID })
+          onDeleteFolder={(folderID) =>
+            requestConfirmation(t("deleteFolderConfirmation"), () =>
+              deleteFolderMutation.mutate(folderID),
+            )
           }
+          onMoveFolder={(folderID, parentID) => moveFolderMutation.mutate({ folderID, parentID })}
           onMergeFeeds={(feedID, targetFeedID) => void mergeSubscriptions(feedID, targetFeedID)}
           onReorderFolder={(folderID, targetID, before) =>
             void reorderFolder(folderID, targetID, before)
           }
           onReorderFeed={(feedID, targetID, before) => void reorderFeed(feedID, targetID, before)}
-          onDeleteFeed={(feedID) => {
-            if (window.confirm(t("unsubscribeConfirmation"))) feedDeleteMutation.mutate(feedID)
-          }}
+          onDeleteFeed={(feedID) =>
+            requestConfirmation(t("unsubscribeConfirmation"), () =>
+              feedDeleteMutation.mutate(feedID),
+            )
+          }
           onChangeFeedView={(feedID, viewMode) => feedUpdateMutation.mutate({ feedID, viewMode })}
           onChangeFeedRefresh={(feedID, refreshPolicy, refreshIntervalMinutes) =>
             feedUpdateMutation.mutate({ feedID, refreshPolicy, refreshIntervalMinutes })
@@ -1336,10 +1342,11 @@ export function AppShell() {
                 toggleSyncMutation.mutate({ accountID, enabled })
               }
               onRunSyncAccount={(accountID, mode) => runSyncMutation.mutate({ accountID, mode })}
-              onDeleteSyncAccount={(accountID) => {
-                if (window.confirm(t("deleteSyncConfirmation")))
-                  deleteSyncMutation.mutate(accountID)
-              }}
+              onDeleteSyncAccount={(accountID) =>
+                requestConfirmation(t("deleteSyncConfirmation"), () =>
+                  deleteSyncMutation.mutate(accountID),
+                )
+              }
               onAddAIProfile={() => {
                 setDialogReturnTarget("preferences")
                 setPreferencesOpen(false)
@@ -1349,10 +1356,11 @@ export function AppShell() {
                 toggleAIProfileMutation.mutate({ profileID, enabled })
               }
               onDefaultAIProfile={(profileID) => defaultAIProfileMutation.mutate(profileID)}
-              onDeleteAIProfile={(profileID) => {
-                if (window.confirm(t("deleteAIConfirmation")))
-                  deleteAIProfileMutation.mutate(profileID)
-              }}
+              onDeleteAIProfile={(profileID) =>
+                requestConfirmation(t("deleteAIConfirmation"), () =>
+                  deleteAIProfileMutation.mutate(profileID),
+                )
+              }
             />
           </Suspense>
         )}
@@ -1471,27 +1479,45 @@ export function AppShell() {
                 else closeSecondaryDialog(setOrganizationOpen)
               }}
               onCreateFolder={(input) => createFolderMutation.mutate(input)}
-              onDeleteFolder={(folderID) => {
-                if (window.confirm(t("deleteFolderConfirmation")))
-                  deleteFolderMutation.mutate(folderID)
-              }}
+              onDeleteFolder={(folderID) =>
+                requestConfirmation(t("deleteFolderConfirmation"), () =>
+                  deleteFolderMutation.mutate(folderID),
+                )
+              }
               onCreateTag={(input) => createTagMutation.mutate(input)}
-              onDeleteTag={(tagID) => {
-                if (window.confirm(t("deleteTagConfirmation"))) deleteTagMutation.mutate(tagID)
-              }}
+              onDeleteTag={(tagID) =>
+                requestConfirmation(t("deleteTagConfirmation"), () =>
+                  deleteTagMutation.mutate(tagID),
+                )
+              }
               onCreateRule={(input) => createRuleMutation.mutate(input)}
-              onDeleteRule={(ruleID) => {
-                if (window.confirm(t("deleteRuleConfirmation"))) deleteRuleMutation.mutate(ruleID)
-              }}
+              onDeleteRule={(ruleID) =>
+                requestConfirmation(t("deleteRuleConfirmation"), () =>
+                  deleteRuleMutation.mutate(ruleID),
+                )
+              }
               onCreateSavedFilter={(input) => createSavedFilterMutation.mutate(input)}
-              onDeleteSavedFilter={(filterID) => {
-                if (window.confirm(t("deleteFilterConfirmation")))
-                  deleteSavedFilterMutation.mutate(filterID)
-              }}
+              onDeleteSavedFilter={(filterID) =>
+                requestConfirmation(t("deleteFilterConfirmation"), () =>
+                  deleteSavedFilterMutation.mutate(filterID),
+                )
+              }
             />
           </Suspense>
         )}
       </main>
+      <ConfirmDialog
+        open={pendingConfirmation !== null}
+        message={pendingConfirmation?.message ?? ""}
+        onOpenChange={(open) => {
+          if (!open) setPendingConfirmation(null)
+        }}
+        onConfirm={() => {
+          const action = pendingConfirmation?.action
+          setPendingConfirmation(null)
+          action?.()
+        }}
+      />
     </>
   )
 }

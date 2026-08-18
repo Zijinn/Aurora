@@ -38,6 +38,7 @@ import type {
 import { useTranslation, type Locale, type Translator } from "../lib/i18n"
 import { listPreferences, putPreference } from "../api/client"
 import { displayShortcut, keyboardChord } from "../lib/shortcuts"
+import { ConfirmDialog } from "./ConfirmDialog"
 import {
   defaultShortcuts,
   type ShortcutAction,
@@ -154,6 +155,10 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
   const [activeTab, setActiveTab] = useState<PreferenceTab>("interface")
   const [conflict, setConflict] = useState("")
   const [autoTagSearch, setAutoTagSearch] = useState("")
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    message: string
+    action: () => void
+  } | null>(null)
   const restoreInput = useRef<HTMLInputElement>(null)
   const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0]!
   const serviceAccounts = props.syncAccounts.filter(
@@ -198,644 +203,679 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
     setShortcut(action, chord)
   }
   const selectBackup = (file?: File) => {
-    if (file && window.confirm(t("restoreConfirmation"))) props.onRestore(file)
+    if (file)
+      setPendingConfirmation({
+        message: t("restoreConfirmation"),
+        action: () => props.onRestore(file),
+      })
     if (restoreInput.current) restoreInput.current.value = ""
   }
   const runCloudSync = (account: SyncAccount, mode: "auto" | "push" | "pull") => {
-    if (mode === "push" && !window.confirm(t("cloudPushConfirmation"))) return
-    if (mode === "pull" && !window.confirm(t("cloudPullConfirmation"))) return
+    if (mode === "push") {
+      setPendingConfirmation({
+        message: t("cloudPushConfirmation"),
+        action: () => props.onRunSyncAccount(account.id, mode),
+      })
+      return
+    }
+    if (mode === "pull") {
+      setPendingConfirmation({
+        message: t("cloudPullConfirmation"),
+        action: () => props.onRunSyncAccount(account.id, mode),
+      })
+      return
+    }
     props.onRunSyncAccount(account.id, mode)
   }
 
   return (
-    <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content preferences-dialog" aria-describedby={undefined}>
-          <div className="preferences-layout">
-            <aside className="preferences-nav">
-              <div className="preferences-nav__brand">
-                <img src="/icons/aurora-192.png" alt="" draggable={false} />
-                <span>
-                  <strong>Aurora</strong>
-                  <small>{t("preferencesTitle")}</small>
-                </span>
-              </div>
-              <nav aria-label={t("preferencesTitle")}>
-                {tabs.map((tab) => {
-                  const Icon = tab.icon
-                  return (
-                    <button
-                      className={
-                        activeTab === tab.id
-                          ? "preferences-nav__item preferences-nav__item--active"
-                          : "preferences-nav__item"
-                      }
-                      type="button"
-                      key={tab.id}
-                      aria-current={activeTab === tab.id ? "page" : undefined}
-                      onClick={() => setActiveTab(tab.id)}
-                    >
-                      <Icon />
-                      <span>{t(tab.labelKey)}</span>
-                    </button>
-                  )
-                })}
-              </nav>
-              <small>Aurora {props.status?.version ?? ""}</small>
-            </aside>
-
-            <main className="preferences-main">
-              <div className="dialog-header preferences-header">
-                <div>
-                  <Dialog.Title>{t(active.labelKey)}</Dialog.Title>
-                  <p>{t(active.descriptionKey)}</p>
+    <>
+      <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="dialog-overlay" />
+          <Dialog.Content
+            className="dialog-content preferences-dialog"
+            aria-describedby={undefined}
+          >
+            <div className="preferences-layout">
+              <aside className="preferences-nav">
+                <div className="preferences-nav__brand">
+                  <img src="/icons/aurora-192.png" alt="" draggable={false} />
+                  <span>
+                    <strong>Aurora</strong>
+                    <small>{t("preferencesTitle")}</small>
+                  </span>
                 </div>
-                <Dialog.Close asChild>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label={t("close")}
-                    title={t("close")}
-                  >
-                    <X />
-                  </button>
-                </Dialog.Close>
-              </div>
-              <div className="preferences-scroll">
-                {activeTab === "interface" && (
-                  <>
-                    <section className="preference-section preference-section--row">
-                      <div>
-                        <h2>{t("language")}</h2>
-                        <p>{t("languageDescription")}</p>
-                      </div>
-                      <select
-                        className="select-input preference-language"
-                        aria-label={t("language")}
-                        value={locale}
-                        onChange={(event) => setLocale(event.target.value as "zh-CN" | "en-US")}
+                <nav aria-label={t("preferencesTitle")}>
+                  {tabs.map((tab) => {
+                    const Icon = tab.icon
+                    return (
+                      <button
+                        className={
+                          activeTab === tab.id
+                            ? "preferences-nav__item preferences-nav__item--active"
+                            : "preferences-nav__item"
+                        }
+                        type="button"
+                        key={tab.id}
+                        aria-current={activeTab === tab.id ? "page" : undefined}
+                        onClick={() => setActiveTab(tab.id)}
                       >
-                        <option value="zh-CN">{t("chinese")}</option>
-                        <option value="en-US">{t("english")}</option>
-                      </select>
-                    </section>
-                    <section className="preference-section preference-section--row">
-                      <div>
-                        <h2>{t("theme")}</h2>
-                        <p>{t("themeDescription")}</p>
-                      </div>
-                      <select
-                        className="select-input preference-language"
-                        aria-label={t("theme")}
-                        value={props.theme}
-                        onChange={(event) => setTheme(event.target.value as ThemeMode)}
-                      >
-                        <option value="system">{t("themeSystem")}</option>
-                        <option value="light">{t("themeLight")}</option>
-                        <option value="dark">{t("themeDark")}</option>
-                      </select>
-                    </section>
-                    <section className="preference-section">
-                      <h2>{t("timelineView")}</h2>
-                      <div
-                        className="segmented-control"
-                        role="group"
-                        aria-label={t("timelineView")}
-                      >
-                        {viewModes.map((mode) => (
-                          <button
-                            className={
-                              viewMode === mode.value
-                                ? "segmented-control__item segmented-control__item--active"
-                                : "segmented-control__item"
-                            }
-                            type="button"
-                            key={mode.value}
-                            onClick={() => setViewMode(mode.value)}
-                          >
-                            {t(mode.labelKey)}
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                    <section className="preference-section">
-                      <div className="preference-heading">
-                        <h2>{t("keyboard")}</h2>
-                        <button
-                          className="button button--quiet"
-                          type="button"
-                          onClick={() => {
-                            resetShortcuts()
-                            setConflict("")
-                          }}
+                        <Icon />
+                        <span>{t(tab.labelKey)}</span>
+                      </button>
+                    )
+                  })}
+                </nav>
+                <small>Aurora {props.status?.version ?? ""}</small>
+              </aside>
+
+              <main className="preferences-main">
+                <div className="dialog-header preferences-header">
+                  <div>
+                    <Dialog.Title>{t(active.labelKey)}</Dialog.Title>
+                    <p>{t(active.descriptionKey)}</p>
+                  </div>
+                  <Dialog.Close asChild>
+                    <button
+                      className="icon-button"
+                      type="button"
+                      aria-label={t("close")}
+                      title={t("close")}
+                    >
+                      <X />
+                    </button>
+                  </Dialog.Close>
+                </div>
+                <div className="preferences-scroll">
+                  {activeTab === "interface" && (
+                    <>
+                      <section className="preference-section preference-section--row">
+                        <div>
+                          <h2>{t("language")}</h2>
+                          <p>{t("languageDescription")}</p>
+                        </div>
+                        <select
+                          className="select-input preference-language"
+                          aria-label={t("language")}
+                          value={locale}
+                          onChange={(event) => setLocale(event.target.value as "zh-CN" | "en-US")}
                         >
-                          <ArrowCounterClockwise />
-                          {t("reset")}
+                          <option value="zh-CN">{t("chinese")}</option>
+                          <option value="en-US">{t("english")}</option>
+                        </select>
+                      </section>
+                      <section className="preference-section preference-section--row">
+                        <div>
+                          <h2>{t("theme")}</h2>
+                          <p>{t("themeDescription")}</p>
+                        </div>
+                        <select
+                          className="select-input preference-language"
+                          aria-label={t("theme")}
+                          value={props.theme}
+                          onChange={(event) => setTheme(event.target.value as ThemeMode)}
+                        >
+                          <option value="system">{t("themeSystem")}</option>
+                          <option value="light">{t("themeLight")}</option>
+                          <option value="dark">{t("themeDark")}</option>
+                        </select>
+                      </section>
+                      <section className="preference-section">
+                        <h2>{t("timelineView")}</h2>
+                        <div
+                          className="segmented-control"
+                          role="group"
+                          aria-label={t("timelineView")}
+                        >
+                          {viewModes.map((mode) => (
+                            <button
+                              className={
+                                viewMode === mode.value
+                                  ? "segmented-control__item segmented-control__item--active"
+                                  : "segmented-control__item"
+                              }
+                              type="button"
+                              key={mode.value}
+                              onClick={() => setViewMode(mode.value)}
+                            >
+                              {t(mode.labelKey)}
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                      <section className="preference-section">
+                        <div className="preference-heading">
+                          <h2>{t("keyboard")}</h2>
+                          <button
+                            className="button button--quiet"
+                            type="button"
+                            onClick={() => {
+                              resetShortcuts()
+                              setConflict("")
+                            }}
+                          >
+                            <ArrowCounterClockwise />
+                            {t("reset")}
+                          </button>
+                        </div>
+                        <div className="shortcut-list">
+                          {(Object.keys(defaultShortcuts) as ShortcutAction[]).map((action) => (
+                            <div className="shortcut-row" key={action}>
+                              <span>{t(shortcutLabelKeys[action])}</span>
+                              <button
+                                className="shortcut-key"
+                                type="button"
+                                title={t("shortcutHint")}
+                                onKeyDown={(event) => captureShortcut(action, event)}
+                              >
+                                {displayShortcut(shortcuts[action])}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        {conflict && (
+                          <p className="form-error" role="alert">
+                            {conflict}
+                          </p>
+                        )}
+                      </section>
+                    </>
+                  )}
+
+                  {activeTab === "ai" && (
+                    <>
+                      <section className="preference-section preference-section--automation">
+                        <div className="preference-heading preference-heading--intro">
+                          <div>
+                            <h2>{t("automaticTranslation")}</h2>
+                            <p>
+                              {props.aiProfiles.some((profile) => profile.enabled)
+                                ? t("aiProviderDescription")
+                                : t("automaticTranslationNeedsProvider")}
+                            </p>
+                          </div>
+                        </div>
+                        <label className="preference-switch-row">
+                          <span>
+                            <strong>{t("alwaysTranslateTitles")}</strong>
+                            <small>{t("alwaysTranslateTitlesDescription")}</small>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={alwaysTranslateTitles}
+                            disabled={!props.aiProfiles.some((profile) => profile.enabled)}
+                            onChange={(event) => setAlwaysTranslateTitles(event.target.checked)}
+                          />
+                          <i aria-hidden="true" />
+                        </label>
+                        <label className="preference-switch-row">
+                          <span>
+                            <strong>{t("alwaysTranslateContent")}</strong>
+                            <small>{t("alwaysTranslateContentDescription")}</small>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={alwaysTranslateContent}
+                            disabled={!props.aiProfiles.some((profile) => profile.enabled)}
+                            onChange={(event) => setAlwaysTranslateContent(event.target.checked)}
+                          />
+                          <i aria-hidden="true" />
+                        </label>
+                      </section>
+                      <section className="preference-section preference-section--auto-tags">
+                        <div className="preference-heading preference-heading--intro">
+                          <div>
+                            <h2>{t("automaticTags")}</h2>
+                            <p>{t("automaticTagsDescription")}</p>
+                          </div>
+                          <label className="preference-switch preference-switch--inline">
+                            <input
+                              type="checkbox"
+                              checked={autoAcademicTags}
+                              disabled={!enabledAI}
+                              aria-label={t("automaticTags")}
+                              onChange={(event) => setAutoAcademicTags(event.target.checked)}
+                            />
+                            <i aria-hidden="true" />
+                          </label>
+                        </div>
+                        {autoAcademicTags && (
+                          <div className="auto-tag-settings">
+                            <label className="auto-tag-search">
+                              <span>{t("automaticTagScope")}</span>
+                              <input
+                                className="text-input"
+                                type="search"
+                                value={autoTagSearch}
+                                placeholder={t("searchFoldersAndSubscriptions")}
+                                onChange={(event) => setAutoTagSearch(event.target.value)}
+                              />
+                            </label>
+                            <p className="auto-tag-selection-summary">
+                              {t("automaticTagSelectionSummary")
+                                .replace("{folders}", String(autoAcademicTagFolderIDs.length))
+                                .replace("{feeds}", String(autoAcademicTagFeedIDs.length))}
+                            </p>
+                            <div className="auto-tag-scope-grid">
+                              <fieldset>
+                                <legend>{t("folders")}</legend>
+                                <div className="auto-tag-scope-actions">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setAutoAcademicTagFolderIDs(
+                                        Array.from(
+                                          new Set([
+                                            ...autoAcademicTagFolderIDs,
+                                            ...visibleAutoTagFolders.map((folder) => folder.id),
+                                          ]),
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    {t("selectAll")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setAutoAcademicTagFolderIDs(
+                                        autoAcademicTagFolderIDs.filter(
+                                          (id) =>
+                                            !visibleAutoTagFolders.some(
+                                              (folder) => folder.id === id,
+                                            ),
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    {t("clear")}
+                                  </button>
+                                </div>
+                                <div className="auto-tag-scope-list">
+                                  {visibleAutoTagFolders.map((folder) => (
+                                    <label key={folder.id}>
+                                      <input
+                                        type="checkbox"
+                                        checked={autoAcademicTagFolderIDs.includes(folder.id)}
+                                        onChange={() =>
+                                          setAutoAcademicTagFolderIDs(
+                                            toggleID(autoAcademicTagFolderIDs, folder.id),
+                                          )
+                                        }
+                                      />
+                                      <span>{folder.name}</span>
+                                    </label>
+                                  ))}
+                                  {visibleAutoTagFolders.length === 0 && (
+                                    <span className="preference-empty">{t("noFolders")}</span>
+                                  )}
+                                </div>
+                              </fieldset>
+                              <fieldset>
+                                <legend>{t("subscriptions")}</legend>
+                                <div className="auto-tag-scope-actions">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setAutoAcademicTagFeedIDs(
+                                        Array.from(
+                                          new Set([
+                                            ...autoAcademicTagFeedIDs,
+                                            ...visibleAutoTagSubscriptions.map(
+                                              (subscription) => subscription.feed_id,
+                                            ),
+                                          ]),
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    {t("selectAll")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setAutoAcademicTagFeedIDs(
+                                        autoAcademicTagFeedIDs.filter(
+                                          (id) =>
+                                            !visibleAutoTagSubscriptions.some(
+                                              (subscription) => subscription.feed_id === id,
+                                            ),
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    {t("clear")}
+                                  </button>
+                                </div>
+                                <div className="auto-tag-scope-list">
+                                  {visibleAutoTagSubscriptions.map((subscription) => (
+                                    <label key={subscription.id}>
+                                      <input
+                                        type="checkbox"
+                                        checked={autoAcademicTagFeedIDs.includes(
+                                          subscription.feed_id,
+                                        )}
+                                        onChange={() =>
+                                          setAutoAcademicTagFeedIDs(
+                                            toggleID(autoAcademicTagFeedIDs, subscription.feed_id),
+                                          )
+                                        }
+                                      />
+                                      <span>
+                                        <strong>{subscription.title}</strong>
+                                        <small>{subscription.feed_url}</small>
+                                      </span>
+                                    </label>
+                                  ))}
+                                  {visibleAutoTagSubscriptions.length === 0 && (
+                                    <span className="preference-empty">{t("noSubscriptions")}</span>
+                                  )}
+                                </div>
+                              </fieldset>
+                            </div>
+                            {autoAcademicTagFolderIDs.length === 0 &&
+                              autoAcademicTagFeedIDs.length === 0 && (
+                                <p className="field-hint">{t("automaticTagScopeRequired")}</p>
+                              )}
+                          </div>
+                        )}
+                      </section>
+                      <section className="preference-section preference-section--flush">
+                        <div className="preference-heading preference-heading--intro">
+                          <div>
+                            <h2>{t("aiProviders")}</h2>
+                            <p>{t("aiProviderDescription")}</p>
+                          </div>
+                          <button
+                            className="button button--secondary"
+                            type="button"
+                            onClick={props.onAddAIProfile}
+                          >
+                            <Plus />
+                            {t("add")}
+                          </button>
+                        </div>
+                        <div className="sync-account-list">
+                          {props.aiProfiles.map((profile) => (
+                            <div className="sync-account-row" key={profile.id}>
+                              <label
+                                className="sync-account-toggle"
+                                title={profile.enabled ? t("disableProvider") : t("enableProvider")}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={profile.enabled}
+                                  onChange={(event) =>
+                                    props.onToggleAIProfile(profile.id, event.target.checked)
+                                  }
+                                />
+                                <span className="sr-only">
+                                  {t("enable")} {profile.name}
+                                </span>
+                              </label>
+                              <span className="sync-account-copy">
+                                <strong>
+                                  <Brain />
+                                  {profile.name}
+                                </strong>
+                                <small
+                                  className={
+                                    profile.last_error_message ? "sync-account-error" : undefined
+                                  }
+                                >
+                                  {profile.last_error_message ??
+                                    `${profile.model}${profile.is_default ? ` · ${t("default")}` : ""}`}
+                                </small>
+                              </span>
+                              <span className="sync-account-actions">
+                                <button
+                                  className={
+                                    profile.is_default
+                                      ? "icon-button icon-button--active"
+                                      : "icon-button"
+                                  }
+                                  type="button"
+                                  aria-label={`${t("useByDefault")} ${profile.name}`}
+                                  title={t("makeDefault")}
+                                  disabled={profile.is_default}
+                                  onClick={() => props.onDefaultAIProfile(profile.id)}
+                                >
+                                  <Check />
+                                </button>
+                                <button
+                                  className="icon-button"
+                                  type="button"
+                                  aria-label={`${t("delete")} ${profile.name}`}
+                                  title={t("deleteAIProvider")}
+                                  onClick={() => props.onDeleteAIProfile(profile.id)}
+                                >
+                                  <Trash />
+                                </button>
+                              </span>
+                            </div>
+                          ))}
+                          {props.aiProfiles.length === 0 && (
+                            <p className="preference-empty">{t("noAIProviders")}</p>
+                          )}
+                        </div>
+                        {props.aiUsage && (
+                          <p className="ai-usage">
+                            {new Intl.NumberFormat(locale).format(props.aiUsage.total_tokens)}{" "}
+                            {t("tokensUsed")}
+                          </p>
+                        )}
+                      </section>
+                    </>
+                  )}
+
+                  {activeTab === "sync" && (
+                    <>
+                      <CloudProviderGrid
+                        accounts={cloudAccounts}
+                        t={t}
+                        onSelect={props.onAddSyncAccount}
+                      />
+                      <SyncAccountSection
+                        title={t("libraryCloudSync")}
+                        description={t("libraryCloudSyncDescription")}
+                        empty={t("noCloudSyncAccounts")}
+                        accounts={cloudAccounts}
+                        locale={locale}
+                        t={t}
+                        pendingID={props.syncPendingID}
+                        onAdd={() => props.onAddSyncAccount()}
+                        onToggle={props.onToggleSyncAccount}
+                        onRun={runCloudSync}
+                        onEdit={props.onEditSyncAccount}
+                        onDelete={props.onDeleteSyncAccount}
+                        cloud
+                      />
+                      <SyncAccountSection
+                        title={t("readingServiceSync")}
+                        description={t("readingServiceSyncDescription")}
+                        empty={t("noServiceSyncAccounts")}
+                        accounts={serviceAccounts}
+                        locale={locale}
+                        t={t}
+                        pendingID={props.syncPendingID}
+                        onAdd={() => props.onAddSyncAccount("freshrss")}
+                        onToggle={props.onToggleSyncAccount}
+                        onRun={(account) => props.onRunSyncAccount(account.id, "auto")}
+                        onEdit={props.onEditSyncAccount}
+                        onDelete={props.onDeleteSyncAccount}
+                      />
+                    </>
+                  )}
+
+                  {activeTab === "library" && (
+                    <>
+                      <section className="preference-section preference-section--row">
+                        <div>
+                          <h2>{t("subscriptions")}</h2>
+                          <p>{t("subscriptionsDescription")}</p>
+                        </div>
+                        <div className="button-group">
+                          <button
+                            className="button button--secondary"
+                            type="button"
+                            onClick={props.onOrganizeLibrary}
+                          >
+                            <Books />
+                            {t("manage")}
+                          </button>
+                          <a
+                            className="button button--secondary"
+                            href="/api/v1/exports/opml"
+                            download
+                          >
+                            <DownloadSimple />
+                            {t("export")}
+                          </a>
+                        </div>
+                      </section>
+                      <section className="preference-section preference-section--row">
+                        <div>
+                          <h2>{t("retentionTitle")}</h2>
+                          <p>{t("retentionDescription")}</p>
+                        </div>
+                        <select
+                          className="select-input preference-language"
+                          aria-label={t("retentionTitle")}
+                          value={String(retentionDays)}
+                          disabled={retentionMutation.isPending}
+                          onChange={(event) => retentionMutation.mutate(Number(event.target.value))}
+                        >
+                          <option value="0">{t("retentionForever")}</option>
+                          <option value="30">{t("retentionDays30")}</option>
+                          <option value="90">{t("retentionDays90")}</option>
+                          <option value="180">{t("retentionDays180")}</option>
+                          <option value="365">{t("retentionDays365")}</option>
+                        </select>
+                      </section>
+                      <section className="preference-section preference-section--row">
+                        <div>
+                          <h2>{t("libraryBackup")}</h2>
+                          <p>{t("backupDescription")}</p>
+                        </div>
+                        <div className="button-group">
+                          <a className="button button--secondary" href="/api/v1/backup" download>
+                            <DownloadSimple />
+                            {t("backup")}
+                          </a>
+                          <input
+                            ref={restoreInput}
+                            className="sr-only"
+                            type="file"
+                            accept="application/json,.json"
+                            onChange={(event) => selectBackup(event.target.files?.[0])}
+                          />
+                          <button
+                            className="button button--secondary"
+                            type="button"
+                            disabled={props.restorePending}
+                            onClick={() => restoreInput.current?.click()}
+                          >
+                            {props.restorePending ? (
+                              <CircleNotch className="spin" />
+                            ) : (
+                              <UploadSimple />
+                            )}
+                            {t("restore")}
+                          </button>
+                        </div>
+                      </section>
+                    </>
+                  )}
+
+                  {activeTab === "devices" && (
+                    <section className="preference-section preference-section--flush">
+                      <div className="preference-heading preference-heading--intro">
+                        <div>
+                          <h2>{t("devices")}</h2>
+                          <p>{t("devicesDescription")}</p>
+                        </div>
+                        <button
+                          className="button button--secondary"
+                          type="button"
+                          disabled={props.pairingCodePending}
+                          onClick={props.onCreatePairingCode}
+                        >
+                          {props.pairingCodePending ? (
+                            <CircleNotch className="spin" />
+                          ) : (
+                            <LinkSimple />
+                          )}
+                          {t("pair")}
                         </button>
                       </div>
-                      <div className="shortcut-list">
-                        {(Object.keys(defaultShortcuts) as ShortcutAction[]).map((action) => (
-                          <div className="shortcut-row" key={action}>
-                            <span>{t(shortcutLabelKeys[action])}</span>
+                      {props.pairingCode && (
+                        <div className="pairing-code-display">
+                          <strong>{props.pairingCode.code}</strong>
+                          <time dateTime={props.pairingCode.expires_at}>
+                            {t("expires")}{" "}
+                            {new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(
+                              new Date(props.pairingCode.expires_at),
+                            )}
+                          </time>
+                        </div>
+                      )}
+                      <div className="device-list">
+                        {activeDevices.map((device) => (
+                          <div className="device-row" key={device.id}>
+                            <span className="device-row__platform">
+                              {device.platform.slice(0, 1).toUpperCase()}
+                            </span>
+                            <span>
+                              <strong>{device.name}</strong>
+                              <small>
+                                {device.last_seen_at
+                                  ? `${t("seen")} ${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(device.last_seen_at))}`
+                                  : t("notConnectedYet")}
+                              </small>
+                            </span>
                             <button
-                              className="shortcut-key"
+                              className="icon-button"
                               type="button"
-                              title={t("shortcutHint")}
-                              onKeyDown={(event) => captureShortcut(action, event)}
+                              aria-label={`${t("revokeDevice")} ${device.name}`}
+                              title={t("revokeDevice")}
+                              onClick={() => props.onRevokeDevice(device.id)}
                             >
-                              {displayShortcut(shortcuts[action])}
+                              <Trash />
                             </button>
                           </div>
                         ))}
                       </div>
-                      {conflict && (
-                        <p className="form-error" role="alert">
-                          {conflict}
-                        </p>
+                      {activeDevices.length === 0 && (
+                        <p className="preference-empty">{t("noPairedDevices")}</p>
                       )}
                     </section>
-                  </>
+                  )}
+                </div>
+                {props.error && (
+                  <p className="form-error preferences-error" role="alert">
+                    {props.error.message}
+                  </p>
                 )}
-
-                {activeTab === "ai" && (
-                  <>
-                    <section className="preference-section preference-section--automation">
-                      <div className="preference-heading preference-heading--intro">
-                        <div>
-                          <h2>{t("automaticTranslation")}</h2>
-                          <p>
-                            {props.aiProfiles.some((profile) => profile.enabled)
-                              ? t("aiProviderDescription")
-                              : t("automaticTranslationNeedsProvider")}
-                          </p>
-                        </div>
-                      </div>
-                      <label className="preference-switch-row">
-                        <span>
-                          <strong>{t("alwaysTranslateTitles")}</strong>
-                          <small>{t("alwaysTranslateTitlesDescription")}</small>
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={alwaysTranslateTitles}
-                          disabled={!props.aiProfiles.some((profile) => profile.enabled)}
-                          onChange={(event) => setAlwaysTranslateTitles(event.target.checked)}
-                        />
-                        <i aria-hidden="true" />
-                      </label>
-                      <label className="preference-switch-row">
-                        <span>
-                          <strong>{t("alwaysTranslateContent")}</strong>
-                          <small>{t("alwaysTranslateContentDescription")}</small>
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={alwaysTranslateContent}
-                          disabled={!props.aiProfiles.some((profile) => profile.enabled)}
-                          onChange={(event) => setAlwaysTranslateContent(event.target.checked)}
-                        />
-                        <i aria-hidden="true" />
-                      </label>
-                    </section>
-                    <section className="preference-section preference-section--auto-tags">
-                      <div className="preference-heading preference-heading--intro">
-                        <div>
-                          <h2>{t("automaticTags")}</h2>
-                          <p>{t("automaticTagsDescription")}</p>
-                        </div>
-                        <label className="preference-switch preference-switch--inline">
-                          <input
-                            type="checkbox"
-                            checked={autoAcademicTags}
-                            disabled={!enabledAI}
-                            aria-label={t("automaticTags")}
-                            onChange={(event) => setAutoAcademicTags(event.target.checked)}
-                          />
-                          <i aria-hidden="true" />
-                        </label>
-                      </div>
-                      {autoAcademicTags && (
-                        <div className="auto-tag-settings">
-                          <label className="auto-tag-search">
-                            <span>{t("automaticTagScope")}</span>
-                            <input
-                              className="text-input"
-                              type="search"
-                              value={autoTagSearch}
-                              placeholder={t("searchFoldersAndSubscriptions")}
-                              onChange={(event) => setAutoTagSearch(event.target.value)}
-                            />
-                          </label>
-                          <p className="auto-tag-selection-summary">
-                            {t("automaticTagSelectionSummary")
-                              .replace("{folders}", String(autoAcademicTagFolderIDs.length))
-                              .replace("{feeds}", String(autoAcademicTagFeedIDs.length))}
-                          </p>
-                          <div className="auto-tag-scope-grid">
-                            <fieldset>
-                              <legend>{t("folders")}</legend>
-                              <div className="auto-tag-scope-actions">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setAutoAcademicTagFolderIDs(
-                                      Array.from(
-                                        new Set([
-                                          ...autoAcademicTagFolderIDs,
-                                          ...visibleAutoTagFolders.map((folder) => folder.id),
-                                        ]),
-                                      ),
-                                    )
-                                  }
-                                >
-                                  {t("selectAll")}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setAutoAcademicTagFolderIDs(
-                                      autoAcademicTagFolderIDs.filter(
-                                        (id) =>
-                                          !visibleAutoTagFolders.some((folder) => folder.id === id),
-                                      ),
-                                    )
-                                  }
-                                >
-                                  {t("clear")}
-                                </button>
-                              </div>
-                              <div className="auto-tag-scope-list">
-                                {visibleAutoTagFolders.map((folder) => (
-                                  <label key={folder.id}>
-                                    <input
-                                      type="checkbox"
-                                      checked={autoAcademicTagFolderIDs.includes(folder.id)}
-                                      onChange={() =>
-                                        setAutoAcademicTagFolderIDs(
-                                          toggleID(autoAcademicTagFolderIDs, folder.id),
-                                        )
-                                      }
-                                    />
-                                    <span>{folder.name}</span>
-                                  </label>
-                                ))}
-                                {visibleAutoTagFolders.length === 0 && (
-                                  <span className="preference-empty">{t("noFolders")}</span>
-                                )}
-                              </div>
-                            </fieldset>
-                            <fieldset>
-                              <legend>{t("subscriptions")}</legend>
-                              <div className="auto-tag-scope-actions">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setAutoAcademicTagFeedIDs(
-                                      Array.from(
-                                        new Set([
-                                          ...autoAcademicTagFeedIDs,
-                                          ...visibleAutoTagSubscriptions.map(
-                                            (subscription) => subscription.feed_id,
-                                          ),
-                                        ]),
-                                      ),
-                                    )
-                                  }
-                                >
-                                  {t("selectAll")}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setAutoAcademicTagFeedIDs(
-                                      autoAcademicTagFeedIDs.filter(
-                                        (id) =>
-                                          !visibleAutoTagSubscriptions.some(
-                                            (subscription) => subscription.feed_id === id,
-                                          ),
-                                      ),
-                                    )
-                                  }
-                                >
-                                  {t("clear")}
-                                </button>
-                              </div>
-                              <div className="auto-tag-scope-list">
-                                {visibleAutoTagSubscriptions.map((subscription) => (
-                                  <label key={subscription.id}>
-                                    <input
-                                      type="checkbox"
-                                      checked={autoAcademicTagFeedIDs.includes(
-                                        subscription.feed_id,
-                                      )}
-                                      onChange={() =>
-                                        setAutoAcademicTagFeedIDs(
-                                          toggleID(autoAcademicTagFeedIDs, subscription.feed_id),
-                                        )
-                                      }
-                                    />
-                                    <span>
-                                      <strong>{subscription.title}</strong>
-                                      <small>{subscription.feed_url}</small>
-                                    </span>
-                                  </label>
-                                ))}
-                                {visibleAutoTagSubscriptions.length === 0 && (
-                                  <span className="preference-empty">{t("noSubscriptions")}</span>
-                                )}
-                              </div>
-                            </fieldset>
-                          </div>
-                          {autoAcademicTagFolderIDs.length === 0 &&
-                            autoAcademicTagFeedIDs.length === 0 && (
-                              <p className="field-hint">{t("automaticTagScopeRequired")}</p>
-                            )}
-                        </div>
-                      )}
-                    </section>
-                    <section className="preference-section preference-section--flush">
-                      <div className="preference-heading preference-heading--intro">
-                        <div>
-                          <h2>{t("aiProviders")}</h2>
-                          <p>{t("aiProviderDescription")}</p>
-                        </div>
-                        <button
-                          className="button button--secondary"
-                          type="button"
-                          onClick={props.onAddAIProfile}
-                        >
-                          <Plus />
-                          {t("add")}
-                        </button>
-                      </div>
-                      <div className="sync-account-list">
-                        {props.aiProfiles.map((profile) => (
-                          <div className="sync-account-row" key={profile.id}>
-                            <label
-                              className="sync-account-toggle"
-                              title={profile.enabled ? t("disableProvider") : t("enableProvider")}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={profile.enabled}
-                                onChange={(event) =>
-                                  props.onToggleAIProfile(profile.id, event.target.checked)
-                                }
-                              />
-                              <span className="sr-only">
-                                {t("enable")} {profile.name}
-                              </span>
-                            </label>
-                            <span className="sync-account-copy">
-                              <strong>
-                                <Brain />
-                                {profile.name}
-                              </strong>
-                              <small
-                                className={
-                                  profile.last_error_message ? "sync-account-error" : undefined
-                                }
-                              >
-                                {profile.last_error_message ??
-                                  `${profile.model}${profile.is_default ? ` · ${t("default")}` : ""}`}
-                              </small>
-                            </span>
-                            <span className="sync-account-actions">
-                              <button
-                                className={
-                                  profile.is_default
-                                    ? "icon-button icon-button--active"
-                                    : "icon-button"
-                                }
-                                type="button"
-                                aria-label={`${t("useByDefault")} ${profile.name}`}
-                                title={t("makeDefault")}
-                                disabled={profile.is_default}
-                                onClick={() => props.onDefaultAIProfile(profile.id)}
-                              >
-                                <Check />
-                              </button>
-                              <button
-                                className="icon-button"
-                                type="button"
-                                aria-label={`${t("delete")} ${profile.name}`}
-                                title={t("deleteAIProvider")}
-                                onClick={() => props.onDeleteAIProfile(profile.id)}
-                              >
-                                <Trash />
-                              </button>
-                            </span>
-                          </div>
-                        ))}
-                        {props.aiProfiles.length === 0 && (
-                          <p className="preference-empty">{t("noAIProviders")}</p>
-                        )}
-                      </div>
-                      {props.aiUsage && (
-                        <p className="ai-usage">
-                          {new Intl.NumberFormat(locale).format(props.aiUsage.total_tokens)}{" "}
-                          {t("tokensUsed")}
-                        </p>
-                      )}
-                    </section>
-                  </>
-                )}
-
-                {activeTab === "sync" && (
-                  <>
-                    <CloudProviderGrid
-                      accounts={cloudAccounts}
-                      t={t}
-                      onSelect={props.onAddSyncAccount}
-                    />
-                    <SyncAccountSection
-                      title={t("libraryCloudSync")}
-                      description={t("libraryCloudSyncDescription")}
-                      empty={t("noCloudSyncAccounts")}
-                      accounts={cloudAccounts}
-                      locale={locale}
-                      t={t}
-                      pendingID={props.syncPendingID}
-                      onAdd={() => props.onAddSyncAccount()}
-                      onToggle={props.onToggleSyncAccount}
-                      onRun={runCloudSync}
-                      onEdit={props.onEditSyncAccount}
-                      onDelete={props.onDeleteSyncAccount}
-                      cloud
-                    />
-                    <SyncAccountSection
-                      title={t("readingServiceSync")}
-                      description={t("readingServiceSyncDescription")}
-                      empty={t("noServiceSyncAccounts")}
-                      accounts={serviceAccounts}
-                      locale={locale}
-                      t={t}
-                      pendingID={props.syncPendingID}
-                      onAdd={() => props.onAddSyncAccount("freshrss")}
-                      onToggle={props.onToggleSyncAccount}
-                      onRun={(account) => props.onRunSyncAccount(account.id, "auto")}
-                      onEdit={props.onEditSyncAccount}
-                      onDelete={props.onDeleteSyncAccount}
-                    />
-                  </>
-                )}
-
-                {activeTab === "library" && (
-                  <>
-                    <section className="preference-section preference-section--row">
-                      <div>
-                        <h2>{t("subscriptions")}</h2>
-                        <p>{t("subscriptionsDescription")}</p>
-                      </div>
-                      <div className="button-group">
-                        <button
-                          className="button button--secondary"
-                          type="button"
-                          onClick={props.onOrganizeLibrary}
-                        >
-                          <Books />
-                          {t("manage")}
-                        </button>
-                        <a
-                          className="button button--secondary"
-                          href="/api/v1/exports/opml"
-                          download
-                        >
-                          <DownloadSimple />
-                          {t("export")}
-                        </a>
-                      </div>
-                    </section>
-                    <section className="preference-section preference-section--row">
-                      <div>
-                        <h2>{t("retentionTitle")}</h2>
-                        <p>{t("retentionDescription")}</p>
-                      </div>
-                      <select
-                        className="select-input preference-language"
-                        aria-label={t("retentionTitle")}
-                        value={String(retentionDays)}
-                        disabled={retentionMutation.isPending}
-                        onChange={(event) => retentionMutation.mutate(Number(event.target.value))}
-                      >
-                        <option value="0">{t("retentionForever")}</option>
-                        <option value="30">{t("retentionDays30")}</option>
-                        <option value="90">{t("retentionDays90")}</option>
-                        <option value="180">{t("retentionDays180")}</option>
-                        <option value="365">{t("retentionDays365")}</option>
-                      </select>
-                    </section>
-                    <section className="preference-section preference-section--row">
-                      <div>
-                        <h2>{t("libraryBackup")}</h2>
-                        <p>{t("backupDescription")}</p>
-                      </div>
-                      <div className="button-group">
-                        <a className="button button--secondary" href="/api/v1/backup" download>
-                          <DownloadSimple />
-                          {t("backup")}
-                        </a>
-                        <input
-                          ref={restoreInput}
-                          className="sr-only"
-                          type="file"
-                          accept="application/json,.json"
-                          onChange={(event) => selectBackup(event.target.files?.[0])}
-                        />
-                        <button
-                          className="button button--secondary"
-                          type="button"
-                          disabled={props.restorePending}
-                          onClick={() => restoreInput.current?.click()}
-                        >
-                          {props.restorePending ? (
-                            <CircleNotch className="spin" />
-                          ) : (
-                            <UploadSimple />
-                          )}
-                          {t("restore")}
-                        </button>
-                      </div>
-                    </section>
-                  </>
-                )}
-
-                {activeTab === "devices" && (
-                  <section className="preference-section preference-section--flush">
-                    <div className="preference-heading preference-heading--intro">
-                      <div>
-                        <h2>{t("devices")}</h2>
-                        <p>{t("devicesDescription")}</p>
-                      </div>
-                      <button
-                        className="button button--secondary"
-                        type="button"
-                        disabled={props.pairingCodePending}
-                        onClick={props.onCreatePairingCode}
-                      >
-                        {props.pairingCodePending ? (
-                          <CircleNotch className="spin" />
-                        ) : (
-                          <LinkSimple />
-                        )}
-                        {t("pair")}
-                      </button>
-                    </div>
-                    {props.pairingCode && (
-                      <div className="pairing-code-display">
-                        <strong>{props.pairingCode.code}</strong>
-                        <time dateTime={props.pairingCode.expires_at}>
-                          {t("expires")}{" "}
-                          {new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(
-                            new Date(props.pairingCode.expires_at),
-                          )}
-                        </time>
-                      </div>
-                    )}
-                    <div className="device-list">
-                      {activeDevices.map((device) => (
-                        <div className="device-row" key={device.id}>
-                          <span className="device-row__platform">
-                            {device.platform.slice(0, 1).toUpperCase()}
-                          </span>
-                          <span>
-                            <strong>{device.name}</strong>
-                            <small>
-                              {device.last_seen_at
-                                ? `${t("seen")} ${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(device.last_seen_at))}`
-                                : t("notConnectedYet")}
-                            </small>
-                          </span>
-                          <button
-                            className="icon-button"
-                            type="button"
-                            aria-label={`${t("revokeDevice")} ${device.name}`}
-                            title={t("revokeDevice")}
-                            onClick={() => props.onRevokeDevice(device.id)}
-                          >
-                            <Trash />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    {activeDevices.length === 0 && (
-                      <p className="preference-empty">{t("noPairedDevices")}</p>
-                    )}
-                  </section>
-                )}
-              </div>
-              {props.error && (
-                <p className="form-error preferences-error" role="alert">
-                  {props.error.message}
-                </p>
-              )}
-              <footer className="dialog-meta">API {props.status?.api_version ?? "v1"}</footer>
-            </main>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+                <footer className="dialog-meta">API {props.status?.api_version ?? "v1"}</footer>
+              </main>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <ConfirmDialog
+        open={pendingConfirmation !== null}
+        message={pendingConfirmation?.message ?? ""}
+        onOpenChange={(open) => {
+          if (!open) setPendingConfirmation(null)
+        }}
+        onConfirm={() => {
+          const action = pendingConfirmation?.action
+          setPendingConfirmation(null)
+          action?.()
+        }}
+      />
+    </>
   )
 }
 

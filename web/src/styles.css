@@ -366,7 +366,10 @@ button:disabled {
   border: 0;
   border-radius: 9px;
   cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 .workspace-segment__item:hover {
   color: var(--text);
@@ -384,7 +387,9 @@ button:disabled {
 .workspace-segment__item--active {
   color: var(--accent-strong);
   background: var(--surface-raised);
-  box-shadow: 0 1px 2px rgb(20 22 26 / 0.08), 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow:
+    0 1px 2px rgb(20 22 26 / 0.08),
+    0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .nav-item,
 .folder-row,
@@ -402,7 +407,9 @@ button:disabled {
   border: 0;
   border-radius: var(--radius-control);
   cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
 }
 .nav-item {
   grid-template-columns: 20px minmax(0, 1fr) auto;
@@ -688,6 +695,14 @@ button:disabled {
 }
 .button--secondary:hover {
   background: var(--surface-muted);
+}
+.button--danger {
+  color: #f7fbfa;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.button--danger:hover {
+  filter: brightness(1.07);
 }
 
 .timeline-scroll {
@@ -1097,7 +1112,9 @@ button:disabled {
   border: 0;
   border-radius: var(--radius-control);
   cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
 }
 .reader-ai-option:hover:not(:disabled) {
   background: var(--surface-muted);
@@ -1539,6 +1556,19 @@ button:disabled {
   margin: 0;
   font-size: 17px;
   letter-spacing: 0;
+}
+.dialog-content--confirm {
+  width: min(400px, calc(100vw - 28px));
+}
+.confirm-dialog__message {
+  margin: 0;
+  padding: 20px 20px 4px;
+  color: var(--text);
+  line-height: 1.55;
+  white-space: pre-line;
+}
+.dialog-content--confirm .dialog-actions {
+  padding: 16px 20px 20px;
 }
 .dialog-form {
   display: grid;
@@ -2542,7 +2572,9 @@ button:disabled {
   );
   border: 1px solid var(--border);
   border-radius: 14px;
-  box-shadow: 0 1px 2px rgb(20 22 26 / 0.04), 0 10px 28px rgb(20 22 26 / 0.05);
+  box-shadow:
+    0 1px 2px rgb(20 22 26 / 0.04),
+    0 10px 28px rgb(20 22 26 / 0.05);
 }
 .daily-signal {
   padding: 18px 20px;
@@ -3752,7 +3784,10 @@ button:disabled {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: 6px;
-  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  transition:
+    color 0.14s ease,
+    border-color 0.14s ease,
+    background 0.14s ease;
 }
 .ai-chat__suggestions button:hover {
   color: var(--text);
