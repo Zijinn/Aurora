@@ -170,17 +170,68 @@ func RestoreLibrarySnapshot(ctx context.Context, db *sql.DB, document BackupDocu
 	return nil
 }
 
+// feedsPollingColumns are maintained by the refresh loop and change on every
+// poll — including bare 304 responses — without any user-visible change.
+// Hashing them marked the library "locally changed" around the clock, which
+// trapped multi-device sync in a permanent both-sides-changed conflict. The
+// values still travel inside the snapshot payload; they are only excluded
+// from change detection.
+var feedsPollingColumns = []string{
+	"etag", "last_modified", "last_checked_at", "last_success_at",
+	"next_check_at", "failure_count", "last_error_code", "last_error_message",
+	"updated_at",
+}
+
 func LibrarySnapshotFingerprint(document BackupDocument) (string, error) {
+	tables := document.Tables
+	copied := false
+	for index, table := range tables {
+		if table.Name != "feeds" {
+			continue
+		}
+		if sanitized := sanitizeFeedsForFingerprint(table); sanitized != nil {
+			if !copied {
+				tables = make([]BackupTable, len(document.Tables))
+				copy(tables, document.Tables)
+				copied = true
+			}
+			tables[index] = *sanitized
+		}
+	}
 	body, err := json.Marshal(struct {
 		Version       int           `json:"version"`
 		SchemaVersion int           `json:"schema_version"`
 		Tables        []BackupTable `json:"tables"`
-	}{Version: document.Version, SchemaVersion: document.SchemaVersion, Tables: document.Tables})
+	}{Version: document.Version, SchemaVersion: document.SchemaVersion, Tables: tables})
 	if err != nil {
 		return "", fmt.Errorf("encode snapshot fingerprint: %w", err)
 	}
 	digest := sha256.Sum256(body)
 	return hex.EncodeToString(digest[:]), nil
+}
+
+func sanitizeFeedsForFingerprint(table BackupTable) *BackupTable {
+	volatile := make(map[int]struct{}, len(feedsPollingColumns))
+	for columnIndex, column := range table.Columns {
+		for _, name := range feedsPollingColumns {
+			if column == name {
+				volatile[columnIndex] = struct{}{}
+			}
+		}
+	}
+	if len(volatile) == 0 {
+		return nil
+	}
+	rows := make([][]BackupValue, len(table.Rows))
+	for rowIndex, row := range table.Rows {
+		cloned := make([]BackupValue, len(row))
+		copy(cloned, row)
+		for columnIndex := range volatile {
+			cloned[columnIndex] = BackupValue{Kind: "null"}
+		}
+		rows[rowIndex] = cloned
+	}
+	return &BackupTable{Name: table.Name, Columns: table.Columns, Rows: rows}
 }
 
 func LibrarySnapshotIsEmpty(document BackupDocument) bool {
