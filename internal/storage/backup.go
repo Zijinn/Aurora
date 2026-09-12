@@ -84,35 +84,6 @@ func RestoreBackup(ctx context.Context, db *sql.DB, document BackupDocument) err
 	if document.Format != BackupFormat || document.Version != 1 {
 		return errors.New("unsupported Aurora backup format")
 	}
-	if document.SchemaVersion < 1 {
-		return errors.New("backup schema version is invalid")
-	}
-	allowed := make(map[string]struct{}, len(backupTables))
-	for _, name := range backupTables {
-		allowed[name] = struct{}{}
-	}
-	seen := make(map[string]struct{})
-	containsProfiles := false
-	for _, table := range document.Tables {
-		if _, ok := allowed[table.Name]; !ok {
-			return fmt.Errorf("backup contains unsupported table %q", table.Name)
-		}
-		if _, duplicate := seen[table.Name]; duplicate {
-			return fmt.Errorf("backup contains duplicate table %q", table.Name)
-		}
-		seen[table.Name] = struct{}{}
-		if table.Name == "profiles" && len(table.Rows) > 0 {
-			containsProfiles = true
-		}
-		for _, row := range table.Rows {
-			if len(row) != len(table.Columns) {
-				return fmt.Errorf("backup table %q has a row with the wrong column count", table.Name)
-			}
-		}
-	}
-	if !containsProfiles {
-		return errors.New("backup does not contain a profile")
-	}
 
 	connection, err := db.Conn(ctx)
 	if err != nil {
@@ -129,9 +100,12 @@ func RestoreBackup(ctx context.Context, db *sql.DB, document BackupDocument) err
 	}
 	defer tx.Rollback()
 
+	if err := validateBackupForRestore(ctx, tx, document); err != nil {
+		return err
+	}
 	for index := len(backupTables) - 1; index >= 0; index-- {
 		name := backupTables[index]
-		exists, existsErr := tableExistsTx(ctx, tx, name)
+		exists, existsErr := tableExists(ctx, tx, name)
 		if existsErr != nil {
 			return existsErr
 		}
@@ -142,13 +116,6 @@ func RestoreBackup(ctx context.Context, db *sql.DB, document BackupDocument) err
 		}
 	}
 	for _, table := range document.Tables {
-		currentColumns, err := tableColumnsTx(ctx, tx, table.Name)
-		if err != nil {
-			return err
-		}
-		if !sameStrings(currentColumns, table.Columns) {
-			return fmt.Errorf("backup table %q columns do not match the current schema", table.Name)
-		}
 		if len(table.Rows) == 0 {
 			continue
 		}
@@ -199,6 +166,73 @@ func RestoreBackup(ctx context.Context, db *sql.DB, document BackupDocument) err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit backup restore: %w", err)
+	}
+	return nil
+}
+
+func validateBackupForRestore(ctx context.Context, tx *sql.Tx, document BackupDocument) error {
+	var currentSchema int
+	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&currentSchema); err != nil {
+		return fmt.Errorf("read current schema version: %w", err)
+	}
+	if document.SchemaVersion != currentSchema {
+		return fmt.Errorf("backup schema version %d does not match Aurora schema version %d", document.SchemaVersion, currentSchema)
+	}
+
+	allowed := make(map[string]struct{}, len(backupTables))
+	required := make(map[string][]string, len(backupTables))
+	for _, name := range backupTables {
+		allowed[name] = struct{}{}
+		exists, err := tableExists(ctx, tx, name)
+		if err != nil {
+			return fmt.Errorf("check backup table %s: %w", name, err)
+		}
+		if !exists {
+			continue
+		}
+		columns, err := tableColumns(ctx, tx, name)
+		if err != nil {
+			return err
+		}
+		required[name] = columns
+	}
+
+	seen := make(map[string]struct{}, len(document.Tables))
+	containsProfiles := false
+	for _, table := range document.Tables {
+		if _, ok := allowed[table.Name]; !ok {
+			return fmt.Errorf("backup contains unsupported table %q", table.Name)
+		}
+		currentColumns, exists := required[table.Name]
+		if !exists {
+			return fmt.Errorf("backup contains table %q which does not exist in the current schema", table.Name)
+		}
+		if _, duplicate := seen[table.Name]; duplicate {
+			return fmt.Errorf("backup contains duplicate table %q", table.Name)
+		}
+		seen[table.Name] = struct{}{}
+		if !sameStrings(currentColumns, table.Columns) {
+			return fmt.Errorf("backup table %q columns do not match the current schema", table.Name)
+		}
+		if table.Name == "profiles" && len(table.Rows) > 0 {
+			containsProfiles = true
+		}
+		for _, row := range table.Rows {
+			if len(row) != len(table.Columns) {
+				return fmt.Errorf("backup table %q has a row with the wrong column count", table.Name)
+			}
+		}
+	}
+	for _, name := range backupTables {
+		if _, exists := required[name]; !exists {
+			continue
+		}
+		if _, ok := seen[name]; !ok {
+			return fmt.Errorf("backup is missing table %q", name)
+		}
+	}
+	if !containsProfiles {
+		return errors.New("backup does not contain a profile")
 	}
 	return nil
 }
@@ -313,15 +347,6 @@ func tableColumns(ctx context.Context, db queryer, name string) ([]string, error
 	return scanTableColumns(rows, name)
 }
 
-func tableColumnsTx(ctx context.Context, tx *sql.Tx, name string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+quoteIdentifier(name)+")")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanTableColumns(rows, name)
-}
-
 func scanTableColumns(rows *sql.Rows, name string) ([]string, error) {
 	columns := make([]string, 0)
 	for rows.Next() {
@@ -339,12 +364,6 @@ func scanTableColumns(rows *sql.Rows, name string) ([]string, error) {
 func tableExists(ctx context.Context, db queryer, name string) (bool, error) {
 	var exists bool
 	err := db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?)", name).Scan(&exists)
-	return exists, err
-}
-
-func tableExistsTx(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
-	var exists bool
-	err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?)", name).Scan(&exists)
 	return exists, err
 }
 

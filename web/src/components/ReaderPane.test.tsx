@@ -320,6 +320,69 @@ it("creates a persistent highlight from selected article text", async () => {
   fetchMock.mockRestore()
 })
 
+it("keeps a failed annotation selection and retries it successfully", async () => {
+  useReaderStore.setState({
+    locale: "en-US",
+    theme: "system",
+    readerAppearance: { fontFamily: "serif", fontSize: 19, lineHeight: 1.8 },
+    annotations: [],
+  })
+  let attempts = 0
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
+    if (url.includes("/entries/entry-1/annotations") && init?.method === "POST") {
+      attempts++
+      if (attempts === 1) {
+        return Promise.resolve(jsonResponse({ detail: "Annotation unavailable" }, 503))
+      }
+      const posted = JSON.parse(init.body as string) as Record<string, string>
+      return Promise.resolve(
+        jsonResponse(
+          {
+            id: "annotation-retried",
+            entry_id: detail.id,
+            quote: posted.quote,
+            prefix: posted.prefix,
+            suffix: posted.suffix,
+            style: posted.style,
+            note: posted.note,
+            created_at: "2026-08-16T00:00:00Z",
+            updated_at: "2026-08-16T00:00:00Z",
+          },
+          201,
+        ),
+      )
+    }
+    if (url.includes("/entries/entry-1/annotations")) {
+      return Promise.resolve(jsonResponse({ items: [] }))
+    }
+    return Promise.resolve(jsonResponse({ items: [] }))
+  })
+  renderReader()
+
+  selectArticleText("Article body", 0, 7)
+  fireEvent.click(await screen.findByRole("button", { name: "Add note" }))
+  fireEvent.change(screen.getByRole("textbox", { name: "Add note" }), {
+    target: { value: "Keep this draft" },
+  })
+  fireEvent.click(screen.getByRole("button", { name: "Save note" }))
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Annotation unavailable")
+  expect(screen.getByRole("textbox", { name: "Add note" })).toHaveValue("Keep this draft")
+  expect(screen.getByRole("toolbar", { name: "Annotate selected text" })).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole("button", { name: "Save note" }))
+  await waitFor(() => expect(attempts).toBe(2))
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("toolbar", { name: "Annotate selected text" }),
+    ).not.toBeInTheDocument(),
+  )
+  expect(document.querySelector(".reader-annotation--highlight")).toHaveTextContent("Article")
+  fetchMock.mockRestore()
+})
+
 it("runs AI quick actions from the toolbar menu without opening the panel", async () => {
   let summaryPosted = false
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
@@ -517,6 +580,19 @@ it("asks for AI configuration when no profile is enabled", () => {
   fireEvent.click(screen.getByRole("menuitem", { name: "Summary" }))
   expect(onConfigureAI).toHaveBeenCalledTimes(1)
 })
+
+function selectArticleText(textContent: string, start: number, end: number) {
+  const paragraph = screen.getByText(textContent)
+  const text = paragraph.firstChild
+  expect(text).not.toBeNull()
+  const range = document.createRange()
+  range.setStart(text!, start)
+  range.setEnd(text!, end)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+  fireEvent.pointerUp(paragraph)
+}
 
 function renderReader() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

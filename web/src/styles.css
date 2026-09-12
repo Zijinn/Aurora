@@ -173,6 +173,36 @@ button:disabled {
   background: var(--canvas);
 }
 
+.bootstrap-state {
+  display: flex;
+  width: 100%;
+  min-height: 100dvh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var(--text);
+  text-align: center;
+  background: var(--canvas);
+}
+.bootstrap-state__icon {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 18px;
+  color: var(--accent);
+}
+.bootstrap-state h1 {
+  margin: 0;
+  font-size: 22px;
+}
+.bootstrap-state p {
+  max-width: 44ch;
+  margin: 10px 0 22px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .pane-divider {
   position: absolute;
   top: 0;

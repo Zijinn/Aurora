@@ -53,6 +53,66 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRestoreRejectsIncompleteDocumentsWithoutMutation(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*BackupDocument)
+	}{
+		{
+			name: "schema version mismatch",
+			mutate: func(document *BackupDocument) {
+				document.SchemaVersion++
+			},
+		},
+		{
+			name: "missing table",
+			mutate: func(document *BackupDocument) {
+				document.Tables = document.Tables[:len(document.Tables)-1]
+			},
+		},
+		{
+			name: "wrong columns",
+			mutate: func(document *BackupDocument) {
+				document.Tables[0].Columns[0] = "wrong_column"
+			},
+		},
+		{
+			name: "truncated row",
+			mutate: func(document *BackupDocument) {
+				document.Tables[0].Rows[0] = document.Tables[0].Rows[0][:len(document.Tables[0].Rows[0])-1]
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			if _, err := db.ExecContext(ctx, "UPDATE profiles SET display_name = 'Before restore'"); err != nil {
+				t.Fatal(err)
+			}
+			document, err := ExportBackup(ctx, db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(&document)
+			if err := RestoreBackup(ctx, db, document); err == nil {
+				t.Fatal("expected malformed backup to be rejected")
+			}
+			var profileName string
+			if err := db.QueryRowContext(ctx, "SELECT display_name FROM profiles WHERE id = ?", domain.DefaultProfileID).Scan(&profileName); err != nil {
+				t.Fatal(err)
+			}
+			if profileName != "Before restore" {
+				t.Fatalf("restore validation mutated profile: %q", profileName)
+			}
+		})
+	}
+}
+
 func TestRestoreRejectsUnknownTablesBeforeMutation(t *testing.T) {
 	ctx := context.Background()
 	db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))

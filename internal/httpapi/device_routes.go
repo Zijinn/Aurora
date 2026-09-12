@@ -25,7 +25,7 @@ func (s *Server) pairDevice(w http.ResponseWriter, r *http.Request) {
 		Platform string `json:"platform"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_pairing_request", "Invalid pairing request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_pairing_request", "Invalid pairing request")
 		return
 	}
 	device, token, err := storage.PairDevice(r.Context(), s.db, request.Code, request.Name, request.Platform)

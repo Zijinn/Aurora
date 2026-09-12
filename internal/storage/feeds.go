@@ -323,6 +323,12 @@ func ListSubscriptions(ctx context.Context, db *sql.DB, profileID string) ([]dom
 }
 
 func UpdateSubscription(ctx context.Context, db *sql.DB, profileID, feedID string, patch domain.SubscriptionPatch) (domain.Subscription, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Subscription{}, fmt.Errorf("begin subscription update: %w", err)
+	}
+	defer tx.Rollback()
+
 	now := time.Now().UTC()
 	setFolder, setTitle := 0, 0
 	setRefreshPolicy := 0
@@ -335,7 +341,7 @@ func UpdateSubscription(ctx context.Context, db *sql.DB, profileID, feedID strin
 	if patch.RefreshPolicy != nil {
 		setRefreshPolicy = 1
 	}
-	result, err := db.ExecContext(ctx, `
+	result, err := tx.ExecContext(ctx, `
 		UPDATE subscriptions SET
 			folder_id = CASE WHEN ? = 1 THEN ? ELSE folder_id END,
 			title_override = CASE WHEN ? = 1 THEN ? ELSE title_override END,
@@ -359,9 +365,15 @@ func UpdateSubscription(ctx context.Context, db *sql.DB, profileID, feedID strin
 	if affected == 0 {
 		return domain.Subscription{}, ErrNotFound
 	}
-	if err := rescheduleFeed(ctx, db, feedID, now); err != nil {
-		return domain.Subscription{}, err
+	if patch.RefreshPolicy != nil || patch.RefreshIntervalMinutes != nil {
+		if err := rescheduleFeed(ctx, tx, feedID, now); err != nil {
+			return domain.Subscription{}, err
+		}
 	}
+	if err := tx.Commit(); err != nil {
+		return domain.Subscription{}, fmt.Errorf("commit subscription update: %w", err)
+	}
+
 	items, err := ListSubscriptions(ctx, db, profileID)
 	if err != nil {
 		return domain.Subscription{}, err

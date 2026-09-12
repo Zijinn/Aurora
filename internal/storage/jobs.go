@@ -12,7 +12,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrJobNotCancellable = errors.New("job is not cancellable")
+var (
+	ErrJobNotCancellable = errors.New("job is not cancellable")
+	ErrJobAlreadyQueued  = errors.New("job is already queued")
+)
 
 const jobColumns = `
 	id, kind, state, payload_json, progress_current, progress_total,
@@ -24,8 +27,8 @@ func CreateJob(ctx context.Context, db *sql.DB, kind string, payload any, schedu
 	if err != nil {
 		return domain.Job{}, fmt.Errorf("encode job payload: %w", err)
 	}
-	now := time.Now().UTC()
 	jobID := uuid.NewString()
+	now := time.Now().UTC()
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO jobs (
 			id, kind, state, payload_json, scheduled_at, created_at, updated_at
@@ -36,6 +39,52 @@ func CreateJob(ctx context.Context, db *sql.DB, kind string, payload any, schedu
 		return domain.Job{}, fmt.Errorf("create job: %w", err)
 	}
 	return GetJob(ctx, db, jobID)
+}
+
+func EnqueueFeedRefresh(ctx context.Context, db *sql.DB, feedID string, scheduledAt time.Time) (domain.Job, error) {
+	return enqueueUniqueJob(ctx, db, "feed.refresh", map[string]string{"feed_id": feedID},
+		"json_extract(payload_json, '$.feed_id') = ?", feedID, scheduledAt)
+}
+
+func EnqueueAccountSync(ctx context.Context, db *sql.DB, accountID, mode string, scheduledAt time.Time) (domain.Job, error) {
+	return enqueueUniqueJob(ctx, db, "sync.account", map[string]string{"account_id": accountID, "mode": mode},
+		"json_extract(payload_json, '$.account_id') = ?", accountID, scheduledAt)
+}
+
+func enqueueUniqueJob(ctx context.Context, db *sql.DB, kind string, payload any, equivalentSQL, equivalentValue string, scheduledAt time.Time) (domain.Job, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("encode job payload: %w", err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("begin enqueue job: %w", err)
+	}
+	defer tx.Rollback()
+
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM jobs WHERE kind = ? AND state IN ('queued', 'running') AND ` + equivalentSQL + `)`
+	if err := tx.QueryRowContext(ctx, query, kind, equivalentValue).Scan(&exists); err != nil {
+		return domain.Job{}, fmt.Errorf("check equivalent job: %w", err)
+	}
+	if exists {
+		return domain.Job{}, ErrJobAlreadyQueued
+	}
+	now := time.Now().UTC()
+	jobID := uuid.NewString()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO jobs (
+		id, kind, state, payload_json, scheduled_at, created_at, updated_at
+	) VALUES (?, ?, 'queued', ?, ?, ?, ?)`, jobID, kind, string(body), formatTime(scheduledAt), formatTime(now), formatTime(now)); err != nil {
+		return domain.Job{}, fmt.Errorf("enqueue job: %w", err)
+	}
+	job, err := scanJob(tx.QueryRowContext(ctx, "SELECT "+jobColumns+" FROM jobs WHERE id = ?", jobID))
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("read enqueued job: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Job{}, fmt.Errorf("commit enqueued job: %w", err)
+	}
+	return job, nil
 }
 
 func GetJob(ctx context.Context, db *sql.DB, jobID string) (domain.Job, error) {

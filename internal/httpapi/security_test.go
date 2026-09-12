@@ -2,15 +2,17 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"testing"
 )
 
 func TestLANModeRequiresPairedDeviceToken(t *testing.T) {
 	server := newTestServer(t)
-	server.ConfigureSecurity(true, nil)
+	server.ConfigureSecurity(true, nil, nil)
 
 	unauthorized := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/feeds", nil)
@@ -62,7 +64,7 @@ func TestLANModeRequiresPairedDeviceToken(t *testing.T) {
 
 func TestOriginValidationRejectsUntrustedWebsites(t *testing.T) {
 	server := newTestServer(t)
-	server.ConfigureSecurity(true, []string{"https://reader.example"})
+	server.ConfigureSecurity(true, []string{"https://reader.example"}, nil)
 	blocked := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
 	request.RemoteAddr = "127.0.0.1:40000"
@@ -78,6 +80,96 @@ func TestOriginValidationRejectsUntrustedWebsites(t *testing.T) {
 	server.Handler().ServeHTTP(allowed, request)
 	if allowed.Code != http.StatusNoContent || allowed.Header().Get("Access-Control-Allow-Origin") != "https://reader.example" {
 		t.Fatalf("expected allowed preflight, got %d %+v", allowed.Code, allowed.Header())
+	}
+}
+
+func TestTrustedProxyIngressAllowsExternalHostButRequiresToken(t *testing.T) {
+	server := newTestServer(t)
+	server.ConfigureSecurity(true, nil, []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")})
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/feeds", nil)
+	request.RemoteAddr = "127.0.0.1:42000"
+	request.Host = "reader.example"
+	request.Header.Set("X-Forwarded-For", "127.0.0.1")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("trusted proxy protected API: expected 401, got %d: %s", response.Code, response.Body.String())
+	}
+
+	statusRequest := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
+	statusRequest.RemoteAddr = "127.0.0.1:42001"
+	statusRequest.Host = "reader.example"
+	statusResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(statusResponse, statusRequest)
+	var status struct {
+		AuthRequired bool `json:"device_auth_required"`
+	}
+	if err := json.NewDecoder(statusResponse.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if statusResponse.Code != http.StatusOK || !status.AuthRequired {
+		t.Fatalf("proxy status classification mismatch: code=%d body=%+v", statusResponse.Code, status)
+	}
+}
+
+func TestTrustedProxyOnlyModeRequiresToken(t *testing.T) {
+	server := newTestServer(t)
+	server.ConfigureSecurity(false, nil, []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")})
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/feeds", nil)
+	request.RemoteAddr = "127.0.0.1:42500"
+	request.Host = "reader.example"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("proxy-only mode protected API: expected 401, got %d", response.Code)
+	}
+
+	statusRequest := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
+	statusRequest.RemoteAddr = "127.0.0.1:42501"
+	statusRequest.Host = "reader.example"
+	statusResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(statusResponse, statusRequest)
+	var status struct {
+		AuthRequired bool `json:"device_auth_required"`
+	}
+	if err := json.NewDecoder(statusResponse.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if !status.AuthRequired {
+		t.Fatal("proxy-only status must report device auth required")
+	}
+}
+
+func TestProxyOnlyStartCreatesPairingCode(t *testing.T) {
+	server := newTestServer(t)
+	server.ConfigureSecurity(false, nil, []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := server.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := server.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pairing_codes WHERE used_at IS NULL").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("proxy-only startup created %d pairing codes, want 1", count)
+	}
+}
+
+func TestForwardedForDoesNotChangeAuthorizationClassification(t *testing.T) {
+	server := newTestServer(t)
+	server.ConfigureSecurity(true, nil, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")})
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/feeds", nil)
+	request.RemoteAddr = "192.168.1.20:43000"
+	request.Header.Set("X-Forwarded-For", "127.0.0.1")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("X-Forwarded-For must not grant loopback trust, got %d", response.Code)
 	}
 }
 

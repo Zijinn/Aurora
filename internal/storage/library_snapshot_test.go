@@ -59,6 +59,75 @@ func TestLibrarySnapshotIsPortableAndPreservesLocalAccounts(t *testing.T) {
 	}
 }
 
+func TestExportLibrarySnapshotClosesReadTransaction(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "aurora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+
+	if _, err := ExportLibrarySnapshot(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE profiles SET display_name = display_name"); err != nil {
+		t.Fatalf("successful export did not release its transaction: %v", err)
+	}
+
+	if _, err := db.ExecContext(ctx, "DROP TABLE preferences"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ExportLibrarySnapshot(ctx, db); err == nil {
+		t.Fatal("expected export with a missing table to fail")
+	}
+	var result int
+	if err := db.QueryRowContext(ctx, "SELECT 1").Scan(&result); err != nil || result != 1 {
+		t.Fatalf("failed export did not roll back its transaction: result=%d err=%v", result, err)
+	}
+}
+
+func TestRestoreLibrarySnapshotRejectsForeignKeyViolations(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "aurora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	document, err := ExportLibrarySnapshot(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for tableIndex := range document.Tables {
+		table := &document.Tables[tableIndex]
+		if table.Name != "folders" {
+			continue
+		}
+		row := make([]BackupValue, len(table.Columns))
+		for columnIndex, column := range table.Columns {
+			switch column {
+			case "id":
+				row[columnIndex] = BackupValue{Kind: "text", Text: "orphan-folder"}
+			case "profile_id":
+				row[columnIndex] = BackupValue{Kind: "text", Text: "missing-profile"}
+			case "name":
+				row[columnIndex] = BackupValue{Kind: "text", Text: "Orphan"}
+			case "position":
+				row[columnIndex] = BackupValue{Kind: "integer"}
+			case "created_at", "updated_at":
+				row[columnIndex] = BackupValue{Kind: "text", Text: "2026-01-01T00:00:00Z"}
+			default:
+				row[columnIndex] = BackupValue{Kind: "null"}
+			}
+		}
+		table.Rows = append(table.Rows, row)
+	}
+	if err := RestoreLibrarySnapshot(ctx, db, document); err == nil {
+		t.Fatal("expected foreign-key violation to reject snapshot")
+	}
+}
+
 func TestLibrarySnapshotFingerprintIgnoresExportTime(t *testing.T) {
 	ctx := context.Background()
 	db, err := Open(ctx, filepath.Join(t.TempDir(), "aurora.db"))

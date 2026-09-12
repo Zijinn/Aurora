@@ -40,7 +40,7 @@ func main() {
 	handler.ConfigureSync(box)
 	handler.ConfigureAI(box)
 	handler.SetRSSHubBase(cfg.RSSHubBase)
-	handler.ConfigureSecurity(cfg.LANMode, cfg.AllowedOrigins)
+	handler.ConfigureSecurity(cfg.LANMode, cfg.AllowedOrigins, cfg.TrustedProxies)
 	appContext, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := handler.Start(appContext); err != nil {

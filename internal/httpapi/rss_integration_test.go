@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zijinn/Aurora/internal/domain"
 	feedcore "github.com/Zijinn/Aurora/internal/feed"
 	"github.com/Zijinn/Aurora/internal/storage"
 )
@@ -112,6 +113,75 @@ func TestRSSAPICoreFlow(t *testing.T) {
 	defer deleteResponse.Body.Close()
 	if deleteResponse.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete returned %d", deleteResponse.StatusCode)
+	}
+}
+
+func TestEntryStateUsesAuthenticatedDeviceProvenance(t *testing.T) {
+	server := newTestServer(t)
+	ctx := context.Background()
+	guid := "provenance-entry"
+	created, err := storage.SaveNewFeed(ctx, server.db, domain.DefaultProfileID, "https://example.com/provenance.xml", "https://example.com/provenance.xml", domain.ParsedFeed{
+		Title: "Provenance", Format: "rss", Entries: []domain.ParsedEntry{{GUID: &guid, Title: "Entry", PublishedAt: time.Now().UTC(), ContentHash: "body"}},
+	}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := storage.ListEntries(ctx, server.db, domain.EntryFilter{ProfileID: domain.DefaultProfileID, FeedID: created.ID, Limit: 10})
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("list entry: %+v, %v", page, err)
+	}
+	entryID := page.Items[0].ID
+
+	code, _, err := storage.CreatePairingCode(ctx, server.db, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, token, err := storage.PairDevice(ctx, server.db, code, "iPad", "ipad")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.ConfigureSecurity(true, nil, nil)
+
+	mismatch := httptest.NewRequest(http.MethodPatch, "/api/v1/entries/"+entryID+"/state", strings.NewReader(`{"mutation_id":"remote-mismatch","device_id":"forged","is_read":true}`))
+	mismatch.RemoteAddr = "192.168.1.20:44000"
+	mismatch.Header.Set("Authorization", "Bearer "+token)
+	mismatchResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(mismatchResponse, mismatch)
+	if mismatchResponse.Code != http.StatusConflict {
+		t.Fatalf("expected body/auth device conflict, got %d: %s", mismatchResponse.Code, mismatchResponse.Body.String())
+	}
+
+	authenticated := httptest.NewRequest(http.MethodPatch, "/api/v1/entries/"+entryID+"/state", strings.NewReader(`{"mutation_id":"remote-ok","device_id":"`+device.ID+`","device_time":"1970-01-01T00:00:00Z","is_read":true}`))
+	authenticated.RemoteAddr = "192.168.1.20:44001"
+	authenticated.Header.Set("Authorization", "Bearer "+token)
+	authenticatedResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(authenticatedResponse, authenticated)
+	if authenticatedResponse.Code != http.StatusOK {
+		t.Fatalf("authenticated update failed: %d %s", authenticatedResponse.Code, authenticatedResponse.Body.String())
+	}
+	var storedDevice string
+	if err := server.db.QueryRow("SELECT updated_by_device_id FROM entry_states WHERE entry_id = ?", entryID).Scan(&storedDevice); err != nil || storedDevice != device.ID {
+		t.Fatalf("stored device = %q, err=%v", storedDevice, err)
+	}
+
+	direct := httptest.NewRequest(http.MethodPatch, "/api/v1/entries/"+entryID+"/state", strings.NewReader(`{"mutation_id":"loopback","device_id":"forged","device_time":"2999-01-01T00:00:00Z","is_starred":true}`))
+	direct.RemoteAddr = "127.0.0.1:44002"
+	direct.Host = "127.0.0.1:7381"
+	directResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(directResponse, direct)
+	if directResponse.Code != http.StatusOK {
+		t.Fatalf("loopback update failed: %d %s", directResponse.Code, directResponse.Body.String())
+	}
+	var directDevice *string
+	var updatedAt string
+	if err := server.db.QueryRow("SELECT updated_by_device_id, updated_at FROM entry_states WHERE entry_id = ?", entryID).Scan(&directDevice, &updatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if directDevice != nil {
+		t.Fatalf("loopback request recorded forged device: %q", *directDevice)
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, updatedAt); err != nil || parsed.After(time.Now().UTC().Add(time.Minute)) {
+		t.Fatalf("device_time influenced stored update time: %q, %v", updatedAt, err)
 	}
 }
 

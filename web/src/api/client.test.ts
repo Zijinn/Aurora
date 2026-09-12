@@ -1,10 +1,35 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { importOPML, markEntriesRead, restoreBackup } from "./client"
+import { importOPML, markEntriesRead, restoreBackup, updateEntryState } from "./client"
 
 afterEach(() => {
   vi.restoreAllMocks()
   localStorage.clear()
+})
+
+describe("updateEntryState", () => {
+  it("uses the caller-provided mutation timestamp", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          is_read: true,
+          is_starred: false,
+          is_read_later: false,
+          updated_at: "2026-09-11T00:00:00Z",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    )
+
+    await updateEntryState("entry-1", { is_read: true }, "mutation-1", "2026-09-11T12:34:56.789Z")
+
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as Record<string, unknown>
+    expect(body).toEqual({
+      mutation_id: "mutation-1",
+      device_time: "2026-09-11T12:34:56.789Z",
+      is_read: true,
+    })
+  })
 })
 
 describe("markEntriesRead", () => {

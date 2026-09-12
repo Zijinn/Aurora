@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/netip"
 	"os"
 	"path"
 	"path/filepath"
@@ -113,12 +114,12 @@ func NewWithFetcher(db *sql.DB, logger *slog.Logger, webDir string, fetcher *fee
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	if s.security.RequireDeviceAuth {
+	if s.security.RequireDeviceAuth || len(s.security.TrustedProxies) > 0 {
 		code, expiresAt, err := storage.CreatePairingCode(ctx, s.db, 10*time.Minute)
 		if err != nil {
 			return err
 		}
-		s.logger.Warn("LAN mode pairing code", "code", code, "expires_at", expiresAt)
+		s.logger.Warn("remote access pairing code", "code", code, "expires_at", expiresAt)
 	}
 	if err := s.jobs.Start(ctx); err != nil {
 		return err
@@ -188,8 +189,12 @@ func (s *Server) ConfigureAI(box *secretbox.Box) {
 	})
 }
 
-func (s *Server) ConfigureSecurity(requireDeviceAuth bool, allowedOrigins []string) {
-	s.security = SecurityConfig{RequireDeviceAuth: requireDeviceAuth, AllowedOrigins: append([]string(nil), allowedOrigins...)}
+func (s *Server) ConfigureSecurity(requireDeviceAuth bool, allowedOrigins []string, trustedProxies []netip.Prefix) {
+	s.security = SecurityConfig{
+		RequireDeviceAuth: requireDeviceAuth,
+		AllowedOrigins:    append([]string(nil), allowedOrigins...),
+		TrustedProxies:    append([]netip.Prefix(nil), trustedProxies...),
+	}
 }
 
 func (s *Server) SetRSSHubBase(base string) {
@@ -212,7 +217,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	if !ready {
 		state = "degraded"
 	}
-	authRequired := s.security.RequireDeviceAuth && !isLoopbackRemote(r.RemoteAddr)
+	authRequired := s.deviceAuthRequired(s.classifyIngress(r.RemoteAddr))
 	deviceAuthenticated := !authRequired
 	if authRequired {
 		if _, err := storage.AuthenticateDevice(r.Context(), s.db, deviceTokenFromRequest(r)); err == nil {

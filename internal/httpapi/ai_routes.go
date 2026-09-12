@@ -68,7 +68,7 @@ func (s *Server) createAIProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	var request aiProfileRequest
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	created, err := s.ai.CreateProfile(r.Context(), service.AIProfileInput{
@@ -90,7 +90,7 @@ func (s *Server) updateAIProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	var request aiProfilePatchRequest
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	if request.Name == nil && request.Endpoint == nil && request.Model == nil && request.APIKey == nil &&
@@ -159,7 +159,7 @@ func (s *Server) runAIOperation(w http.ResponseWriter, r *http.Request) {
 		Language  string `json:"language"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	operation := strings.ReplaceAll(r.PathValue("operation"), "-", "_")
@@ -199,7 +199,7 @@ func (s *Server) startAIChat(w http.ResponseWriter, r *http.Request) {
 		Message   string `json:"message"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	session, payload, err := s.ai.PrepareChat(r.Context(), r.PathValue("entryID"), request.ProfileID, request.SessionID, request.Message)
@@ -226,7 +226,7 @@ func (s *Server) startAILibraryChat(w http.ResponseWriter, r *http.Request) {
 		EntryIDs  []string `json:"entry_ids"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	session, payload, err := s.ai.PrepareLibraryChat(r.Context(), request.EntryIDs, request.ProfileID, request.SessionID, request.Message)

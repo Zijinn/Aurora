@@ -43,7 +43,7 @@ func main() {
 	api.ConfigureSync(box)
 	api.ConfigureAI(box)
 	api.SetRSSHubBase(cfg.RSSHubBase)
-	api.ConfigureSecurity(cfg.LANMode, cfg.AllowedOrigins)
+	api.ConfigureSecurity(cfg.LANMode, cfg.AllowedOrigins, cfg.TrustedProxies)
 	if err := api.Start(ctx); err != nil {
 		logger.Error("start application services", "error", err)
 		os.Exit(1)

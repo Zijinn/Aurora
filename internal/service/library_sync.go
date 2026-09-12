@@ -99,7 +99,12 @@ func (s *SyncService) runLibrarySync(
 		// Pause dispatch and cancel other in-flight jobs before replacing
 		// tables; this job keeps running via its own ID exemption.
 		if s.maintenance != nil {
-			s.maintenance.EnterMaintenance(syncJobIDFromContext(ctx))
+			maintenanceCtx, cancelMaintenance := context.WithTimeout(ctx, 30*time.Second)
+			err := s.maintenance.EnterMaintenance(maintenanceCtx, syncJobIDFromContext(ctx))
+			cancelMaintenance()
+			if err != nil {
+				return SyncResult{}, fmt.Errorf("pause background jobs for library restore: %w", err)
+			}
 			defer s.maintenance.ExitMaintenance()
 		}
 		if err := storage.RestoreLibrarySnapshot(ctx, s.db, remote); err != nil {

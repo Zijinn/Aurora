@@ -80,7 +80,7 @@ type syncClientFactory func(allowPrivate bool) *http.Client
 // MaintenanceController pauses and resumes background work so a library
 // restore can replace tables without racing in-flight jobs.
 type MaintenanceController interface {
-	EnterMaintenance(exceptJobID string)
+	EnterMaintenance(ctx context.Context, exceptJobID string) error
 	ExitMaintenance()
 }
 

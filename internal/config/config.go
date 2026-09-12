@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ type Config struct {
 	LANMode        bool
 	RSSHubBase     string
 	AllowedOrigins []string
+	TrustedProxies []netip.Prefix
 }
 
 func Load() (Config, error) {
@@ -42,6 +44,10 @@ func Load() (Config, error) {
 		LogLevel:       strings.ToLower(envOr("CAIRN_LOG_LEVEL", "info")),
 		RSSHubBase:     envOr("CAIRN_RSSHUB_BASE", "https://rsshub.app"),
 		AllowedOrigins: splitList(os.Getenv("CAIRN_ALLOWED_ORIGINS")),
+	}
+	cfg.TrustedProxies, err = parseTrustedProxies(os.Getenv("CAIRN_TRUSTED_PROXIES"))
+	if err != nil {
+		return Config{}, err
 	}
 
 	if raw := os.Getenv("CAIRN_LAN_MODE"); raw != "" {
@@ -113,7 +119,32 @@ func (c Config) Validate() error {
 			return fmt.Errorf("invalid CAIRN_ALLOWED_ORIGINS value %q", origin)
 		}
 	}
+	for _, proxy := range c.TrustedProxies {
+		if !proxy.IsValid() || proxy != proxy.Masked() {
+			return fmt.Errorf("invalid CAIRN_TRUSTED_PROXIES prefix %q", proxy)
+		}
+	}
 	return nil
+}
+
+func parseTrustedProxies(value string) ([]netip.Prefix, error) {
+	items := splitList(value)
+	proxies := make([]netip.Prefix, 0, len(items))
+	for _, item := range items {
+		prefix, err := netip.ParsePrefix(item)
+		if err != nil {
+			address, addressErr := netip.ParseAddr(item)
+			if addressErr != nil {
+				return nil, fmt.Errorf("invalid CAIRN_TRUSTED_PROXIES value %q", item)
+			}
+			prefix = netip.PrefixFrom(address, address.BitLen())
+		}
+		if prefix != prefix.Masked() {
+			return nil, fmt.Errorf("CAIRN_TRUSTED_PROXIES CIDR %q has host bits set", item)
+		}
+		proxies = append(proxies, prefix)
+	}
+	return proxies, nil
 }
 
 func defaultDataDir() (string, error) {

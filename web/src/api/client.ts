@@ -470,13 +470,14 @@ export async function getEntry(
 export function updateEntryState(
   entryID: string,
   patch: Partial<Pick<EntryState, "is_read" | "is_starred" | "is_read_later">>,
-  mutationID = crypto.randomUUID(),
+  mutationID: string = crypto.randomUUID(),
+  deviceTime = new Date().toISOString(),
 ): Promise<EntryState> {
   return request<EntryState>(`/api/v1/entries/${encodeURIComponent(entryID)}/state`, {
     method: "PATCH",
     body: JSON.stringify({
       mutation_id: mutationID,
-      device_time: new Date().toISOString(),
+      device_time: deviceTime,
       ...patch,
     }),
   })
@@ -527,7 +528,13 @@ export async function listEntryAnnotations(
 
 export async function createEntryAnnotation(
   entryID: string,
-  input: { style: ReaderAnnotation["style"]; quote: string; prefix: string; suffix: string; note?: string },
+  input: {
+    style: ReaderAnnotation["style"]
+    quote: string
+    prefix: string
+    suffix: string
+    note?: string
+  },
 ): Promise<ReaderAnnotation> {
   const created = await request<ServerAnnotation>(
     `/api/v1/entries/${encodeURIComponent(entryID)}/annotations`,

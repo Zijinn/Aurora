@@ -86,7 +86,7 @@ The REST contract is documented in [api/openapi.yaml](api/openapi.yaml). Archite
 
 SQLite is authoritative. Existing installations continue to use the operating-system configuration directory named `Cairn` so upgrading to Aurora does not hide or duplicate the current library. The database and owner-only `master.key` must be kept together when restoring a full local backup.
 
-Aurora binds to loopback by default. LAN access must be enabled explicitly and uses one-time device pairing, hashed bearer tokens, scoped origins, and optional TLS. Feed, synchronization, WebDAV, and AI HTTP endpoints share redirect validation, response limits, and SSRF protections; private network access requires an account-level opt-in.
+Aurora binds to loopback by default. LAN access must be enabled explicitly and uses one-time device pairing, hashed bearer tokens, scoped origins, and optional TLS. Reverse proxies must be explicitly listed by exact IP or CIDR in `CAIRN_TRUSTED_PROXIES`; only the immediate peer is classified, forwarded-address headers are ignored for authorization, and protected APIs still require a paired device token. Feed, synchronization, WebDAV, and AI HTTP endpoints share redirect validation, response limits, and SSRF protections; private network access requires an account-level opt-in.
 
 ## License
 

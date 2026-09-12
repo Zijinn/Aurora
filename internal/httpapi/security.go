@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 
@@ -14,22 +15,35 @@ import (
 type SecurityConfig struct {
 	RequireDeviceAuth bool
 	AllowedOrigins    []string
+	TrustedProxies    []netip.Prefix
 }
+
+type ingressClass uint8
+
+const (
+	ingressExternal ingressClass = iota
+	ingressLoopback
+	ingressProxy
+)
 
 type deviceContextKey struct{}
 
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ingress := s.classifyIngress(r.RemoteAddr)
 		// DNS-rebinding guard: a web page served from an attacker-controlled
 		// domain can rebind it to 127.0.0.1, after which its same-origin
 		// requests arrive from a loopback peer with the attacker's Host header
 		// and would otherwise inherit loopback trust (no device auth, CORS
-		// origin == Host). The loopback listener only serves loopback hosts.
-		if isLoopbackRemote(r.RemoteAddr) && !isLoopbackHostHeader(r.Host) {
+		// origin == Host). Direct loopback traffic only serves loopback hosts.
+		// A configured proxy peer is instead an explicit ingress boundary and
+		// may forward external Host values, but protected APIs still require a
+		// device token. Forwarded client IP headers are never authorization input.
+		if ingress == ingressLoopback && !isLoopbackHostHeader(r.Host) {
 			writeProblem(w, r, http.StatusForbidden, "host_not_allowed", "Host not allowed", "The loopback listener only accepts requests addressed to a loopback host.")
 			return
 		}
-		if !s.security.RequireDeviceAuth || !strings.HasPrefix(r.URL.Path, "/api/") || publicAPIPath(r.URL.Path) || isLoopbackRemote(r.RemoteAddr) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") || publicAPIPath(r.URL.Path) || !s.deviceAuthRequired(ingress) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -101,13 +115,38 @@ func publicAPIPath(path string) bool {
 	return path == "/api/v1/status" || path == "/api/v1/devices/pair"
 }
 
-func isLoopbackRemote(remoteAddress string) bool {
+func (s *Server) deviceAuthRequired(ingress ingressClass) bool {
+	return ingress == ingressProxy || (ingress == ingressExternal && s.security.RequireDeviceAuth)
+}
+
+func (s *Server) classifyIngress(remoteAddress string) ingressClass {
+	address, ok := remoteIP(remoteAddress)
+	if !ok {
+		return ingressExternal
+	}
+	for _, proxy := range s.security.TrustedProxies {
+		if proxy.Contains(address) {
+			return ingressProxy
+		}
+	}
+	if address.IsLoopback() {
+		return ingressLoopback
+	}
+	return ingressExternal
+}
+
+func remoteIP(remoteAddress string) (netip.Addr, bool) {
 	host, _, err := net.SplitHostPort(remoteAddress)
 	if err != nil {
-		return false
+		return netip.Addr{}, false
 	}
-	ip := net.ParseIP(strings.Trim(host, "[]"))
-	return ip != nil && ip.IsLoopback()
+	address, err := netip.ParseAddr(strings.Trim(host, "[]"))
+	return address, err == nil
+}
+
+func isLoopbackRemote(remoteAddress string) bool {
+	address, ok := remoteIP(remoteAddress)
+	return ok && address.IsLoopback()
 }
 
 func isLoopbackHostHeader(hostHeader string) bool {

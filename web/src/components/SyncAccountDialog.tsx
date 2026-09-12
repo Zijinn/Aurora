@@ -8,7 +8,7 @@ import {
   PlugsConnected,
   X,
 } from "@phosphor-icons/react"
-import { type FormEvent, useMemo, useState } from "react"
+import { type FormEvent, useMemo, useRef, useState } from "react"
 
 import {
   APIError,
@@ -58,6 +58,11 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
   const [interval, setInterval] = useState(props.account?.sync_interval_minutes ?? 30)
   const [allowPrivate, setAllowPrivate] = useState(props.account?.allow_private_network ?? false)
   const [connection, setConnection] = useState<ConnectionState>({ status: "idle" })
+  const testGeneration = useRef(0)
+  const invalidateConnectionTest = () => {
+    testGeneration.current++
+    setConnection({ status: "idle" })
+  }
   const providerName = useMemo(
     () => props.providers.find((item) => item.id === provider)?.name ?? provider,
     [props.providers, provider],
@@ -76,12 +81,12 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
     setPassword("")
     setToken("")
     setAPIKey("")
-    setConnection({ status: "idle" })
+    invalidateConnectionTest()
   }
   const useNutstore = () => {
     setName(t("nutstore"))
     setEndpoint("https://dav.jianguoyun.com/dav/Aurora/")
-    setConnection({ status: "idle" })
+    invalidateConnectionTest()
   }
   const credentials = (): SyncCredentials => ({
     username: username.trim() || undefined,
@@ -112,6 +117,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
   }
   const testConnection = async () => {
     if (!isWebDAV || !endpointReady || connection.status === "pending") return
+    const generation = ++testGeneration.current
     setConnection({ status: "pending" })
     try {
       const result = await props.onTest({
@@ -121,8 +127,10 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
         credentials: credentials(),
         allow_private_network: allowPrivate,
       })
+      if (testGeneration.current !== generation) return
       setConnection({ status: "success", endpoint: result.endpoint })
     } catch (error) {
+      if (testGeneration.current !== generation) return
       const message =
         error instanceof APIError && error.code === "authentication_error"
           ? t("webdavAuthenticationFailed")
@@ -231,7 +239,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
               value={endpoint}
               onChange={(event) => {
                 setEndpoint(event.target.value)
-                setConnection({ status: "idle" })
+                invalidateConnectionTest()
               }}
             />
             {isICloud && <p className="field-hint">{t("icloudDefaultPathHint")}</p>}
@@ -251,7 +259,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
                   placeholder={editing ? t("leaveBlankToKeep") : undefined}
                   onChange={(event) => {
                     setAPIKey(event.target.value)
-                    setConnection({ status: "idle" })
+                    invalidateConnectionTest()
                   }}
                 />
               </>
@@ -268,7 +276,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
                   placeholder={editing ? t("leaveBlankToKeep") : undefined}
                   onChange={(event) => {
                     setUsername(event.target.value)
-                    setConnection({ status: "idle" })
+                    invalidateConnectionTest()
                   }}
                 />
                 <label className="field-label" htmlFor="sync-password">
@@ -283,7 +291,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
                   placeholder={editing ? t("leaveBlankToKeep") : undefined}
                   onChange={(event) => {
                     setPassword(event.target.value)
-                    setConnection({ status: "idle" })
+                    invalidateConnectionTest()
                   }}
                 />
               </>
@@ -301,7 +309,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
                   placeholder={editing ? t("leaveBlankToKeep") : undefined}
                   onChange={(event) => {
                     setToken(event.target.value)
-                    setConnection({ status: "idle" })
+                    invalidateConnectionTest()
                   }}
                 />
                 <label className="field-label" htmlFor="sync-username">
@@ -315,7 +323,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
                   placeholder={editing ? t("leaveBlankToKeep") : undefined}
                   onChange={(event) => {
                     setUsername(event.target.value)
-                    setConnection({ status: "idle" })
+                    invalidateConnectionTest()
                   }}
                 />
                 <label className="field-label" htmlFor="sync-password">
@@ -330,7 +338,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
                   placeholder={editing ? t("leaveBlankToKeep") : undefined}
                   onChange={(event) => {
                     setPassword(event.target.value)
-                    setConnection({ status: "idle" })
+                    invalidateConnectionTest()
                   }}
                 />
               </>
@@ -360,7 +368,7 @@ export function SyncAccountDialog(props: SyncAccountDialogProps) {
                   checked={allowPrivate}
                   onChange={(event) => {
                     setAllowPrivate(event.target.checked)
-                    setConnection({ status: "idle" })
+                    invalidateConnectionTest()
                   }}
                 />
                 <span>{t("allowPrivateEndpoint")}</span>

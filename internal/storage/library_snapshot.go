@@ -23,15 +23,21 @@ var librarySnapshotTables = []string{
 // ExportLibrarySnapshot intentionally excludes device tokens, background jobs,
 // provider credentials, and local sync metadata so a snapshot stays portable.
 func ExportLibrarySnapshot(ctx context.Context, db *sql.DB) (BackupDocument, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return BackupDocument{}, fmt.Errorf("begin library snapshot: %w", err)
+	}
+	defer tx.Rollback()
+
 	document := BackupDocument{
 		Format: LibrarySnapshotFormat, Version: 1, CreatedAt: time.Now().UTC(),
 		Tables: make([]BackupTable, 0, len(librarySnapshotTables)),
 	}
-	if err := db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&document.SchemaVersion); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&document.SchemaVersion); err != nil {
 		return BackupDocument{}, fmt.Errorf("read schema version: %w", err)
 	}
 	for _, name := range librarySnapshotTables {
-		table, err := exportTable(ctx, db, name)
+		table, err := exportTable(ctx, tx, name)
 		if err != nil {
 			return BackupDocument{}, err
 		}
@@ -42,6 +48,9 @@ func ExportLibrarySnapshot(ctx context.Context, db *sql.DB) (BackupDocument, err
 			return string(left) < string(right)
 		})
 		document.Tables = append(document.Tables, table)
+	}
+	if err := tx.Commit(); err != nil {
+		return BackupDocument{}, fmt.Errorf("commit library snapshot: %w", err)
 	}
 	return document, nil
 }
@@ -103,7 +112,7 @@ func RestoreLibrarySnapshot(ctx context.Context, db *sql.DB, document BackupDocu
 		}
 	}
 	for _, table := range document.Tables {
-		currentColumns, err := tableColumnsTx(ctx, tx, table.Name)
+		currentColumns, err := tableColumns(ctx, tx, table.Name)
 		if err != nil {
 			return err
 		}
@@ -161,8 +170,15 @@ func RestoreLibrarySnapshot(ctx context.Context, db *sql.DB, document BackupDocu
 		INSERT INTO entries_fts (entry_id, title, author, summary, plain_text)
 		SELECT e.id, e.title, COALESCE(e.author, ''), COALESCE(e.summary, ''),
 			COALESCE(NULLIF(ec.readability_text, ''), ec.plain_text, '')
-		FROM entries e LEFT JOIN entry_contents ec ON ec.entry_id = e.id`); err != nil {
+			FROM entries e LEFT JOIN entry_contents ec ON ec.entry_id = e.id`); err != nil {
 		return fmt.Errorf("rebuild search index: %w", err)
+	}
+	violations, err := countForeignKeyViolations(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if violations > 0 {
+		return fmt.Errorf("library snapshot restore would leave %d foreign key violations", violations)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit snapshot restore: %w", err)

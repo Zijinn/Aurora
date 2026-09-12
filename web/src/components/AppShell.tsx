@@ -1,3 +1,4 @@
+import { CircleNotch, WarningCircle } from "@phosphor-icons/react"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { InfiniteData } from "@tanstack/react-query"
 import {
@@ -10,6 +11,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react"
 
 import {
@@ -69,6 +71,7 @@ import type {
   Folder,
   LibraryScope,
   ListResponse,
+  ServerStatus,
   Subscription,
   SyncAccount,
   SyncProvider,
@@ -206,37 +209,6 @@ export function AppShell() {
     }
   }, [theme])
 
-  // One-time migration: highlights used to live in localStorage only. Upload
-  // any legacy annotations, then clear the local copy so the server becomes
-  // the source of truth and annotations sync across devices.
-  useEffect(() => {
-    if (legacyAnnotationsMigrated) return
-    legacyAnnotationsMigrated = true
-    const legacy = useReaderStore.getState().annotations
-    if (legacy.length === 0) return
-    void (async () => {
-      for (const annotation of legacy) {
-        try {
-          await createEntryAnnotation(annotation.entryID, {
-            style: annotation.style,
-            quote: annotation.quote,
-            prefix: annotation.prefix,
-            suffix: annotation.suffix,
-            note: annotation.note,
-          })
-        } catch (error) {
-          // Entries pruned since the highlight was made answer 404; drop those
-          // but keep the rest queued for the next launch on transient errors.
-          if (error instanceof APIError && error.status === 404) continue
-          legacyAnnotationsMigrated = false
-          return
-        }
-      }
-      useReaderStore.getState().clearAnnotations()
-      void queryClient.invalidateQueries({ queryKey: ["annotations"] })
-    })()
-  }, [queryClient])
-
   useEffect(() => {
     const update = () => setViewportWidth(window.innerWidth)
     window.addEventListener("resize", update)
@@ -307,11 +279,43 @@ export function AppShell() {
   const status = useQuery({
     queryKey: ["server-status"],
     queryFn: ({ signal }) => getServerStatus(signal),
-    retry: 2,
+    retry: false,
     refetchInterval: 30_000,
   })
-  const libraryEnabled =
-    status.isSuccess && (!status.data.device_auth_required || status.data.device_authenticated)
+  const bootstrapState = getBootstrapState(status)
+  const libraryEnabled = bootstrapState === "ready"
+
+  // One-time migration: highlights used to live in localStorage only. Upload
+  // any legacy annotations, then clear the local copy so the server becomes
+  // the source of truth and annotations sync across devices.
+  useEffect(() => {
+    if (!libraryEnabled || legacyAnnotationsMigrated) return
+    legacyAnnotationsMigrated = true
+    const legacy = useReaderStore.getState().annotations
+    if (legacy.length === 0) return
+    void (async () => {
+      for (const annotation of legacy) {
+        try {
+          await createEntryAnnotation(annotation.entryID, {
+            style: annotation.style,
+            quote: annotation.quote,
+            prefix: annotation.prefix,
+            suffix: annotation.suffix,
+            note: annotation.note,
+          })
+        } catch (error) {
+          // Entries pruned since the highlight was made answer 404; drop those
+          // but keep the rest queued for the next launch on transient errors.
+          if (error instanceof APIError && error.status === 404) continue
+          legacyAnnotationsMigrated = false
+          return
+        }
+      }
+      useReaderStore.getState().clearAnnotations()
+      void queryClient.invalidateQueries({ queryKey: ["annotations"] })
+    })()
+  }, [libraryEnabled, queryClient])
+
   const subscriptions = useQuery({
     queryKey: ["subscriptions"],
     queryFn: ({ signal }) => listSubscriptions(signal),
@@ -420,7 +424,7 @@ export function AppShell() {
   const entryDetail = useQuery({
     queryKey: ["entry", selectedEntryID, aiLanguage],
     queryFn: ({ signal }) => getEntry(selectedEntryID!, aiLanguage, signal),
-    enabled: selectedEntryID !== null,
+    enabled: libraryEnabled && selectedEntryID !== null,
   })
   const importJob = useQuery({
     queryKey: ["job", importJobID],
@@ -545,21 +549,29 @@ export function AppShell() {
   // double-refetch every article open.
   const applyEntryStateToCache = useCallback(
     (entry: Entry, state: EntryState) => {
+      let cachedState: EntryState | undefined
       queryClient.setQueriesData<InfiniteData<EntryPage>>({ queryKey: ["entries"] }, (current) =>
         current
           ? {
               ...current,
               pages: current.pages.map((page) => ({
                 ...page,
-                items: page.items.map((item) => (item.id === entry.id ? { ...item, state } : item)),
+                items: page.items.map((item) => {
+                  if (item.id !== entry.id) return item
+                  cachedState ??= item.state
+                  return { ...item, state }
+                }),
               })),
             }
           : current,
       )
-      queryClient.setQueriesData<Entry>({ queryKey: ["entry", entry.id] }, (current) =>
-        current ? { ...current, state } : current,
-      )
-      if (state.is_read !== entry.state.is_read) {
+      queryClient.setQueriesData<Entry>({ queryKey: ["entry", entry.id] }, (current) => {
+        if (!current) return current
+        cachedState ??= current.state
+        return { ...current, state }
+      })
+      const previousState = cachedState ?? entry.state
+      if (state.is_read !== previousState.is_read) {
         const delta = state.is_read ? -1 : 1
         queryClient.setQueriesData<ListResponse<Subscription>>(
           { queryKey: ["subscriptions"] },
@@ -587,7 +599,9 @@ export function AppShell() {
       const mutationID = crypto.randomUUID()
       const deviceTime = new Date().toISOString()
       try {
-        return await queueStateMutation(() => updateEntryState(entry.id, patch, mutationID))
+        return await queueStateMutation(() =>
+          updateEntryState(entry.id, patch, mutationID, deviceTime),
+        )
       } catch (error) {
         if (error instanceof APIError) throw error
         await enqueueStateMutation({
@@ -1012,7 +1026,7 @@ export function AppShell() {
   }, [invalidateLibrary, libraryEnabled, queryClient, setSSEState])
 
   useEffect(() => {
-    if (!online) return
+    if (!libraryEnabled || !online) return
     const flush = () => {
       void flushMutationOutbox().then((completed) => {
         if (completed > 0) void invalidateLibrary()
@@ -1027,7 +1041,7 @@ export function AppShell() {
       window.removeEventListener("focus", flush)
       window.clearInterval(interval)
     }
-  }, [invalidateLibrary, online])
+  }, [invalidateLibrary, libraryEnabled, online])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1074,6 +1088,27 @@ export function AppShell() {
     selectedEntryID,
     shortcuts,
   ])
+
+  if (bootstrapState !== "ready") {
+    return (
+      <BootstrapBoundary
+        state={bootstrapState}
+        error={status.error}
+        retrying={status.isFetching}
+        onRetry={() => void status.refetch()}
+        pairing={
+          <Suspense fallback={null}>
+            <PairDeviceDialog
+              open
+              pending={pairMutation.isPending}
+              error={pairMutation.error}
+              onPair={(code, name, platform) => pairMutation.mutate({ code, name, platform })}
+            />
+          </Suspense>
+        }
+      />
+    )
+  }
 
   return (
     <>
@@ -1380,16 +1415,6 @@ export function AppShell() {
             />
           </Suspense>
         )}
-        {status.data?.device_auth_required === true && !status.data.device_authenticated && (
-          <Suspense fallback={null}>
-            <PairDeviceDialog
-              open
-              pending={pairMutation.isPending}
-              error={pairMutation.error}
-              onPair={(code, name, platform) => pairMutation.mutate({ code, name, platform })}
-            />
-          </Suspense>
-        )}
         {syncAccountOpen && (
           <Suspense fallback={null}>
             <SyncAccountDialog
@@ -1519,6 +1544,66 @@ export function AppShell() {
         }}
       />
     </>
+  )
+}
+
+type BootstrapState = "loading" | "error" | "database-unavailable" | "pairing" | "ready"
+
+type StatusQuery = {
+  data?: ServerStatus
+  error: Error | null
+  isPending: boolean
+  isSuccess: boolean
+}
+
+function getBootstrapState(status: StatusQuery): BootstrapState {
+  if (status.isPending) return "loading"
+  if (!status.isSuccess || !status.data) return "error"
+  if (status.data.status !== "ready" || !status.data.database_ready) {
+    return "database-unavailable"
+  }
+  if (status.data.device_auth_required && !status.data.device_authenticated) return "pairing"
+  return "ready"
+}
+
+function BootstrapBoundary(props: {
+  state: BootstrapState
+  error: Error | null
+  retrying: boolean
+  onRetry: () => void
+  pairing: ReactNode
+}) {
+  const { t } = useTranslation()
+  if (props.state === "pairing") return props.pairing
+  if (props.state === "loading") {
+    return (
+      <main className="bootstrap-state" aria-label={t("loadingLibrary")}>
+        <CircleNotch className="spin bootstrap-state__icon" aria-hidden="true" />
+        <h1>{t("loadingLibrary")}</h1>
+        <p>{t("loadingLibraryDescription")}</p>
+      </main>
+    )
+  }
+  const unavailable = props.state === "database-unavailable"
+  return (
+    <main className="bootstrap-state" role="alert">
+      <WarningCircle className="bootstrap-state__icon" aria-hidden="true" />
+      <h1>{t(unavailable ? "databaseUnavailable" : "serverUnavailable")}</h1>
+      <p>
+        {unavailable
+          ? t("databaseUnavailableDescription")
+          : props.error?.message || t("serverUnavailableDescription")}
+      </p>
+      <button
+        className="button button--primary"
+        type="button"
+        disabled={props.retrying}
+        onClick={props.onRetry}
+      >
+        {props.retrying && <CircleNotch className="spin" aria-hidden="true" />}
+        {t("retry")}
+      </button>
+    </main>
   )
 }
 

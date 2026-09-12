@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -145,5 +146,112 @@ func TestMarkEntriesReadRespectsStateFilter(t *testing.T) {
 	plainEntry, err := GetEntry(ctx, db, domain.DefaultProfileID, plainID)
 	if err != nil || plainEntry.State.IsRead {
 		t.Fatalf("unfiltered entry was unexpectedly marked read: %+v, %v", plainEntry.State, err)
+	}
+}
+
+func TestUpdateFolderAppendOrderAndProfileBoundary(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	destination, err := EnsureFolder(ctx, db, domain.DefaultProfileID, nil, "Destination")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureFolder(ctx, db, domain.DefaultProfileID, &destination.ID, "First"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureFolder(ctx, db, domain.DefaultProfileID, &destination.ID, "Second"); err != nil {
+		t.Fatal(err)
+	}
+	moving, err := EnsureFolder(ctx, db, domain.DefaultProfileID, nil, "Moving")
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved, err := UpdateFolder(ctx, db, domain.DefaultProfileID, moving.ID, true, &destination.ID, nil, nil)
+	if err != nil || moved.Position != 2 {
+		t.Fatalf("expected append position 2, folder=%+v err=%v", moved, err)
+	}
+
+	const otherProfile = "00000000-0000-4000-8000-000000000002"
+	if _, err := db.ExecContext(ctx, "INSERT INTO profiles (id, display_name) VALUES (?, ?)", otherProfile, "Other"); err != nil {
+		t.Fatal(err)
+	}
+	otherParent, err := EnsureFolder(ctx, db, otherProfile, nil, "Other parent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpdateFolder(ctx, db, domain.DefaultProfileID, moving.ID, true, &otherParent.ID, nil, nil); err == nil {
+		t.Fatal("expected cross-profile parent to be rejected")
+	}
+	folders, err := ListFolders(ctx, db, domain.DefaultProfileID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, folder := range folders {
+		if folder.ID == moving.ID && (folder.ParentID == nil || *folder.ParentID != destination.ID) {
+			t.Fatalf("cross-profile update changed parent: %+v", folder)
+		}
+	}
+}
+
+func TestUpdateFolderConcurrentOppositeMovesCannotCycle(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	folderA, err := EnsureFolder(ctx, db, domain.DefaultProfileID, nil, "A")
+	if err != nil {
+		t.Fatal(err)
+	}
+	folderB, err := EnsureFolder(ctx, db, domain.DefaultProfileID, nil, "B")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var ready sync.WaitGroup
+	ready.Add(2)
+	move := func(folderID, parentID string) {
+		ready.Done()
+		<-start
+		_, updateErr := UpdateFolder(ctx, db, domain.DefaultProfileID, folderID, true, &parentID, nil, nil)
+		results <- updateErr
+	}
+	go move(folderA.ID, folderB.ID)
+	go move(folderB.ID, folderA.ID)
+	ready.Wait()
+	close(start)
+
+	successes := 0
+	for range 2 {
+		if err := <-results; err == nil {
+			successes++
+		}
+	}
+	if successes != 1 {
+		t.Fatalf("expected exactly one opposite move to succeed, got %d", successes)
+	}
+
+	var cycle bool
+	if err := db.QueryRowContext(ctx, `
+		WITH RECURSIVE path(id, parent_id, visited, cycle) AS (
+			SELECT id, parent_id, ',' || id || ',', 0 FROM folders WHERE profile_id = ?
+			UNION ALL
+			SELECT f.id, f.parent_id, path.visited || f.id || ',', instr(path.visited, ',' || f.id || ',') > 0
+			FROM folders f JOIN path ON f.id = path.parent_id WHERE path.cycle = 0
+		)
+		SELECT EXISTS(SELECT 1 FROM path WHERE cycle = 1)`, domain.DefaultProfileID).Scan(&cycle); err != nil {
+		t.Fatal(err)
+	}
+	if cycle {
+		t.Fatal("opposite moves created a folder cycle")
 	}
 }

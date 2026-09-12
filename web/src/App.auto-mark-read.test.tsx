@@ -33,7 +33,32 @@ function makeEntry(id: string, title: string) {
   }
 }
 
-const ENTRIES = [makeEntry("entry-1", "First unread article"), makeEntry("entry-2", "Second unread article")]
+const ENTRIES = [
+  makeEntry("entry-1", "First unread article"),
+  makeEntry("entry-2", "Second unread article"),
+]
+
+const SUBSCRIPTION = {
+  id: "subscription-1",
+  feed_id: "feed-1",
+  folder_id: null,
+  position: 0,
+  title: "Feed One",
+  icon_url: null,
+  feed_url: "https://example.com/feed.xml",
+  site_url: "https://example.com",
+  unread_count: 2,
+  failure_count: 0,
+  last_error_code: null,
+  last_error_message: null,
+  last_success_at: "2026-08-10T01:00:00Z",
+  view_mode: "standard",
+  refresh_policy: "inherit",
+  refresh_interval_minutes: 30,
+  hide_from_timeline: false,
+  created_at: "2026-08-10T00:00:00Z",
+  updated_at: "2026-08-10T01:00:00Z",
+}
 
 let statePatchCalls = 0
 
@@ -62,8 +87,7 @@ beforeEach(() => {
     const url =
       typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url
     const method = (
-      init?.method ??
-      (typeof input === "object" && "method" in input ? input.method : "GET")
+      init?.method ?? (typeof input === "object" && "method" in input ? input.method : "GET")
     ).toUpperCase()
     const stateMatch = url.match(/\/api\/v1\/entries\/([^/?]+)\/state(?:\?|$)/)
     if (stateMatch && method === "PATCH") {
@@ -93,8 +117,10 @@ beforeEach(() => {
         capabilities: ["rss"],
       })
     }
+    if (url.includes("/api/v1/subscriptions")) {
+      return jsonResponse({ items: [SUBSCRIPTION] })
+    }
     if (
-      url.includes("/api/v1/subscriptions") ||
       url.includes("/api/v1/folders") ||
       url.includes("/api/v1/devices") ||
       url.includes("/api/v1/sync/accounts") ||
@@ -149,6 +175,18 @@ describe("auto mark-read on article open", () => {
     expect(
       screen.getByRole("heading", { name: "First unread article", level: 1 }),
     ).toBeInTheDocument()
+  })
+
+  it("applies duplicate read responses to the unread count only once", async () => {
+    renderApp()
+    fireEvent.click(await screen.findByRole("button", { name: /First unread article/ }))
+    await screen.findByRole("heading", { name: "First unread article", level: 1 })
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark read" }))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 1200)))
+
+    expect(statePatchCalls).toBe(2)
+    expect(document.querySelector(".feed-row__count")).toHaveTextContent("1")
   })
 
   it("fires once per article when switching from one article to another", async () => {

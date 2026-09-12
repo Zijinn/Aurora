@@ -14,23 +14,61 @@ import (
 )
 
 func UpdateFolder(ctx context.Context, db *sql.DB, profileID, folderID string, setParent bool, parentID *string, name *string, position *int) (domain.Folder, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Folder{}, fmt.Errorf("begin folder update: %w", err)
+	}
+	defer tx.Rollback()
+
+	var folderExists bool
+	if err := tx.QueryRowContext(ctx,
+		"SELECT EXISTS(SELECT 1 FROM folders WHERE id = ? AND profile_id = ?)", folderID, profileID,
+	).Scan(&folderExists); err != nil {
+		return domain.Folder{}, fmt.Errorf("find folder: %w", err)
+	}
+	if !folderExists {
+		return domain.Folder{}, ErrNotFound
+	}
+
 	if setParent && parentID != nil {
 		if *parentID == folderID {
 			return domain.Folder{}, errors.New("a folder cannot contain itself")
 		}
+		var parentExists bool
+		if err := tx.QueryRowContext(ctx,
+			"SELECT EXISTS(SELECT 1 FROM folders WHERE id = ? AND profile_id = ?)", *parentID, profileID,
+		).Scan(&parentExists); err != nil {
+			return domain.Folder{}, fmt.Errorf("find parent folder: %w", err)
+		}
+		if !parentExists {
+			return domain.Folder{}, ErrNotFound
+		}
 		var cycle bool
-		if err := db.QueryRowContext(ctx, `
+		if err := tx.QueryRowContext(ctx, `
 			WITH RECURSIVE descendants(id) AS (
-				SELECT id FROM folders WHERE parent_id = ?
-				UNION ALL SELECT f.id FROM folders f JOIN descendants d ON f.parent_id = d.id
+				SELECT id FROM folders WHERE parent_id = ? AND profile_id = ?
+				UNION SELECT f.id FROM folders f JOIN descendants d ON f.parent_id = d.id
+				WHERE f.profile_id = ?
 			)
-			SELECT EXISTS(SELECT 1 FROM descendants WHERE id = ?)`, folderID, *parentID).Scan(&cycle); err != nil {
+			SELECT EXISTS(SELECT 1 FROM descendants WHERE id = ?)`, folderID, profileID, profileID, *parentID).Scan(&cycle); err != nil {
 			return domain.Folder{}, fmt.Errorf("check folder cycle: %w", err)
 		}
 		if cycle {
 			return domain.Folder{}, errors.New("folder nesting would create a cycle")
 		}
 	}
+
+	var appendPosition int
+	if setParent && position == nil {
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COALESCE(MAX(position) + 1, 0) FROM folders
+			WHERE profile_id = ? AND ((parent_id IS NULL AND ? IS NULL) OR parent_id = ?) AND id != ?`,
+			profileID, nullable(parentID), nullable(parentID), folderID,
+		).Scan(&appendPosition); err != nil {
+			return domain.Folder{}, fmt.Errorf("calculate folder position: %w", err)
+		}
+	}
+
 	now := time.Now().UTC()
 	sets := []string{"updated_at = ?"}
 	args := []any{formatTime(now)}
@@ -46,15 +84,10 @@ func UpdateFolder(ctx context.Context, db *sql.DB, profileID, folderID string, s
 		sets = append(sets, "position = ?")
 		args = append(args, *position)
 	} else if setParent {
-		// Re-parenting without an explicit position appends to the end of the
-		// new sibling group, so moved folders don't jump to the top.
-		sets = append(sets, `position = COALESCE((
-			SELECT MAX(position) + 1 FROM folders
-			WHERE profile_id = ? AND ((parent_id IS NULL AND ? IS NULL) OR parent_id = ?) AND id != ?
-		), 0)`)
-		args = append(args, profileID, nullable(parentID), nullable(parentID), folderID)
+		sets = append(sets, "position = ?")
+		args = append(args, appendPosition)
 	}
-	result, err := db.ExecContext(ctx, "UPDATE folders SET "+strings.Join(sets, ", ")+
+	result, err := tx.ExecContext(ctx, "UPDATE folders SET "+strings.Join(sets, ", ")+
 		" WHERE id = ? AND profile_id = ?", append(args, folderID, profileID)...)
 	if err != nil {
 		return domain.Folder{}, fmt.Errorf("update folder: %w", err)
@@ -63,6 +96,10 @@ func UpdateFolder(ctx context.Context, db *sql.DB, profileID, folderID string, s
 	if affected == 0 {
 		return domain.Folder{}, ErrNotFound
 	}
+	if err := tx.Commit(); err != nil {
+		return domain.Folder{}, fmt.Errorf("commit folder update: %w", err)
+	}
+
 	items, err := ListFolders(ctx, db, profileID)
 	if err != nil {
 		return domain.Folder{}, err

@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/Zijinn/Aurora/internal/domain"
-	"github.com/Zijinn/Aurora/internal/job"
 	feedcore "github.com/Zijinn/Aurora/internal/feed"
+	"github.com/Zijinn/Aurora/internal/job"
 	"github.com/Zijinn/Aurora/internal/opml"
 	"github.com/Zijinn/Aurora/internal/service"
 	"github.com/Zijinn/Aurora/internal/storage"
@@ -103,7 +103,7 @@ func (s *Server) createFeed(w http.ResponseWriter, r *http.Request) {
 		TitleOverride *string `json:"title_override"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	if strings.TrimSpace(request.URL) == "" {
@@ -127,7 +127,11 @@ func (s *Server) discoverFeeds(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		URL string `json:"url"`
 	}
-	if err := decodeJSON(w, r, &request); err != nil || strings.TrimSpace(request.URL) == "" {
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
+		return
+	}
+	if strings.TrimSpace(request.URL) == "" {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", "A URL is required.")
 		return
 	}
@@ -161,7 +165,7 @@ func (s *Server) updateFeed(w http.ResponseWriter, r *http.Request) {
 		Position               json.RawMessage `json:"position"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	setFolder, folderID, err := optionalNullableString(request.FolderID)
@@ -331,7 +335,7 @@ func (s *Server) markEntriesRead(w http.ResponseWriter, r *http.Request) {
 		Since       *time.Time `json:"since"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	if request.State != "" && request.State != "all" && request.State != "unread" && request.State != "starred" && request.State != "read_later" {
@@ -369,16 +373,24 @@ func (s *Server) updateEntryState(w http.ResponseWriter, r *http.Request) {
 		DeviceTime  *time.Time `json:"device_time"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	if request.MutationID == "" || (request.IsRead == nil && request.IsStarred == nil && request.IsReadLater == nil) {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_state_patch", "Invalid state change", "A mutation_id and at least one state field are required.")
 		return
 	}
+	var authenticatedDeviceID *string
+	if device := deviceFromContext(r.Context()); device != nil {
+		authenticatedDeviceID = &device.ID
+		if request.DeviceID != nil && *request.DeviceID != device.ID {
+			writeProblem(w, r, http.StatusConflict, "device_id_mismatch", "Device identity mismatch", "The body device_id does not match the authenticated device.")
+			return
+		}
+	}
 	state, err := storage.UpdateEntryState(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("entryID"), domain.EntryStatePatch{
-		MutationID: request.MutationID, DeviceID: request.DeviceID, IsRead: request.IsRead,
-		IsStarred: request.IsStarred, IsReadLater: request.IsReadLater, DeviceTime: request.DeviceTime,
+		MutationID: request.MutationID, DeviceID: authenticatedDeviceID, IsRead: request.IsRead,
+		IsStarred: request.IsStarred, IsReadLater: request.IsReadLater,
 	})
 	if err != nil {
 		s.storageError(w, r, err)
@@ -405,7 +417,7 @@ func (s *Server) putPreference(w http.ResponseWriter, r *http.Request) {
 	}
 	var value json.RawMessage
 	if err := decodeJSON(w, r, &value); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	if key == storage.PreferenceRetentionDays {
@@ -440,7 +452,7 @@ func (s *Server) createEntryAnnotation(w http.ResponseWriter, r *http.Request) {
 		Note   string `json:"note"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	if request.Style == "" {
@@ -463,7 +475,7 @@ func (s *Server) updateEntryAnnotation(w http.ResponseWriter, r *http.Request) {
 		Note  *string `json:"note"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	annotation, err := storage.UpdateEntryAnnotation(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("entryID"), r.PathValue("annotationID"), domain.EntryAnnotationPatch{
@@ -503,8 +515,16 @@ func (s *Server) importOPML(w http.ResponseWriter, r *http.Request) {
 	// OPML documents are user exports and can legitimately exceed the request
 	// limit used by small JSON mutations. Keep this endpoint independent so
 	// large libraries can be imported without an arbitrary size ceiling.
-	body, err := io.ReadAll(io.LimitReader(r.Body, 16<<20))
-	if err != nil || len(body) == 0 {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxOPMLBodyBytes+1))
+	if err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_opml", "Invalid OPML", "The OPML document could not be read.")
+		return
+	}
+	if len(body) > maxOPMLBodyBytes {
+		writeProblem(w, r, http.StatusRequestEntityTooLarge, "request_body_too_large", "Request body too large", "The OPML document exceeds the 16 MiB limit.")
+		return
+	}
+	if len(body) == 0 {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_opml", "Invalid OPML", "Provide a non-empty OPML document.")
 		return
 	}
@@ -601,16 +621,20 @@ func (s *Server) exportBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 512<<20)
-	decoder := json.NewDecoder(r.Body)
 	var document storage.BackupDocument
-	if err := decoder.Decode(&document); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_backup", "Invalid backup", err.Error())
+	if err := decodeJSONLimit(w, r, &document, maxBackupBodyBytes, false); err != nil {
+		writeJSONDecodeError(w, r, err, "invalid_backup", "Invalid backup")
 		return
 	}
 	// Quiesce the job manager so in-flight refreshes and AI tasks do not write
 	// into tables being replaced.
-	s.jobs.EnterMaintenance("")
+	maintenanceCtx, cancelMaintenance := context.WithTimeout(r.Context(), 30*time.Second)
+	err := s.jobs.EnterMaintenance(maintenanceCtx, "")
+	cancelMaintenance()
+	if err != nil {
+		writeProblem(w, r, http.StatusServiceUnavailable, "restore_busy", "Backup restore could not start", "Background work did not stop before the restore deadline.")
+		return
+	}
 	defer s.jobs.ExitMaintenance()
 	if err := storage.RestoreBackup(r.Context(), s.db, document); err != nil {
 		writeProblem(w, r, http.StatusUnprocessableEntity, "restore_failed", "Backup could not be restored", err.Error())
@@ -620,16 +644,41 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "restored"})
 }
 
+const (
+	maxJSONBodyBytes   = 1 << 20
+	maxOPMLBodyBytes   = 16 << 20
+	maxBackupBodyBytes = 512 << 20
+)
+
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
+	return decodeJSONLimit(w, r, target, maxJSONBodyBytes, true)
+}
+
+func decodeJSONLimit(w http.ResponseWriter, r *http.Request, target any, limit int64, disallowUnknown bool) error {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
+	if disallowUnknown {
+		decoder.DisallowUnknownFields()
+	}
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err != nil {
+			return err
+		}
 		return errors.New("request body must contain one JSON value")
 	}
 	return nil
+}
+
+func writeJSONDecodeError(w http.ResponseWriter, r *http.Request, err error, invalidCode, invalidTitle string) {
+	var maxBytesError *http.MaxBytesError
+	if errors.As(err, &maxBytesError) {
+		writeProblem(w, r, http.StatusRequestEntityTooLarge, "request_body_too_large", "Request body too large", "The request body exceeds the limit for this endpoint.")
+		return
+	}
+	writeProblem(w, r, http.StatusBadRequest, invalidCode, invalidTitle, err.Error())
 }
 
 func optionalNullableString(raw json.RawMessage) (bool, *string, error) {

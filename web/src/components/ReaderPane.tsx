@@ -231,7 +231,15 @@ export function ReaderPane(props: ReaderPaneProps) {
         flashAIResult(operation)
       }
     })()
-  }, [aiJob.data, aiJobActive, aiPendingJobID, aiPendingOperation, entry?.id, queryClient, flashAIResult])
+  }, [
+    aiJob.data,
+    aiJobActive,
+    aiPendingJobID,
+    aiPendingOperation,
+    entry?.id,
+    queryClient,
+    flashAIResult,
+  ])
   const aiBusy = aiOperationMutation.isPending || aiJobActive
   const aiError =
     aiOperationMutation.error ??
@@ -270,10 +278,7 @@ export function ReaderPane(props: ReaderPaneProps) {
     queryFn: ({ signal }) => listEntryAnnotations(entry!.id, signal),
     enabled: Boolean(entry),
   })
-  const entryAnnotations = useMemo(
-    () => annotationsQuery.data ?? [],
-    [annotationsQuery.data],
-  )
+  const entryAnnotations = useMemo(() => annotationsQuery.data ?? [], [annotationsQuery.data])
   const createAnnotationMutation = useMutation({
     mutationFn: (input: {
       style: AnnotationStyle
@@ -287,6 +292,10 @@ export function ReaderPane(props: ReaderPaneProps) {
         ...(current ?? []),
         created,
       ])
+      setPendingSelection(null)
+      setNoteEditorOpen(false)
+      setNoteDraft("")
+      window.getSelection()?.removeAllRanges()
     },
   })
   const deleteAnnotationMutation = useMutation({
@@ -313,7 +322,7 @@ export function ReaderPane(props: ReaderPaneProps) {
   const bodyShowsSummary = !safeHTML && !translatedContent
   const showHeaderSummary = Boolean(
     entry?.ai_summary ??
-      (entry?.summary && !bodyShowsSummary && !summaryDuplicatesContent(entry.summary, safeHTML)),
+    (entry?.summary && !bodyShowsSummary && !summaryDuplicatesContent(entry.summary, safeHTML)),
   )
   // Fire at most once per entry: if the callback prop identity changes while
   // the PATCH is still in flight (the parent re-renders on every mutation
@@ -366,7 +375,7 @@ export function ReaderPane(props: ReaderPaneProps) {
   }, [])
 
   const createAnnotation = (style: AnnotationStyle, note = "") => {
-    if (!entry || !pendingSelection) return
+    if (!entry || !pendingSelection || createAnnotationMutation.isPending) return
     createAnnotationMutation.mutate({
       quote: pendingSelection.quote,
       prefix: pendingSelection.prefix,
@@ -374,10 +383,6 @@ export function ReaderPane(props: ReaderPaneProps) {
       style,
       note: note.trim(),
     })
-    setPendingSelection(null)
-    setNoteEditorOpen(false)
-    setNoteDraft("")
-    window.getSelection()?.removeAllRanges()
   }
 
   const saveNote = (event: FormEvent) => {
@@ -466,7 +471,11 @@ export function ReaderPane(props: ReaderPaneProps) {
             {aiBusy ? <CircleNotch className="spin" /> : <AIIcon />}
           </button>
           {aiMenuOpen && (
-            <div className="reader-tag-picker reader-ai-picker" role="menu" aria-label={t("aiAssistant")}>
+            <div
+              className="reader-tag-picker reader-ai-picker"
+              role="menu"
+              aria-label={t("aiAssistant")}
+            >
               {aiQuickOperations.map((operation) => {
                 const Icon = operation.icon
                 return (
@@ -653,6 +662,11 @@ export function ReaderPane(props: ReaderPaneProps) {
       {zoteroMutation.error && (
         <div className="reader-toast reader-toast--error" role="alert">
           {zoteroMutation.error.message}
+        </div>
+      )}
+      {createAnnotationMutation.error && (
+        <div className="reader-toast reader-toast--error" role="alert">
+          {createAnnotationMutation.error.message}
         </div>
       )}
       {aiFlash && (
@@ -912,6 +926,7 @@ export function ReaderPane(props: ReaderPaneProps) {
                 type="button"
                 aria-label={t("highlight")}
                 title={t("highlight")}
+                disabled={createAnnotationMutation.isPending}
                 onClick={() => createAnnotation("highlight")}
               >
                 <HighlighterCircle weight="fill" />
@@ -920,6 +935,7 @@ export function ReaderPane(props: ReaderPaneProps) {
                 type="button"
                 aria-label={t("underline")}
                 title={t("underline")}
+                disabled={createAnnotationMutation.isPending}
                 onClick={() => createAnnotation("underline")}
               >
                 <TextUnderline />
@@ -928,6 +944,7 @@ export function ReaderPane(props: ReaderPaneProps) {
                 type="button"
                 aria-label={t("wavyUnderline")}
                 title={t("wavyUnderline")}
+                disabled={createAnnotationMutation.isPending}
                 onClick={() => createAnnotation("wavy")}
               >
                 <WaveSine />
@@ -936,6 +953,7 @@ export function ReaderPane(props: ReaderPaneProps) {
                 type="button"
                 aria-label={t("addNote")}
                 title={t("addNote")}
+                disabled={createAnnotationMutation.isPending}
                 onClick={() => setNoteEditorOpen(true)}
               >
                 <NotePencil />
@@ -948,9 +966,13 @@ export function ReaderPane(props: ReaderPaneProps) {
                 value={noteDraft}
                 placeholder={t("notePlaceholder")}
                 aria-label={t("addNote")}
+                disabled={createAnnotationMutation.isPending}
                 onChange={(event) => setNoteDraft(event.target.value)}
               />
-              <button type="submit" disabled={!noteDraft.trim()}>
+              <button
+                type="submit"
+                disabled={!noteDraft.trim() || createAnnotationMutation.isPending}
+              >
                 {t("saveNote")}
               </button>
             </form>

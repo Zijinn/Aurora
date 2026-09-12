@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { APIError } from "../api/client"
@@ -97,6 +97,40 @@ describe("SyncAccountDialog", () => {
     )
   })
 
+  it("ignores a connection response after test inputs change", async () => {
+    const testResult = deferred<{ ok: true; endpoint: string }>()
+    const onTest = vi.fn().mockReturnValue(testResult.promise)
+    render(
+      <SyncAccountDialog
+        open
+        providers={providers}
+        initialProvider="webdav"
+        pending={false}
+        error={null}
+        onOpenChange={vi.fn()}
+        onSave={vi.fn()}
+        onTest={onTest}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText("Snapshot file URL"), {
+      target: { value: "https://dav.example.com/old/" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }))
+    await waitFor(() => expect(onTest).toHaveBeenCalledOnce())
+
+    fireEvent.change(screen.getByLabelText("Snapshot file URL"), {
+      target: { value: "https://dav.example.com/new/" },
+    })
+    await act(async () => {
+      testResult.resolve({ ok: true, endpoint: "https://dav.example.com/old/library.json" })
+      await testResult.promise
+    })
+
+    expect(screen.queryByText(/Connection successful/)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Test connection" })).toBeEnabled()
+  })
+
   it("prefills editable settings while leaving encrypted credentials blank", () => {
     const account: SyncAccount = {
       id: "webdav-account",
@@ -148,3 +182,13 @@ describe("SyncAccountDialog", () => {
     )
   })
 })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}

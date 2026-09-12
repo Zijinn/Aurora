@@ -14,7 +14,11 @@ func (s *Server) createFolder(w http.ResponseWriter, r *http.Request) {
 		Name     string  `json:"name"`
 		ParentID *string `json:"parent_id"`
 	}
-	if err := decodeJSON(w, r, &request); err != nil || strings.TrimSpace(request.Name) == "" {
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeJSONDecodeError(w, r, err, "invalid_folder", "Invalid folder")
+		return
+	}
+	if strings.TrimSpace(request.Name) == "" {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_folder", "Invalid folder", "Folder name is required.")
 		return
 	}
@@ -34,7 +38,7 @@ func (s *Server) updateFolder(w http.ResponseWriter, r *http.Request) {
 		Position json.RawMessage `json:"position"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_folder", "Invalid folder", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_folder", "Invalid folder")
 		return
 	}
 	name, err := optionalString(request.Name)
@@ -89,7 +93,7 @@ func (s *Server) createTag(w http.ResponseWriter, r *http.Request) {
 		Color *string `json:"color"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_tag", "Invalid tag", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_tag", "Invalid tag")
 		return
 	}
 	item, err := storage.CreateTag(r.Context(), s.db, domain.DefaultProfileID, request.Name, request.Color)
@@ -113,7 +117,7 @@ func (s *Server) setEntryTags(w http.ResponseWriter, r *http.Request) {
 		TagIDs []string `json:"tag_ids"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_tags", "Invalid tags", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_tags", "Invalid tags")
 		return
 	}
 	if err := storage.SetEntryTags(r.Context(), s.db, domain.DefaultProfileID, r.PathValue("entryID"), request.TagIDs); err != nil {
@@ -142,7 +146,7 @@ func (s *Server) createRule(w http.ResponseWriter, r *http.Request) {
 		Actions    json.RawMessage `json:"actions"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_rule", "Invalid rule", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_rule", "Invalid rule")
 		return
 	}
 	enabled := true
@@ -180,7 +184,7 @@ func (s *Server) createSavedFilter(w http.ResponseWriter, r *http.Request) {
 		Query json.RawMessage `json:"query"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_filter", "Invalid saved filter", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_filter", "Invalid saved filter")
 		return
 	}
 	item, err := storage.CreateSavedFilter(r.Context(), s.db, domain.DefaultProfileID, request.Name, request.Query)

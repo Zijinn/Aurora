@@ -22,19 +22,31 @@ type Handler func(ctx context.Context, job domain.Job, progress ProgressFunc) er
 
 // ErrJobAlreadyQueued reports that an equivalent pending job exists; callers
 // should treat it as a benign duplicate, not a failure.
-var ErrJobAlreadyQueued = errors.New("job is already queued")
+var (
+	ErrJobAlreadyQueued = storage.ErrJobAlreadyQueued
+	ErrMaintenance      = errors.New("job manager is in maintenance mode")
+)
+
+type execution struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
 
 type Manager struct {
-	db          *sql.DB
-	hub         *event.Hub
-	logger      *slog.Logger
-	workers     int
-	handlers    map[string]Handler
-	queue       chan domain.Job
-	start       sync.Once
-	cancelMu    sync.Mutex
-	cancels     map[string]context.CancelFunc
-	maintenance atomic.Bool
+	db                 *sql.DB
+	hub                *event.Hub
+	logger             *slog.Logger
+	workers            int
+	handlers           map[string]Handler
+	queue              chan domain.Job
+	work               chan struct{}
+	ready              chan struct{}
+	maintenanceChanged chan struct{}
+	start              sync.Once
+	maintenanceMu      sync.Mutex
+	admissionMu        sync.Mutex
+	executions         map[string]execution
+	maintenance        atomic.Bool
 }
 
 func NewManager(db *sql.DB, hub *event.Hub, logger *slog.Logger, workers int) *Manager {
@@ -47,39 +59,62 @@ func NewManager(db *sql.DB, hub *event.Hub, logger *slog.Logger, workers int) *M
 	return &Manager{
 		db: db, hub: hub, logger: logger, workers: workers,
 		handlers: make(map[string]Handler), queue: make(chan domain.Job, workers),
-		cancels: make(map[string]context.CancelFunc),
+		work: make(chan struct{}, workers), ready: make(chan struct{}, 1),
+		maintenanceChanged: make(chan struct{}, 1), executions: make(map[string]execution),
 	}
 }
 
-// EnterMaintenance pauses dispatch and the schedulers and cancels in-flight
-// jobs so database restores run against a quiet store. exceptJobID keeps the
-// calling job alive when maintenance begins inside a job handler (library
-// restores triggered by a sync job). It waits briefly for cancelled handlers
-// to unwind.
-func (m *Manager) EnterMaintenance(exceptJobID string) {
-	m.maintenance.Store(true)
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		m.cancelMu.Lock()
-		remaining := 0
-		for id, cancel := range m.cancels {
-			if id == exceptJobID {
-				continue
-			}
-			cancel()
-			remaining++
-		}
-		m.cancelMu.Unlock()
-		if remaining == 0 || time.Now().After(deadline) {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
+// EnterMaintenance prevents new handlers from starting, returns claimed jobs
+// to the queue, cancels all running handlers except exceptJobID, and waits for
+// the cancelled handlers to exit. The caller controls the wait deadline.
+func (m *Manager) EnterMaintenance(ctx context.Context, exceptJobID string) error {
+	if err := m.lockMaintenance(ctx); err != nil {
+		return err
 	}
+	m.admissionMu.Lock()
+	m.maintenance.Store(true)
+	var waiting []<-chan struct{}
+	for id, running := range m.executions {
+		if id == exceptJobID {
+			continue
+		}
+		running.cancel()
+		waiting = append(waiting, running.done)
+	}
+	m.admissionMu.Unlock()
+	m.signalMaintenanceChanged()
+
+	m.drainClaimedJobs()
+	for _, done := range waiting {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			m.ExitMaintenance()
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 // ExitMaintenance resumes dispatch and schedulers after a restore.
 func (m *Manager) ExitMaintenance() {
+	m.admissionMu.Lock()
 	m.maintenance.Store(false)
+	m.admissionMu.Unlock()
+	m.signalMaintenanceChanged()
+	m.signalDispatcher()
+	m.maintenanceMu.Unlock()
+}
+
+func (m *Manager) lockMaintenance(ctx context.Context) error {
+	for !m.maintenanceMu.TryLock() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	return nil
 }
 
 // InMaintenance reports whether the manager is paused for a restore.
@@ -88,16 +123,17 @@ func (m *Manager) InMaintenance() bool {
 }
 
 func (m *Manager) Cancel(ctx context.Context, jobID string) (domain.Job, error) {
+	m.admissionMu.Lock()
 	cancelled, err := storage.CancelJob(ctx, m.db, jobID)
 	if err != nil {
+		m.admissionMu.Unlock()
 		return domain.Job{}, err
 	}
-	m.cancelMu.Lock()
-	cancel := m.cancels[jobID]
-	m.cancelMu.Unlock()
-	if cancel != nil {
-		cancel()
+	running, exists := m.executions[jobID]
+	if exists {
+		running.cancel()
 	}
+	m.admissionMu.Unlock()
 	m.publish("job.cancelled", cancelled)
 	return cancelled, nil
 }
@@ -120,37 +156,48 @@ func (m *Manager) Start(ctx context.Context) error {
 }
 
 func (m *Manager) Enqueue(ctx context.Context, kind string, payload any) (domain.Job, error) {
-	job, err := storage.CreateJob(ctx, m.db, kind, payload, time.Now().UTC())
+	job, err := m.enqueueAdmitted(func() (domain.Job, error) {
+		return storage.CreateJob(ctx, m.db, kind, payload, time.Now().UTC())
+	})
 	if err == nil {
 		m.publish("job.queued", job)
 	}
 	return job, err
 }
 
+func (m *Manager) enqueueAdmitted(enqueue func() (domain.Job, error)) (domain.Job, error) {
+	m.admissionMu.Lock()
+	defer m.admissionMu.Unlock()
+	if m.maintenance.Load() {
+		return domain.Job{}, ErrMaintenance
+	}
+	return enqueue()
+}
+
 func (m *Manager) EnqueueFeedRefresh(ctx context.Context, feedID string) (domain.Job, error) {
-	pending, err := storage.HasPendingFeedRefresh(ctx, m.db, feedID)
+	queued, err := m.enqueueAdmitted(func() (domain.Job, error) {
+		return storage.EnqueueFeedRefresh(ctx, m.db, feedID, time.Now().UTC())
+	})
 	if err != nil {
-		return domain.Job{}, err
+		return domain.Job{}, fmt.Errorf("feed refresh: %w", err)
 	}
-	if pending {
-		return domain.Job{}, fmt.Errorf("feed refresh: %w", ErrJobAlreadyQueued)
-	}
-	return m.Enqueue(ctx, "feed.refresh", map[string]string{"feed_id": feedID})
+	m.publish("job.queued", queued)
+	return queued, nil
 }
 
 func (m *Manager) EnqueueAccountSync(ctx context.Context, accountID string, requestedMode ...string) (domain.Job, error) {
-	pending, err := storage.HasPendingAccountSync(ctx, m.db, accountID)
-	if err != nil {
-		return domain.Job{}, err
-	}
-	if pending {
-		return domain.Job{}, fmt.Errorf("account sync: %w", ErrJobAlreadyQueued)
-	}
 	mode := "auto"
 	if len(requestedMode) > 0 && requestedMode[0] != "" {
 		mode = requestedMode[0]
 	}
-	return m.Enqueue(ctx, "sync.account", map[string]string{"account_id": accountID, "mode": mode})
+	queued, err := m.enqueueAdmitted(func() (domain.Job, error) {
+		return storage.EnqueueAccountSync(ctx, m.db, accountID, mode, time.Now().UTC())
+	})
+	if err != nil {
+		return domain.Job{}, fmt.Errorf("account sync: %w", err)
+	}
+	m.publish("job.queued", queued)
+	return queued, nil
 }
 
 func (m *Manager) StartFeedScheduler(ctx context.Context, interval time.Duration) {
@@ -204,32 +251,38 @@ func (m *Manager) StartCleanupScheduler(ctx context.Context, interval time.Durat
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if m.maintenance.Load() {
-					continue
-				}
-				cutoff := time.Now().UTC().Add(-30 * 24 * time.Hour)
-				if pruned, err := storage.PruneProcessedMutations(ctx, m.db, cutoff); err != nil {
-					m.logger.WarnContext(ctx, "prune processed mutations", "error", err)
-				} else if pruned > 0 {
-					m.logger.InfoContext(ctx, "pruned processed mutations", "rows", pruned)
-				}
-				retentionDays, err := storage.RetentionDays(ctx, m.db, domain.DefaultProfileID)
-				if err != nil {
-					m.logger.WarnContext(ctx, "read retention preference", "error", err)
-					continue
-				}
-				if retentionDays <= 0 {
-					continue
-				}
-				entryCutoff := time.Now().UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour)
-				if pruned, err := storage.PruneReadEntries(ctx, m.db, domain.DefaultProfileID, entryCutoff); err != nil {
-					m.logger.WarnContext(ctx, "prune read entries", "error", err)
-				} else if pruned > 0 {
-					m.logger.InfoContext(ctx, "pruned read entries", "rows", pruned, "retention_days", retentionDays)
-				}
+				m.runCleanup(ctx)
 			}
 		}
 	}()
+}
+
+func (m *Manager) runCleanup(ctx context.Context) {
+	m.admissionMu.Lock()
+	defer m.admissionMu.Unlock()
+	if m.maintenance.Load() {
+		return
+	}
+	cutoff := time.Now().UTC().Add(-30 * 24 * time.Hour)
+	if pruned, err := storage.PruneProcessedMutations(ctx, m.db, cutoff); err != nil {
+		m.logger.WarnContext(ctx, "prune processed mutations", "error", err)
+	} else if pruned > 0 {
+		m.logger.InfoContext(ctx, "pruned processed mutations", "rows", pruned)
+	}
+	retentionDays, err := storage.RetentionDays(ctx, m.db, domain.DefaultProfileID)
+	if err != nil {
+		m.logger.WarnContext(ctx, "read retention preference", "error", err)
+		return
+	}
+	if retentionDays <= 0 {
+		return
+	}
+	entryCutoff := time.Now().UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+	if pruned, err := storage.PruneReadEntries(ctx, m.db, domain.DefaultProfileID, entryCutoff); err != nil {
+		m.logger.WarnContext(ctx, "prune read entries", "error", err)
+	} else if pruned > 0 {
+		m.logger.InfoContext(ctx, "pruned read entries", "rows", pruned, "retention_days", retentionDays)
+	}
 }
 
 func DecodePayload(job domain.Job, target any) error {
@@ -248,6 +301,8 @@ func (m *Manager) dispatch(ctx context.Context) {
 			return
 		case <-ticker.C:
 			m.claimAvailable(ctx)
+		case <-m.ready:
+			m.claimAvailable(ctx)
 		}
 	}
 }
@@ -255,28 +310,81 @@ func (m *Manager) dispatch(ctx context.Context) {
 // claimAvailable drains the pending queue until the worker channel is full,
 // instead of claiming at most one job per tick.
 func (m *Manager) claimAvailable(ctx context.Context) {
-	if m.maintenance.Load() {
-		return
-	}
 	for {
+		m.admissionMu.Lock()
+		if m.maintenance.Load() {
+			m.admissionMu.Unlock()
+			return
+		}
 		job, err := storage.ClaimNextJob(ctx, m.db)
 		if err != nil {
+			m.admissionMu.Unlock()
 			if !errors.Is(err, context.Canceled) {
 				m.logger.ErrorContext(ctx, "claim background job", "error", err)
 			}
 			return
 		}
 		if job == nil {
+			m.admissionMu.Unlock()
 			return
 		}
 		select {
 		case m.queue <- *job:
+			m.signalWorker()
+			m.admissionMu.Unlock()
 		case <-ctx.Done():
-			if err := storage.RequeueJob(context.Background(), m.db, job.ID); err != nil {
-				m.logger.Warn("requeue claimed job on shutdown", "job_id", job.ID, "error", err)
-			}
+			m.requeueClaimed(job.ID, "shutdown")
+			m.admissionMu.Unlock()
+			return
+		default:
+			m.admissionMu.Unlock()
+			m.requeueClaimed(job.ID, "full queue")
 			return
 		}
+	}
+}
+
+func (m *Manager) signalDispatcher() {
+	select {
+	case m.ready <- struct{}{}:
+	default:
+	}
+}
+
+func (m *Manager) signalWorker() {
+	select {
+	case m.work <- struct{}{}:
+	default:
+	}
+}
+
+func (m *Manager) signalMaintenanceChanged() {
+	select {
+	case m.maintenanceChanged <- struct{}{}:
+	default:
+	}
+}
+
+func (m *Manager) drainClaimedJobs() {
+	for {
+		select {
+		case claimed := <-m.queue:
+			select {
+			case <-m.work:
+			default:
+			}
+			m.requeueClaimed(claimed.ID, "maintenance")
+		default:
+			return
+		}
+	}
+}
+
+func (m *Manager) requeueClaimed(jobID, reason string) {
+	writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := storage.RequeueJob(writeCtx, m.db, jobID); err != nil {
+		m.logger.WarnContext(writeCtx, "requeue claimed job", "job_id", jobID, "reason", reason, "error", err)
 	}
 }
 
@@ -285,23 +393,50 @@ func (m *Manager) worker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case current := <-m.queue:
-			m.execute(ctx, current)
+		case <-m.maintenanceChanged:
+			continue
+		case <-m.work:
+			if m.maintenance.Load() {
+				continue
+			}
+			select {
+			case current := <-m.queue:
+				m.execute(ctx, current)
+			default:
+			}
 		}
 	}
 }
 
 func (m *Manager) execute(ctx context.Context, current domain.Job) {
 	jobCtx, cancel := context.WithCancel(ctx)
-	m.cancelMu.Lock()
-	m.cancels[current.ID] = cancel
-	m.cancelMu.Unlock()
+	done := make(chan struct{})
+	m.admissionMu.Lock()
+	if m.maintenance.Load() {
+		m.admissionMu.Unlock()
+		cancel()
+		m.requeueClaimed(current.ID, "maintenance")
+		return
+	}
+	stored, err := storage.GetJob(jobCtx, m.db, current.ID)
+	if err != nil || stored.State != "running" {
+		m.admissionMu.Unlock()
+		cancel()
+		if err != nil && !errors.Is(err, storage.ErrNotFound) && !errors.Is(err, context.Canceled) {
+			m.logger.WarnContext(ctx, "verify claimed job", "job_id", current.ID, "error", err)
+		}
+		return
+	}
+	m.executions[current.ID] = execution{cancel: cancel, done: done}
+	m.admissionMu.Unlock()
 	defer func() {
 		cancel()
-		m.cancelMu.Lock()
-		delete(m.cancels, current.ID)
-		m.cancelMu.Unlock()
+		m.admissionMu.Lock()
+		delete(m.executions, current.ID)
+		close(done)
+		m.admissionMu.Unlock()
 	}()
+	current = stored
 	m.publish("job.started", current)
 	attemptID, attemptErr := storage.BeginJobAttempt(jobCtx, m.db, current.ID)
 	if attemptErr != nil {

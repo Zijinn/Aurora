@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"net/netip"
+	"testing"
+)
 
 func TestValidateRejectsLANAddressWithoutLANMode(t *testing.T) {
 	cfg := Config{
@@ -50,5 +53,44 @@ func TestValidateRequiresTLSCertificateAndKeyTogether(t *testing.T) {
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected a missing TLS key to be rejected")
+	}
+}
+
+func TestParseTrustedProxiesAcceptsExactIPsAndCanonicalCIDRs(t *testing.T) {
+	proxies, err := parseTrustedProxies("127.0.0.1, 10.20.0.0/16, ::1, 2001:db8::/32")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []netip.Prefix{
+		netip.MustParsePrefix("127.0.0.1/32"), netip.MustParsePrefix("10.20.0.0/16"),
+		netip.MustParsePrefix("::1/128"), netip.MustParsePrefix("2001:db8::/32"),
+	}
+	if len(proxies) != len(want) {
+		t.Fatalf("got %d proxies, want %d", len(proxies), len(want))
+	}
+	for index := range want {
+		if proxies[index] != want[index] {
+			t.Fatalf("proxy %d = %s, want %s", index, proxies[index], want[index])
+		}
+	}
+}
+
+func TestParseTrustedProxiesRejectsNamesAndNonCanonicalCIDRs(t *testing.T) {
+	for _, value := range []string{"localhost", "proxy.example", "10.0.0.1/8", "192.168.1.999"} {
+		if _, err := parseTrustedProxies(value); err == nil {
+			t.Fatalf("expected %q to be rejected", value)
+		}
+	}
+}
+
+func TestLoadParsesTrustedProxies(t *testing.T) {
+	t.Setenv("CAIRN_DATA_DIR", t.TempDir())
+	t.Setenv("CAIRN_TRUSTED_PROXIES", "127.0.0.1,10.0.0.0/8")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.TrustedProxies) != 2 || !cfg.TrustedProxies[1].Contains(netip.MustParseAddr("10.2.3.4")) {
+		t.Fatalf("unexpected trusted proxies: %v", cfg.TrustedProxies)
 	}
 }

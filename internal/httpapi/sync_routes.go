@@ -71,7 +71,7 @@ func (s *Server) createSyncAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	var request syncAccountRequest
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	created, err := s.syncs.CreateAccount(r.Context(), service.SyncAccountInput{
@@ -92,7 +92,7 @@ func (s *Server) updateSyncAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	var request syncAccountPatchRequest
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	if request.Name == nil && request.Endpoint == nil && request.Credentials == nil && request.Enabled == nil &&
@@ -122,7 +122,7 @@ func (s *Server) testSyncAccountConnection(w http.ResponseWriter, r *http.Reques
 	}
 	var request syncConnectionTestRequest
 	if err := decodeJSON(w, r, &request); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "invalid_request", "Invalid request", err.Error())
+		writeJSONDecodeError(w, r, err, "invalid_request", "Invalid request")
 		return
 	}
 	result, err := s.syncs.TestConnection(r.Context(), service.SyncConnectionTestInput{

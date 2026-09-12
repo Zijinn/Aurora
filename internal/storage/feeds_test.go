@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -69,6 +70,16 @@ func TestFeedEntryDedupSearchAndMutationIdempotency(t *testing.T) {
 	state, err = UpdateEntryState(ctx, db, domain.DefaultProfileID, entryID, domain.EntryStatePatch{MutationID: "mutation-2", IsRead: &falsehood})
 	if err != nil || state.IsRead {
 		t.Fatalf("new mutation should apply: %+v, %v", state, err)
+	}
+	future := time.Now().UTC().Add(100 * 365 * 24 * time.Hour)
+	state, err = UpdateEntryState(ctx, db, domain.DefaultProfileID, entryID, domain.EntryStatePatch{
+		MutationID: "mutation-device-time", IsStarred: &truth, DeviceTime: &future,
+	})
+	if err != nil || !state.IsStarred {
+		t.Fatalf("device time mutation failed: %+v, %v", state, err)
+	}
+	if state.UpdatedAt.After(time.Now().UTC().Add(time.Minute)) {
+		t.Fatalf("device_time must not determine LWW time: updated_at=%s device_time=%s", state.UpdatedAt, future)
 	}
 }
 
@@ -140,6 +151,77 @@ func TestSubscriptionRefreshPolicyReschedulesFeed(t *testing.T) {
 	feed, err = GetFeed(ctx, db, created.ID)
 	if err != nil || feed.NextCheckAt == nil || time.Until(*feed.NextCheckAt) < 364*24*time.Hour {
 		t.Fatalf("expected never policy to defer scheduler, feed=%+v err=%v", feed, err)
+	}
+}
+
+func TestUpdateSubscriptionRollsBackWhenFeedRescheduleFails(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	created, err := SaveNewFeed(ctx, db, domain.DefaultProfileID, "https://example.com/rollback", "https://example.com/rollback", domain.ParsedFeed{Title: "Original", Format: "rss"}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		CREATE TRIGGER fail_feed_reschedule BEFORE UPDATE ON feeds
+		BEGIN
+			SELECT RAISE(FAIL, 'feed update blocked');
+		END`); err != nil {
+		t.Fatal(err)
+	}
+
+	title := "Changed"
+	interval := 45
+	if _, err := UpdateSubscription(ctx, db, domain.DefaultProfileID, created.ID, domain.SubscriptionPatch{
+		SetTitleOverride:       true,
+		TitleOverride:          &title,
+		RefreshIntervalMinutes: &interval,
+	}); err == nil {
+		t.Fatal("expected feed reschedule failure")
+	}
+	var storedTitle sql.NullString
+	var storedInterval int
+	if err := db.QueryRowContext(ctx, `
+		SELECT title_override, refresh_interval_minutes FROM subscriptions
+		WHERE profile_id = ? AND feed_id = ?`, domain.DefaultProfileID, created.ID).Scan(&storedTitle, &storedInterval); err != nil {
+		t.Fatal(err)
+	}
+	if storedTitle.Valid || storedInterval != 0 {
+		t.Fatalf("subscription update was not rolled back: title=%v interval=%d", storedTitle, storedInterval)
+	}
+}
+
+func TestUpdateSubscriptionNonRefreshPatchKeepsNextCheck(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	created, err := SaveNewFeed(ctx, db, domain.DefaultProfileID, "https://example.com/no-reschedule", "https://example.com/no-reschedule", domain.ParsedFeed{Title: "Example", Format: "rss"}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const nextCheck = "2040-01-02T03:04:05Z"
+	if _, err := db.ExecContext(ctx, "UPDATE feeds SET next_check_at = ? WHERE id = ?", nextCheck, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	viewMode := "compact"
+	updated, err := UpdateSubscription(ctx, db, domain.DefaultProfileID, created.ID, domain.SubscriptionPatch{ViewMode: &viewMode})
+	if err != nil || updated.ViewMode != viewMode {
+		t.Fatalf("update non-refresh field: subscription=%+v err=%v", updated, err)
+	}
+	var storedNextCheck string
+	if err := db.QueryRowContext(ctx, "SELECT next_check_at FROM feeds WHERE id = ?", created.ID).Scan(&storedNextCheck); err != nil {
+		t.Fatal(err)
+	}
+	if storedNextCheck != nextCheck {
+		t.Fatalf("non-refresh patch changed next_check_at: got %q want %q", storedNextCheck, nextCheck)
 	}
 }
 

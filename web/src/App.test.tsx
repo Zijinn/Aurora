@@ -31,6 +31,8 @@ beforeEach(() => {
           api_version: "v1",
           database_ready: true,
           capabilities: ["rss"],
+          device_auth_required: false,
+          device_authenticated: false,
         }),
       )
     }
@@ -115,10 +117,76 @@ afterEach(() => {
   delete document.documentElement.dataset.desktop
 })
 
+describe("Bootstrap boundary", () => {
+  it("shows a retryable status error and does not request library data", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: "Gateway unavailable" }, 503))
+
+    renderApp()
+
+    expect(await screen.findByRole("heading", { name: "Unable to connect" })).toBeInTheDocument()
+    expect(screen.getByText("Gateway unavailable")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument()
+    expect(requestedLibraryURLs()).toEqual([])
+  })
+
+  it("shows a retryable database state for degraded bootstrap without library requests", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({
+        status: "degraded",
+        version: "test",
+        api_version: "v1",
+        database_ready: false,
+        capabilities: ["rss"],
+        device_auth_required: false,
+        device_authenticated: false,
+      }),
+    )
+
+    renderApp()
+
+    expect(await screen.findByRole("heading", { name: "Database unavailable" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument()
+    expect(requestedLibraryURLs()).toEqual([])
+  })
+
+  it("loads the library after a successful status retry", async () => {
+    const defaultFetch = vi.mocked(fetch).getMockImplementation()
+    let statusAttempts = 0
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const url = requestURL(input)
+      if (url.includes("/api/v1/status")) {
+        statusAttempts += 1
+        if (statusAttempts === 1) {
+          return Promise.resolve(jsonResponse({ detail: "Service warming up" }, 503))
+        }
+        return Promise.resolve(
+          jsonResponse({
+            status: "ready",
+            version: "test",
+            api_version: "v1",
+            database_ready: true,
+            capabilities: ["rss"],
+            device_auth_required: false,
+            device_authenticated: false,
+          }),
+        )
+      }
+      return defaultFetch!(input, init)
+    })
+
+    renderApp()
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }))
+
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeInTheDocument()
+    await waitFor(() => expect(requestedLibraryURLs().length).toBeGreaterThan(0))
+    expect(statusAttempts).toBe(2)
+  })
+})
+
 describe("Aurora reading experience", () => {
   it("renders the empty reading state and reports a ready library", async () => {
     renderApp()
-    expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeInTheDocument()
     expect(await screen.findByText("Your reading trail starts here")).toBeInTheDocument()
     expect(screen.queryByText("Library ready")).not.toBeInTheDocument()
   })
@@ -401,9 +469,16 @@ function jsonResponse(value: unknown, status = 200) {
 }
 
 function requestedURLIncludes(value: string) {
-  return vi.mocked(fetch).mock.calls.some(([input]) => {
-    const url =
-      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-    return url.includes(value)
-  })
+  return vi.mocked(fetch).mock.calls.some(([input]) => requestURL(input).includes(value))
+}
+
+function requestedLibraryURLs() {
+  return vi
+    .mocked(fetch)
+    .mock.calls.map(([input]) => requestURL(input))
+    .filter((url) => !url.includes("/api/v1/status"))
+}
+
+function requestURL(input: RequestInfo | URL) {
+  return typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
 }
