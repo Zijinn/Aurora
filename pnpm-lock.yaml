@@ -10,9 +10,6 @@ importers:
 
   web:
     dependencies:
-      '@fontsource-variable/manrope':
-        specifier: ^5.2.8
-        version: 5.2.8
       '@fontsource-variable/source-serif-4':
         specifier: ^5.2.8
         version: 5.2.9
@@ -919,9 +916,6 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
-
-  '@fontsource-variable/manrope@5.2.8':
-    resolution: {integrity: sha512-nc9lOuCRz73UHnovDE2bwXUdghE2SEOc7Aii0qGe3CLyE03W1a7VnY5Z6euRiapiKbCkGS+eXbY3s/kvWeGeSw==}
 
   '@fontsource-variable/source-serif-4@5.2.9':
     resolution: {integrity: sha512-PPcxjLFk/fS0WHg79pDM2YNvz61kC+oYZ5cWZZyCS0DHpJncmuYOuiZAsvj4tDxlWPBEvxxcRLQQNmSaRbPkqw==}
@@ -4199,8 +4193,6 @@ snapshots:
       react-dom: 19.2.7(react@19.2.7)
 
   '@floating-ui/utils@0.2.12': {}
-
-  '@fontsource-variable/manrope@5.2.8': {}
 
   '@fontsource-variable/source-serif-4@5.2.9': {}
 
