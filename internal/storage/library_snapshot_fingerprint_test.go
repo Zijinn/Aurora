@@ -126,3 +126,47 @@ func TestSnapshotFingerprintDetectsRealChanges(t *testing.T) {
 		t.Fatal("fingerprint ignored a new entry")
 	}
 }
+
+// Research papers are part of the library snapshot, so the fingerprint must
+// move when they change while feed polling noise stays invisible.
+func TestSnapshotFingerprintTracksResearchChanges(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "cairn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	fingerprint := func() string {
+		document, err := ExportLibrarySnapshot(ctx, db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hash, err := LibrarySnapshotFingerprint(document)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return hash
+	}
+	base := fingerprint()
+
+	created, err := CreateResearchPaper(ctx, db, domain.DefaultProfileID, domain.ResearchPaper{
+		Kind: domain.ResearchKindResearch, Title: "New paper",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := fingerprint()
+	if after == base {
+		t.Fatal("fingerprint ignored a new research paper")
+	}
+
+	title := "Renamed paper"
+	if _, err := UpdateResearchPaper(ctx, db, domain.DefaultProfileID, created.ID,
+		domain.ResearchPaperPatch{Title: &title}); err != nil {
+		t.Fatal(err)
+	}
+	if changed := fingerprint(); changed == after {
+		t.Fatal("fingerprint ignored a research paper edit")
+	}
+}

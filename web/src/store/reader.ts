@@ -9,6 +9,7 @@ export type ShortcutAction =
   "palette" | "search" | "next" | "previous" | "toggleStar" | "toggleRead"
 export type ThemeMode = "system" | "light" | "dark"
 export type SSEState = "live" | "reconnecting"
+export type AppView = "reader" | "workbench"
 
 export const defaultShortcuts: Record<ShortcutAction, string> = {
   palette: "mod+k",
@@ -63,6 +64,8 @@ interface ReaderStore {
   autoAcademicTagFolderIDs: string[]
   autoAcademicTagFeedIDs: string[]
   sseState: SSEState
+  appView: AppView
+  setAppView: (appView: AppView) => void
   setScope: (scope: LibraryScope) => void
   selectEntry: (entryID: string | null) => void
   setSearch: (search: string) => void
@@ -110,6 +113,8 @@ export const useReaderStore = create<ReaderStore>()(
       autoAcademicTagFolderIDs: [],
       autoAcademicTagFeedIDs: [],
       sseState: "live",
+      appView: "reader",
+      setAppView: (appView) => set({ appView }),
       setScope: (scope) =>
         set({ scope, readerReturnScope: null, selectedEntryID: null, mobileReaderOpen: false }),
       selectEntry: (selectedEntryID) =>
@@ -173,6 +178,7 @@ export const useReaderStore = create<ReaderStore>()(
         autoAcademicTags: state.autoAcademicTags,
         autoAcademicTagFolderIDs: state.autoAcademicTagFolderIDs,
         autoAcademicTagFeedIDs: state.autoAcademicTagFeedIDs,
+        appView: state.appView,
       }),
     },
   ),

@@ -309,3 +309,104 @@ type AIChatMessage struct {
 	Usage     json.RawMessage `json:"usage"`
 	CreatedAt time.Time       `json:"created_at"`
 }
+
+// Research workspace kinds.
+const (
+	ResearchKindResearch  = "research"
+	ResearchKindSubmitted = "submitted"
+	ResearchKindPublished = "published"
+)
+
+// ResearchStage is one node in a paper's up-to-three-level progress tree.
+type ResearchStage struct {
+	Name     string          `json:"name"`
+	Done     bool            `json:"done"`
+	Children []ResearchStage `json:"children"`
+}
+
+// SubmissionRecord is one entry in a submitted paper's history timeline.
+type SubmissionRecord struct {
+	Journal string `json:"journal"`
+	Date    string `json:"date"`
+	Status  string `json:"status"`
+}
+
+// ResearchPaper is a working paper, submission, or publication tracked in the
+// research workspace. Kind-specific fields stay zero-valued for other kinds.
+type ResearchPaper struct {
+	ID         string   `json:"id"`
+	Kind       string   `json:"kind"`
+	Position   int      `json:"position"`
+	Title      string   `json:"title"`
+	Authors    []string `json:"authors"`
+	Keywords   []string `json:"keywords"`
+	FilePath   string   `json:"file_path"`
+	NextAction string   `json:"next_action"`
+	Notes      string   `json:"notes"`
+
+	// research
+	ResearchArea  string          `json:"research_area"`
+	Status        string          `json:"status"`
+	Priority      string          `json:"priority"`
+	TargetJournal string          `json:"target_journal"`
+	Stages        []ResearchStage `json:"stages"`
+
+	// submitted
+	CurrentJournal  string             `json:"current_journal"`
+	SubmissionDate  string             `json:"submission_date"`
+	ManuscriptID    string             `json:"manuscript_id"`
+	SubmissionCount int                `json:"submission_count"`
+	TargetLevel     string             `json:"target_level"`
+	Editor          string             `json:"editor"`
+	History         []SubmissionRecord `json:"history"`
+
+	// published
+	Abstract          string `json:"abstract"`
+	Journal           string `json:"journal"`
+	Language          string `json:"language"`
+	Year              string `json:"year"`
+	Volume            string `json:"volume"`
+	Issue             string `json:"issue"`
+	Pages             string `json:"pages"`
+	DOI               string `json:"doi"`
+	Citations         *int   `json:"citations"`
+	CitationSource    string `json:"citation_source"`
+	CitationUpdatedAt string `json:"citation_updated_at"`
+
+	LastUpdated string    `json:"last_updated"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// ResearchPaperPatch carries optional field updates; nil fields are untouched.
+type ResearchPaperPatch struct {
+	Title           *string
+	Authors         *[]string
+	Keywords        *[]string
+	FilePath        *string
+	NextAction      *string
+	Notes           *string
+	ResearchArea    *string
+	Status          *string
+	Priority        *string
+	TargetJournal   *string
+	Stages          *[]ResearchStage
+	CurrentJournal  *string
+	SubmissionDate  *string
+	ManuscriptID    *string
+	SubmissionCount *int
+	TargetLevel     *string
+	Editor          *string
+	History         *[]SubmissionRecord
+	Abstract        *string
+	Journal         *string
+	Language        *string
+	Year            *string
+	Volume          *string
+	Issue           *string
+	Pages           *string
+	DOI             *string
+	SetCitations    bool
+	Citations       *int
+	CitationSource  *string
+}

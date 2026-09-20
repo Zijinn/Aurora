@@ -3,9 +3,11 @@ import {
   CaretDown,
   CaretRight,
   CircleNotch,
+  Flask,
   Funnel,
   FolderOpen,
   FolderSimplePlus,
+  NewspaperClipping,
   Plus,
   Sparkle,
   Star,
@@ -17,12 +19,14 @@ import { useState, type DragEvent, type MouseEvent, type ReactNode } from "react
 
 import type { Folder, LibraryScope, SavedFilter, Subscription, Tag, ViewMode } from "../api/types"
 import { localizedScopeTitle, useTranslation } from "../lib/i18n"
-import { useReaderStore } from "../store/reader"
+import { useReaderStore, type AppView } from "../store/reader"
 import { Brand } from "./Brand"
 import { FolderContextMenu } from "./FolderContextMenu"
 import { SubscriptionContextMenu } from "./SubscriptionContextMenu"
 
 interface SidebarProps {
+  appView: AppView
+  onAppViewChange: (view: AppView) => void
   scope: LibraryScope
   subscriptions: Subscription[]
   folders: Folder[]
@@ -102,6 +106,36 @@ export function Sidebar(props: SidebarProps) {
       <div className="sidebar__header">
         <Brand />
       </div>
+      <nav className="app-view-switch" aria-label={t("spaces")}>
+        <button
+          className={
+            props.appView === "reader"
+              ? "app-view-switch__item app-view-switch__item--active"
+              : "app-view-switch__item"
+          }
+          type="button"
+          aria-current={props.appView === "reader" ? "page" : undefined}
+          title={t("switchToReader")}
+          onClick={() => props.onAppViewChange("reader")}
+        >
+          <NewspaperClipping aria-hidden="true" weight={props.appView === "reader" ? "fill" : "regular"} />
+          <span>{t("reader")}</span>
+        </button>
+        <button
+          className={
+            props.appView === "workbench"
+              ? "app-view-switch__item app-view-switch__item--active"
+              : "app-view-switch__item"
+          }
+          type="button"
+          aria-current={props.appView === "workbench" ? "page" : undefined}
+          title={t("switchToWorkbench")}
+          onClick={() => props.onAppViewChange("workbench")}
+        >
+          <Flask aria-hidden="true" weight={props.appView === "workbench" ? "fill" : "regular"} />
+          <span>{t("workbench")}</span>
+        </button>
+      </nav>
       <nav className="workspace-segment" aria-label={t("libraryViews")}>
         {workspaceScopes.map(({ scope, icon: Icon }) => {
           const active = props.scope.kind === scope.kind
@@ -383,7 +417,7 @@ function FolderTree(props: {
         ]
           .filter(Boolean)
           .join(" ")}
-        style={{ paddingLeft: `${9 + depth * 14}px` }}
+        style={{ paddingLeft: `calc(var(--space-5) + ${depth} * var(--space-7))` }}
         key={subscription.id}
         type="button"
         draggable
@@ -497,7 +531,7 @@ function FolderTree(props: {
             .filter(Boolean)
             .join(" ")}
           key={folder.id}
-          style={{ paddingLeft: `${9 + depth * 14}px` }}
+          style={{ paddingLeft: `calc(var(--space-5) + ${depth} * var(--space-7))` }}
           draggable
           onDragStart={(event) => startDrag(event, { type: "folder", id: folder.id })}
           onDragEnd={clearDragState}

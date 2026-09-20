@@ -20,7 +20,7 @@ func TestTrigramFTSMatchesCJKSubstrings(t *testing.T) {
 	feed := domain.ParsedFeed{
 		Title: "经济研究", Format: "rss",
 		Entries: []domain.ParsedEntry{{
-			Title: "数据要素市场化配置与福利效应研究",
+			Title:       "数据要素市场化配置与福利效应研究",
 			PublishedAt: time.Now().UTC(), ContentHash: "cjk-hash",
 			SanitizedHTML: "<p>正文讨论跨区域流动的均衡模型</p>", PlainText: "正文讨论跨区域流动的均衡模型",
 		}},
@@ -30,9 +30,9 @@ func TestTrigramFTSMatchesCJKSubstrings(t *testing.T) {
 	}
 
 	queries := map[string]int{
-		"要素市场": 1, // substring inside a longer CJK run
-		"福利效应": 1,
-		"均衡模型": 1, // body text
+		"要素市场":   1, // substring inside a longer CJK run
+		"福利效应":   1,
+		"均衡模型":   1, // body text
 		"不存在的词汇": 0,
 	}
 	for query, want := range queries {

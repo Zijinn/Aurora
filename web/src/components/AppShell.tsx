@@ -78,6 +78,7 @@ import type {
   SyncProviderID,
 } from "../api/types"
 import { useTranslation } from "../lib/i18n"
+import { useOnlineState } from "../lib/online"
 import { keyboardChord } from "../lib/shortcuts"
 import { enqueueStateMutation, flushMutationOutbox, queueStateMutation } from "../offline/database"
 import { useReaderStore, type PaneLayout } from "../store/reader"
@@ -118,6 +119,9 @@ const LibraryOrganizationDialog = lazy(() =>
     default: module.LibraryOrganizationDialog,
   })),
 )
+const Workbench = lazy(() =>
+  import("./workbench/Workbench").then((module) => ({ default: module.Workbench })),
+)
 
 const DESKTOP_BREAKPOINT = 900
 const SIDEBAR_MIN = 210
@@ -149,6 +153,8 @@ export function AppShell() {
   const setPaneLayout = useReaderStore((state) => state.setPaneLayout)
   const aiPanelWidth = useReaderStore((state) => state.aiPanelWidth)
   const setAIPanelWidth = useReaderStore((state) => state.setAIPanelWidth)
+  const appView = useReaderStore((state) => state.appView)
+  const setAppView = useReaderStore((state) => state.setAppView)
   const alwaysTranslateTitles = useReaderStore((state) => state.alwaysTranslateTitles)
   const alwaysTranslateContent = useReaderStore((state) => state.alwaysTranslateContent)
   const autoAcademicTags = useReaderStore((state) => state.autoAcademicTags)
@@ -1055,6 +1061,10 @@ export function AppShell() {
         setCommandOpen((open) => !open)
         return
       }
+      // Reader-only shortcuts stay in the reader view: in the workbench the
+      // library DOM is hidden, so j/k/i/u would silently operate on
+      // background articles and search would focus an invisible input.
+      if (appView !== "reader") return
       const target = event.target as HTMLElement | null
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return
       const currentIndex = entries.findIndex((entry) => entry.id === selectedEntryID)
@@ -1080,6 +1090,7 @@ export function AppShell() {
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [
+    appView,
     closeMobileReader,
     entries,
     mutateState,
@@ -1123,6 +1134,8 @@ export function AppShell() {
         className={mobileReaderOpen ? "app-shell app-shell--reader-open" : "app-shell"}
       >
         <Sidebar
+          appView={appView}
+          onAppViewChange={setAppView}
           scope={scope}
           subscriptions={subscriptions.data?.items ?? []}
           folders={folders.data?.items ?? []}
@@ -1169,6 +1182,12 @@ export function AppShell() {
           }
         />
         <section className="workspace">
+          {appView === "workbench" ? (
+            <Suspense fallback={<ReaderPlaceholder label={t("workbench")} message={t("workbench")} />}>
+              <Workbench />
+            </Suspense>
+          ) : (
+          <>
           <WorkspaceHeader
             scope={scope}
             search={search}
@@ -1249,7 +1268,10 @@ export function AppShell() {
               />
             )}
           </div>
+          </>
+          )}
         </section>
+        {appView === "reader" && (
         <PaneDivider
           edge="sidebar"
           value={constrainedPaneLayout.sidebarWidth}
@@ -1260,6 +1282,8 @@ export function AppShell() {
           onDelta={(delta) => resizePane("sidebar", delta)}
           onEnd={finishPaneResize}
         />
+        )}
+        {appView === "reader" && (
         <PaneDivider
           edge="timeline"
           value={constrainedPaneLayout.timelineWidth}
@@ -1270,6 +1294,7 @@ export function AppShell() {
           onDelta={(delta) => resizePane("timeline", delta)}
           onEnd={finishPaneResize}
         />
+        )}
         <MobileNav
           scope={scope}
           onScopeChange={setScope}
@@ -1683,18 +1708,4 @@ function resolveAutoTagFeedIDs(
     }
   }
   return feedIDs
-}
-
-function useOnlineState() {
-  const [online, setOnline] = useState(() => navigator.onLine)
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine)
-    window.addEventListener("online", update)
-    window.addEventListener("offline", update)
-    return () => {
-      window.removeEventListener("online", update)
-      window.removeEventListener("offline", update)
-    }
-  }, [])
-  return online
 }

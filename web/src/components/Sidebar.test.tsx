@@ -235,6 +235,8 @@ function renderSidebar(overrides: {
 }) {
   return render(
     <Sidebar
+      appView="reader"
+      onAppViewChange={vi.fn()}
       scope={{ kind: "all", title: "All feeds" }}
       subscriptions={[subscription]}
       folders={overrides.folders ?? [folder]}

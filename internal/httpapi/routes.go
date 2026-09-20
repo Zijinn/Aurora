@@ -82,6 +82,14 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/entries/{entryID}/ai-chat", s.startAIChat)
 	mux.HandleFunc("POST /api/v1/ai/library-chat", s.startAILibraryChat)
 	mux.HandleFunc("GET /api/v1/ai/chats/{sessionID}", s.getAIChat)
+	mux.HandleFunc("GET /api/v1/research/papers", s.listResearchPapers)
+	mux.HandleFunc("POST /api/v1/research/papers", s.createResearchPaper)
+	mux.HandleFunc("POST /api/v1/research/papers/reorder", s.reorderResearchPapers)
+	mux.HandleFunc("GET /api/v1/research/papers/{paperID}", s.getResearchPaper)
+	mux.HandleFunc("PATCH /api/v1/research/papers/{paperID}", s.updateResearchPaper)
+	mux.HandleFunc("DELETE /api/v1/research/papers/{paperID}", s.deleteResearchPaper)
+	mux.HandleFunc("POST /api/v1/research/papers/{paperID}/move", s.moveResearchPaper)
+	mux.HandleFunc("POST /api/v1/research/papers/{paperID}/citation", s.fetchResearchCitation)
 	mux.HandleFunc("GET /api/v1/integrations/zotero/status", s.getZoteroStatus)
 	mux.HandleFunc("GET /api/v1/entries/{entryID}/zotero", s.getEntryZoteroStatus)
 	mux.HandleFunc("POST /api/v1/entries/{entryID}/zotero", s.saveEntryToZotero)
@@ -752,6 +760,11 @@ func (s *Server) storageError(w http.ResponseWriter, r *http.Request, err error)
 	var annotationValidation *storage.AnnotationValidationError
 	if errors.As(err, &annotationValidation) {
 		writeProblem(w, r, http.StatusBadRequest, "invalid_annotation", "Invalid annotation", annotationValidation.Reason)
+		return
+	}
+	var researchValidation *storage.ResearchValidationError
+	if errors.As(err, &researchValidation) {
+		writeProblem(w, r, http.StatusBadRequest, "invalid_research_paper", "Invalid research paper", researchValidation.Reason)
 		return
 	}
 	s.internalError(w, r, err)

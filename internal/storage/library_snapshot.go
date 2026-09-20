@@ -18,6 +18,7 @@ const LibrarySnapshotFormat = "aurora-library-snapshot"
 var librarySnapshotTables = []string{
 	"folders", "feeds", "subscriptions", "entries", "entry_contents", "entry_states",
 	"entry_annotations", "tags", "feed_tags", "entry_tags", "rules", "saved_filters", "preferences",
+	"research_papers",
 }
 
 // ExportLibrarySnapshot intentionally excludes device tokens, background jobs,
@@ -252,8 +253,11 @@ func sanitizeFeedsForFingerprint(table BackupTable) *BackupTable {
 
 func LibrarySnapshotIsEmpty(document BackupDocument) bool {
 	for _, table := range document.Tables {
-		if (table.Name == "feeds" || table.Name == "subscriptions" || table.Name == "entries") && len(table.Rows) > 0 {
-			return false
+		switch table.Name {
+		case "feeds", "subscriptions", "entries", "research_papers":
+			if len(table.Rows) > 0 {
+				return false
+			}
 		}
 	}
 	return true

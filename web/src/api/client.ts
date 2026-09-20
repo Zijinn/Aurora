@@ -28,6 +28,9 @@ import type {
   ZoteroSaveResult,
   ZoteroStatus,
   EntryZoteroStatus,
+  ResearchKind,
+  ResearchPaper,
+  ResearchPaperPatch,
 } from "./types"
 import { entryDetailCacheKey, entryPageCacheKey, readCache, writeCache } from "../offline/database"
 import type { ReaderAnnotation } from "../lib/annotations"
@@ -321,6 +324,64 @@ export function saveEntryToZotero(entryID: string): Promise<ZoteroSaveResult> {
 
 export function getAIChat(sessionID: string, signal?: AbortSignal): Promise<AIChatSession> {
   return request<AIChatSession>(`/api/v1/ai/chats/${encodeURIComponent(sessionID)}`, { signal })
+}
+
+export function listResearchPapers(
+  kind: ResearchKind,
+  signal?: AbortSignal,
+): Promise<ListResponse<ResearchPaper>> {
+  return request<ListResponse<ResearchPaper>>(
+    `/api/v1/research/papers?kind=${encodeURIComponent(kind)}`,
+    { signal },
+  )
+}
+
+export function createResearchPaper(input: {
+  kind: ResearchKind
+  title?: string
+  authors?: string[]
+}): Promise<ResearchPaper> {
+  return request<ResearchPaper>("/api/v1/research/papers", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateResearchPaper(
+  paperID: string,
+  patch: ResearchPaperPatch,
+): Promise<ResearchPaper> {
+  return request<ResearchPaper>(`/api/v1/research/papers/${encodeURIComponent(paperID)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
+}
+
+export function deleteResearchPaper(paperID: string): Promise<void> {
+  return request<void>(`/api/v1/research/papers/${encodeURIComponent(paperID)}`, {
+    method: "DELETE",
+  })
+}
+
+export function reorderResearchPapers(kind: ResearchKind, paperIDs: string[]): Promise<void> {
+  return request<void>("/api/v1/research/papers/reorder", {
+    method: "POST",
+    body: JSON.stringify({ kind, paper_ids: paperIDs }),
+  })
+}
+
+export function moveResearchPaper(paperID: string, kind: ResearchKind): Promise<ResearchPaper> {
+  return request<ResearchPaper>(`/api/v1/research/papers/${encodeURIComponent(paperID)}/move`, {
+    method: "POST",
+    body: JSON.stringify({ kind }),
+  })
+}
+
+export function fetchResearchCitation(paperID: string): Promise<ResearchPaper> {
+  return request<ResearchPaper>(
+    `/api/v1/research/papers/${encodeURIComponent(paperID)}/citation`,
+    { method: "POST" },
+  )
 }
 
 export function getJob(jobID: string, signal?: AbortSignal): Promise<Job> {

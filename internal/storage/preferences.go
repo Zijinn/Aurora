@@ -10,11 +10,13 @@ import (
 )
 
 const PreferenceRetentionDays = "retention_days"
+const PreferenceCrossrefEmail = "crossref_email"
 
 // preferenceKeys whitelists the settings the API accepts so the key-value
 // table cannot grow arbitrary rows from a malformed client.
 var preferenceKeys = map[string]struct{}{
 	PreferenceRetentionDays: {},
+	PreferenceCrossrefEmail: {},
 }
 
 func IsPreferenceKey(key string) bool {
@@ -78,4 +80,20 @@ func RetentionDays(ctx context.Context, db *sql.DB, profileID string) (int, erro
 		return 0, fmt.Errorf("decode retention preference: %w", err)
 	}
 	return days, nil
+}
+
+// CrossrefEmail reads the polite Crossref contact email; empty when unset.
+func CrossrefEmail(ctx context.Context, db *sql.DB, profileID string) (string, error) {
+	raw, err := GetPreference(ctx, db, profileID, PreferenceCrossrefEmail)
+	if errors.Is(err, ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	var email string
+	if err := json.Unmarshal(raw, &email); err != nil {
+		return "", fmt.Errorf("decode crossref email preference: %w", err)
+	}
+	return email, nil
 }

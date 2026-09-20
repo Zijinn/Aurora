@@ -1285,6 +1285,213 @@ paths:
                 $ref: "#/components/schemas/AIChatSession"
         "404":
           $ref: "#/components/responses/Problem"
+  /api/v1/research/papers:
+    get:
+      operationId: listResearchPapers
+      tags: [research]
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [research, submitted, published]
+      responses:
+        "200":
+          description: Research workspace papers of the requested kind.
+        "400":
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createResearchPaper
+      tags: [research]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind:
+                  type: string
+                  enum: [research, submitted, published]
+                title: { type: string, maxLength: 500 }
+                authors:
+                  type: array
+                  items: { type: string, maxLength: 500 }
+      responses:
+        "201":
+          description: Paper created.
+        "400":
+          $ref: "#/components/responses/Problem"
+  /api/v1/research/papers/reorder:
+    post:
+      operationId: reorderResearchPapers
+      tags: [research]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, paper_ids]
+              properties:
+                kind:
+                  type: string
+                  enum: [research, submitted, published]
+                paper_ids:
+                  type: array
+                  maxItems: 500
+                  items: { type: string }
+      responses:
+        "204":
+          description: Order updated.
+        "400":
+          $ref: "#/components/responses/Problem"
+  /api/v1/research/papers/{paperId}:
+    parameters:
+      - name: paperId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getResearchPaper
+      tags: [research]
+      responses:
+        "200":
+          description: A single research workspace paper.
+        "404":
+          $ref: "#/components/responses/Problem"
+    patch:
+      operationId: updateResearchPaper
+      tags: [research]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: >
+                Partial update. Text fields accept at most 500 characters
+                (notes and abstract at most 2000) and submission_count must
+                not be negative; violations return 400 with code
+                invalid_research_paper.
+              properties:
+                title: { type: string, maxLength: 500 }
+                authors: { type: array, items: { type: string, maxLength: 500 } }
+                keywords: { type: array, items: { type: string, maxLength: 500 } }
+                file_path: { type: string, maxLength: 500 }
+                next_action: { type: string, maxLength: 500 }
+                notes: { type: string, maxLength: 2000 }
+                research_area: { type: string, maxLength: 500 }
+                status: { type: string, maxLength: 500 }
+                priority: { type: string, maxLength: 500 }
+                target_journal: { type: string, maxLength: 500 }
+                stages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name: { type: string, maxLength: 500 }
+                      done: { type: boolean }
+                      children: { type: array, items: { type: object } }
+                current_journal: { type: string, maxLength: 500 }
+                submission_date: { type: string, maxLength: 500 }
+                manuscript_id: { type: string, maxLength: 500 }
+                submission_count: { type: integer, minimum: 0 }
+                target_level: { type: string, maxLength: 500 }
+                editor: { type: string, maxLength: 500 }
+                history:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      journal: { type: string, maxLength: 500 }
+                      date: { type: string, maxLength: 500 }
+                      status: { type: string, maxLength: 500 }
+                abstract: { type: string, maxLength: 2000 }
+                journal: { type: string, maxLength: 500 }
+                language: { type: string, maxLength: 500 }
+                year: { type: string, maxLength: 500 }
+                volume: { type: string, maxLength: 500 }
+                issue: { type: string, maxLength: 500 }
+                pages: { type: string, maxLength: 500 }
+                doi: { type: string, maxLength: 500 }
+                citations: { type: [integer, "null"] }
+                citation_source: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Updated paper.
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteResearchPaper
+      tags: [research]
+      responses:
+        "204":
+          description: Paper deleted.
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/research/papers/{paperId}/move:
+    parameters:
+      - name: paperId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: moveResearchPaper
+      tags: [research]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind:
+                  type: string
+                  enum: [research, submitted, published]
+      responses:
+        "200":
+          description: Paper moved to the new kind. Stages and submission history are preserved.
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /api/v1/research/papers/{paperId}/citation:
+    parameters:
+      - name: paperId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: fetchResearchCitation
+      tags: [research]
+      description: >
+        Refreshes the citation count from Crossref. Returns 422 with code
+        citation_no_doi when the paper has no usable DOI, or doi_not_found
+        when Crossref has no work for the DOI; 502 crossref_unavailable is
+        retryable.
+      responses:
+        "200":
+          description: Citation count refreshed from Crossref.
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     deviceToken:

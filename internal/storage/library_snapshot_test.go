@@ -149,3 +149,66 @@ func TestLibrarySnapshotFingerprintIgnoresExportTime(t *testing.T) {
 		t.Fatalf("stable snapshot fingerprint mismatch: %q %q", firstHash, secondHash)
 	}
 }
+
+func TestLibrarySnapshotRoundTripsResearchPapers(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "aurora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	created, err := CreateResearchPaper(ctx, db, domain.DefaultProfileID, domain.ResearchPaper{
+		Kind: domain.ResearchKindResearch, Title: "Tracked paper",
+		Authors: []string{"Ann"}, Stages: []domain.ResearchStage{{Name: "Draft", Done: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := ExportLibrarySnapshot(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := "Local edit"
+	if _, err := UpdateResearchPaper(ctx, db, domain.DefaultProfileID, created.ID,
+		domain.ResearchPaperPatch{Title: &title}); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestoreLibrarySnapshot(ctx, db, document); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := GetResearchPaper(ctx, db, domain.DefaultProfileID, created.ID)
+	if err != nil {
+		t.Fatalf("research paper missing after snapshot restore: %v", err)
+	}
+	if restored.Title != "Tracked paper" || len(restored.Stages) != 1 || len(restored.Authors) != 1 {
+		t.Fatalf("snapshot restore lost research data: %+v", restored)
+	}
+}
+
+func TestLibrarySnapshotIsEmptyCountsResearchPapers(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "aurora.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	document, err := ExportLibrarySnapshot(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !LibrarySnapshotIsEmpty(document) {
+		t.Fatal("empty database snapshot should be considered empty")
+	}
+	if _, err := CreateResearchPaper(ctx, db, domain.DefaultProfileID, domain.ResearchPaper{
+		Kind: domain.ResearchKindResearch, Title: "Only a paper",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	document, err = ExportLibrarySnapshot(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if LibrarySnapshotIsEmpty(document) {
+		t.Fatal("a lone research paper must keep the snapshot non-empty")
+	}
+}

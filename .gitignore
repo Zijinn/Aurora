@@ -13,6 +13,8 @@ dist/
 /cairn-desktop
 coverage/
 node_modules/
+.pnpm-store/
+.gocache/
 web/coverage/
 web/dev-dist/
 web/dist/

@@ -35,6 +35,7 @@ type Server struct {
 	syncs    *service.SyncService
 	ai       *service.AIService
 	zotero   *service.ZoteroService
+	research *service.ResearchService
 	jobs     *job.Manager
 	events   *event.Hub
 	security SecurityConfig
@@ -51,7 +52,8 @@ func NewWithFetcher(db *sql.DB, logger *slog.Logger, webDir string, fetcher *fee
 	manager := job.NewManager(db, hub, logger, 4)
 	s := &Server{
 		db: db, logger: logger, webDir: webDir, feeds: feedService,
-		zotero: service.NewZoteroService(db, fetcher), jobs: manager, events: hub,
+		zotero: service.NewZoteroService(db, fetcher), research: service.NewResearchService(db),
+		jobs: manager, events: hub,
 	}
 	manager.Register("feed.refresh", func(ctx context.Context, current domain.Job, progress job.ProgressFunc) error {
 		var payload struct {
@@ -231,7 +233,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	if s.ai != nil {
 		capabilities = append(capabilities, "ai")
 	}
-	capabilities = append(capabilities, "zotero_connector")
+	capabilities = append(capabilities, "zotero_connector", "research_workspace")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":               state,
 		"version":              version.Version,

@@ -293,6 +293,89 @@ export interface ListResponse<T> {
   items: T[]
 }
 
+export type ResearchKind = "research" | "submitted" | "published"
+
+export interface ResearchStage {
+  name: string
+  done: boolean
+  children: ResearchStage[]
+}
+
+export interface SubmissionRecord {
+  journal: string
+  date: string
+  status: string
+}
+
+export interface ResearchPaper {
+  id: string
+  kind: ResearchKind
+  position: number
+  title: string
+  authors: string[]
+  keywords: string[]
+  file_path: string
+  next_action: string
+  notes: string
+  research_area: string
+  status: string
+  priority: string
+  target_journal: string
+  stages: ResearchStage[]
+  current_journal: string
+  submission_date: string
+  manuscript_id: string
+  submission_count: number
+  target_level: string
+  editor: string
+  history: SubmissionRecord[]
+  abstract: string
+  journal: string
+  language: string
+  year: string
+  volume: string
+  issue: string
+  pages: string
+  doi: string
+  citations: number | null
+  citation_source: string
+  citation_updated_at: string
+  last_updated: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ResearchPaperPatch {
+  title?: string
+  authors?: string[]
+  keywords?: string[]
+  file_path?: string
+  next_action?: string
+  notes?: string
+  research_area?: string
+  status?: string
+  priority?: string
+  target_journal?: string
+  stages?: ResearchStage[]
+  current_journal?: string
+  submission_date?: string
+  manuscript_id?: string
+  submission_count?: number
+  target_level?: string
+  editor?: string
+  history?: SubmissionRecord[]
+  abstract?: string
+  journal?: string
+  language?: string
+  year?: string
+  volume?: string
+  issue?: string
+  pages?: string
+  doi?: string
+  citations?: number | null
+  citation_source?: string
+}
+
 export type LibraryScope =
   | { kind: "today"; title: "Today" }
   | { kind: "unread"; title: "Unread" }
