@@ -6558,11 +6558,18 @@ button:disabled {
 }
 
 .wb-shell {
+  /* .workspace is a 60px + 1fr grid for the reader header/body; the workbench
+     replaces both rows, so it must span the whole grid instead of landing in
+     the fixed 60px header row. */
+  grid-row: 1 / -1;
   display: flex;
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+.workspace > .reader--placeholder {
+  grid-row: 1 / -1;
 }
 .wb-nav {
   width: 200px;
