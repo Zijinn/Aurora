@@ -1,6 +1,6 @@
 {
   "name": "aurora",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "private": true,
   "packageManager": "pnpm@11.9.0",
   "scripts": {
