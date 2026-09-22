@@ -328,6 +328,7 @@ export interface ResearchPaper {
   submission_count: number
   target_level: string
   editor: string
+  deadline: string
   history: SubmissionRecord[]
   abstract: string
   journal: string
@@ -363,6 +364,7 @@ export interface ResearchPaperPatch {
   submission_count?: number
   target_level?: string
   editor?: string
+  deadline?: string
   history?: SubmissionRecord[]
   abstract?: string
   journal?: string

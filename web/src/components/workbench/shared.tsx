@@ -229,3 +229,71 @@ export function Card(props: {
     </article>
   )
 }
+
+// Row is the table counterpart of Card: same reorder contract, but the drop
+// hint renders as a top/bottom edge on the <tr> instead of a card outline.
+export function Row(props: {
+  id: string
+  onReorder: (fromID: string, toID: string, before: boolean) => void
+  className?: string
+  dataPaperID?: string
+  children: ReactNode
+}) {
+  const [dropHint, setDropHint] = useState<"top" | "bottom" | null>(null)
+  return (
+    <tr
+      className={`wb-row ${dropHint ? `wb-row--drop-${dropHint}` : ""} ${props.className ?? ""}`}
+      data-paper-id={props.dataPaperID}
+      draggable
+      onDragStart={(e) => {
+        const target = e.target as HTMLElement
+        if (target.closest("button, select, input, textarea, .wb-editable, .wb-chip, a")) {
+          e.preventDefault()
+          return
+        }
+        e.dataTransfer.effectAllowed = "move"
+        e.dataTransfer.setData("text/wb-row", props.id)
+      }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("text/wb-row")) return
+        e.preventDefault()
+        const rect = e.currentTarget.getBoundingClientRect()
+        setDropHint(e.clientY < rect.top + rect.height / 2 ? "top" : "bottom")
+      }}
+      onDragLeave={() => setDropHint(null)}
+      onDrop={(e) => {
+        const fromID = e.dataTransfer.getData("text/wb-row")
+        setDropHint(null)
+        if (!fromID || fromID === props.id) return
+        e.preventDefault()
+        const rect = e.currentTarget.getBoundingClientRect()
+        props.onReorder(fromID, props.id, e.clientY < rect.top + rect.height / 2)
+      }}
+    >
+      {props.children}
+    </tr>
+  )
+}
+
+export function DragHandle() {
+  return (
+    <span className="wb-drag-handle" aria-hidden="true">
+      ⠿
+    </span>
+  )
+}
+
+export function ExpandToggle(props: { expanded: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      className={`wb-expand ${props.expanded ? "wb-expand--open" : ""}`}
+      aria-expanded={props.expanded}
+      aria-label={props.label}
+      title={props.label}
+      onClick={props.onToggle}
+    >
+      ▸
+    </button>
+  )
+}

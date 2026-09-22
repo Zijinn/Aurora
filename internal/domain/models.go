@@ -358,6 +358,7 @@ type ResearchPaper struct {
 	SubmissionCount int                `json:"submission_count"`
 	TargetLevel     string             `json:"target_level"`
 	Editor          string             `json:"editor"`
+	Deadline        string             `json:"deadline"`
 	History         []SubmissionRecord `json:"history"`
 
 	// published
@@ -397,6 +398,7 @@ type ResearchPaperPatch struct {
 	SubmissionCount *int
 	TargetLevel     *string
 	Editor          *string
+	Deadline        *string
 	History         *[]SubmissionRecord
 	Abstract        *string
 	Journal         *string

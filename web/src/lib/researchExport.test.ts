@@ -25,6 +25,7 @@ function paper(overrides: Partial<ResearchPaper> = {}): ResearchPaper {
     submission_count: 0,
     target_level: "",
     editor: "",
+    deadline: "",
     history: [],
     abstract: "摘要文本",
     journal: "经济研究",

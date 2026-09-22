@@ -34,6 +34,7 @@ function paper(overrides: Partial<ResearchPaper>): ResearchPaper {
     submission_count: 0,
     target_level: "",
     editor: "",
+    deadline: "",
     history: [],
     abstract: "",
     journal: "",

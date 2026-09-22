@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 
 import type { ResearchPaper, ResearchPaperPatch } from "../../api/types"
 import { useTranslation } from "../../lib/i18n"
 import { toast } from "../../store/toast"
-import { Card, ChipEditor, InlineText } from "./shared"
+import { countStageLeaves, computeProgress } from "../../lib/research"
+import { ChipEditor, DragHandle, ExpandToggle, InlineText, Row } from "./shared"
 import { displayID, matchesPaperQuery, reorderList } from "./utils"
 import { StageTree } from "./StageTree"
 
@@ -12,6 +13,7 @@ const PRIORITIES = ["High", "Medium", "Average"]
 export function ResearchPage(props: {
   papers: ResearchPaper[]
   offline?: boolean
+  creating?: boolean
   onCreate: () => void
   onUpdate: (id: string, patch: ResearchPaperPatch) => void
   onDelete: (id: string) => void
@@ -21,6 +23,7 @@ export function ResearchPage(props: {
   const { t } = useTranslation()
   const [search, setSearch] = useState("")
   const [priority, setPriority] = useState("")
+  const [expandedID, setExpandedID] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     const query = search.toLowerCase().trim()
@@ -64,119 +67,180 @@ export function ResearchPage(props: {
         <button
           type="button"
           className="wb-btn wb-btn--primary"
-          disabled={props.offline}
+          disabled={props.offline || props.creating}
           title={props.offline ? t("workbenchOfflineHint") : undefined}
           onClick={props.onCreate}
         >
           {t("addPaper")}
         </button>
       </div>
-      <div className="wb-cards-grid">
-        {filtered.length === 0 ? (
-          <div className="wb-empty">{t("noMatchingPapers")}</div>
-        ) : (
-          filtered.map((paper) => {
-            const index = props.papers.findIndex((p) => p.id === paper.id)
-            return (
-              <Card key={paper.id} id={paper.id} onReorder={reorder}>
-                <div className="wb-card-top">
-                  <div>
-                    <div className="wb-card-eyebrow">
-                      {displayID("research", index)} · {t("eyebrowResearchProject")}
-                    </div>
-                    <div className="wb-card-title">
-                      <InlineText
-                        value={paper.title}
-                        placeholder={t("fillPlaceholder")}
-                        onCommit={(title) => props.onUpdate(paper.id, { title })}
-                      />
-                    </div>
-                  </div>
-                  <div className="wb-card-actions">
-                    <select
-                      className={`wb-select wb-priority wb-priority--${paper.priority || "Medium"}`}
-                      value={paper.priority || "Medium"}
-                      onChange={(e) => props.onUpdate(paper.id, { priority: e.target.value })}
-                    >
-                      {PRIORITIES.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="wb-icon-btn"
-                      title={t("delete")}
-                      aria-label={`${t("delete")}: ${paper.title || displayID("research", index)}`}
-                      disabled={props.offline}
-                      onClick={() => props.onDelete(paper.id)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-                <ChipEditor
-                  label={t("authors")}
-                  items={paper.authors}
-                  addPrompt={t("addAuthorPrompt")}
-                  onChange={(authors) => props.onUpdate(paper.id, { authors })}
-                />
-                <div className="wb-card-line">
-                  <span className="wb-muted">{t("targetJournal")}</span>
-                  <strong>
-                    <InlineText
-                      value={paper.target_journal}
-                      placeholder={t("fillPlaceholder")}
-                      onCommit={(value) => props.onUpdate(paper.id, { target_journal: value })}
-                    />
-                  </strong>
-                </div>
-                <div className="wb-card-line">
-                  <span className="wb-muted">{t("lastUpdatedLabel")}</span>
-                  <strong>{paper.last_updated || "—"}</strong>
-                </div>
-                <StageTree
-                  stages={paper.stages}
-                  onChange={(stages) => props.onUpdate(paper.id, { stages })}
-                />
-                <div className="wb-next-action">
-                  <b>{t("nextAction")}</b>
-                  <InlineText
-                    value={paper.next_action}
-                    placeholder={t("fillPlaceholder")}
-                    onCommit={(value) => props.onUpdate(paper.id, { next_action: value })}
-                  />
-                </div>
-                <div className="wb-path-row">
-                  <span className="wb-muted">{t("folderLabel")}</span>
-                  <InlineText
-                    className="wb-path-text"
-                    value={paper.file_path}
-                    placeholder={t("fillPlaceholder")}
-                    onCommit={(value) => props.onUpdate(paper.id, { file_path: value })}
-                  />
-                  <button
-                    type="button"
-                    className="wb-btn"
-                    onClick={() => copyPath(paper.file_path)}
-                  >
-                    {t("copyPath")}
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="wb-btn wb-flow-btn"
-                  disabled={props.offline}
-                  title={props.offline ? t("workbenchOfflineHint") : undefined}
-                  onClick={() => props.onMove(paper.id)}
-                >
-                  {t("flowToSubmitted")}
-                </button>
-              </Card>
-            )
-          })
-        )}
+      <div className="wb-table-wrap">
+        <table className="wb-table">
+          <thead>
+            <tr>
+              <th className="wb-col-grip" aria-label={t("colCode")} />
+              <th>{t("colTitle")}</th>
+              <th className="wb-col-stage">{t("colStage")}</th>
+              <th className="wb-col-priority">{t("colPriority")}</th>
+              <th>{t("targetJournal")}</th>
+              <th>{t("nextAction")}</th>
+              <th className="wb-col-date">{t("lastUpdatedLabel")}</th>
+              <th className="wb-col-actions">{t("colActions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="wb-empty">
+                  {t("noMatchingPapers")}
+                </td>
+              </tr>
+            ) : (
+              filtered.map((paper) => {
+                const index = props.papers.findIndex((p) => p.id === paper.id)
+                const expanded = expandedID === paper.id
+                const progress = computeProgress(paper.stages)
+                const leaves = countStageLeaves(paper.stages)
+                return (
+                  <Fragment key={paper.id}>
+                    <Row id={paper.id} onReorder={reorder} dataPaperID={paper.id}>
+                      <td className="wb-col-grip">
+                        <DragHandle />
+                        <span className="wb-code">{displayID("research", index)}</span>
+                      </td>
+                      <td>
+                        <div className="wb-cell-title">
+                          <InlineText
+                            value={paper.title}
+                            placeholder={t("fillPlaceholder")}
+                            onCommit={(title) => props.onUpdate(paper.id, { title })}
+                          />
+                        </div>
+                        <ChipEditor
+                          label={t("authors")}
+                          items={paper.authors}
+                          addPrompt={t("addAuthorPrompt")}
+                          onChange={(authors) => props.onUpdate(paper.id, { authors })}
+                        />
+                      </td>
+                      <td className="wb-col-stage">
+                        <div className="wb-stage-cell">
+                          <ExpandToggle
+                            expanded={expanded}
+                            label={expanded ? t("collapseRow") : t("expandRow")}
+                            onToggle={() => setExpandedID(expanded ? null : paper.id)}
+                          />
+                          <span
+                            className="wb-progress-track"
+                            role="progressbar"
+                            aria-valuenow={progress}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                          >
+                            <span className="wb-progress-fill" style={{ width: `${progress}%` }} />
+                          </span>
+                          <span className="wb-progress-text">{progress}%</span>
+                        </div>
+                      </td>
+                      <td className="wb-col-priority">
+                        <select
+                          className={`wb-select wb-priority wb-priority--${paper.priority || "Medium"}`}
+                          value={paper.priority || "Medium"}
+                          onChange={(e) => props.onUpdate(paper.id, { priority: e.target.value })}
+                        >
+                          {PRIORITIES.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <InlineText
+                          value={paper.target_journal}
+                          placeholder={t("fillPlaceholder")}
+                          onCommit={(value) => props.onUpdate(paper.id, { target_journal: value })}
+                        />
+                      </td>
+                      <td>
+                        <InlineText
+                          value={paper.next_action}
+                          placeholder={t("fillPlaceholder")}
+                          onCommit={(value) => props.onUpdate(paper.id, { next_action: value })}
+                        />
+                      </td>
+                      <td className="wb-col-date wb-muted">
+                        {(paper.last_updated || "").slice(0, 10) || "—"}
+                      </td>
+                      <td className="wb-col-actions">
+                        <button
+                          type="button"
+                          className="wb-btn wb-flow-btn"
+                          disabled={props.offline}
+                          title={props.offline ? t("workbenchOfflineHint") : undefined}
+                          onClick={() => props.onMove(paper.id)}
+                        >
+                          {t("flowToSubmitted")}
+                        </button>
+                        <button
+                          type="button"
+                          className="wb-icon-btn"
+                          title={t("delete")}
+                          aria-label={`${t("delete")}: ${paper.title || displayID("research", index)}`}
+                          disabled={props.offline}
+                          onClick={() => props.onDelete(paper.id)}
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </Row>
+                    {expanded && (
+                      <tr className="wb-row-detail">
+                        <td colSpan={8}>
+                          <div className="wb-detail-grid">
+                            <StageTree
+                              stages={paper.stages}
+                              onChange={(stages) => props.onUpdate(paper.id, { stages })}
+                            />
+                            <div className="wb-detail-side">
+                              <ChipEditor
+                                label={t("keywords")}
+                                items={paper.keywords}
+                                addPrompt={t("addKeywordPrompt")}
+                                onChange={(keywords) => props.onUpdate(paper.id, { keywords })}
+                              />
+                              <div className="wb-path-row">
+                                <span className="wb-muted">{t("folderLabel")}</span>
+                                <InlineText
+                                  className="wb-path-text"
+                                  value={paper.file_path}
+                                  placeholder={t("fillPlaceholder")}
+                                  onCommit={(value) =>
+                                    props.onUpdate(paper.id, { file_path: value })
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="wb-btn"
+                                  onClick={() => copyPath(paper.file_path)}
+                                >
+                                  {t("copyPath")}
+                                </button>
+                              </div>
+                              <div className="wb-muted wb-detail-meta">
+                                {t("stageProgress")} · {leaves.done}/{leaves.total}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   )

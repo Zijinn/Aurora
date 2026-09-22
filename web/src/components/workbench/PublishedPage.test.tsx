@@ -33,6 +33,7 @@ function paper(overrides: Partial<ResearchPaper> = {}): ResearchPaper {
     submission_count: 0,
     target_level: "",
     editor: "",
+    deadline: "",
     history: [],
     abstract: "",
     journal: "American Economic Review",
@@ -60,6 +61,7 @@ function noopProps() {
     onDelete: vi.fn(),
     onReorder: vi.fn(),
     onFetchCitation: vi.fn(),
+    onFetchAllCitations: vi.fn(),
     onCrossrefEmailChange: vi.fn(),
   }
 }
@@ -173,6 +175,23 @@ describe("PublishedPage search", () => {
     expect(screen.getByText("Machine Learning Review")).toBeInTheDocument()
     fireEvent.change(search, { target: { value: "citation_updated_at" } })
     expect(screen.queryByText("Machine Learning Review")).not.toBeInTheDocument()
+  })
+})
+
+describe("PublishedPage batch citations", () => {
+  it("fires onFetchAllCitations from the toolbar button", () => {
+    const props = { ...noopProps(), crossrefEmail: "me@lab.org" }
+    render(<PublishedPage papers={[paper()]} {...props} />)
+    fireEvent.click(screen.getByRole("button", { name: "Update all citations" }))
+    expect(props.onFetchAllCitations).toHaveBeenCalledTimes(1)
+  })
+
+  it("disables the batch button and swaps its label while pending", () => {
+    const props = { ...noopProps(), crossrefEmail: "me@lab.org", batchCitationPending: true }
+    render(<PublishedPage papers={[paper()]} {...props} />)
+    const button = screen.getByRole("button", { name: "Updating all citations…" })
+    expect(button).toBeDisabled()
+    expect(screen.queryByRole("button", { name: "Update all citations" })).not.toBeInTheDocument()
   })
 })
 

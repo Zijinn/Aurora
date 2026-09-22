@@ -34,6 +34,7 @@ function paper(overrides: Partial<ResearchPaper> = {}): ResearchPaper {
     submission_count: 0,
     target_level: "",
     editor: "",
+    deadline: "",
     history: [],
     abstract: "",
     journal: "",
@@ -64,9 +65,10 @@ function props() {
 }
 
 describe("ResearchPage", () => {
-  it("renders the localized eyebrow instead of a hard-coded English label", () => {
+  it("renders the sequential code and title as table cells", () => {
     render(<ResearchPage papers={[paper()]} {...props()} />)
-    expect(screen.getByText(/R001 · RESEARCH PROJECT/)).toBeInTheDocument()
+    expect(document.querySelector(".wb-table thead")).not.toBeNull()
+    expect(screen.getByText("R001")).toBeInTheDocument()
     expect(screen.getByText("Working Paper One")).toBeInTheDocument()
   })
 
@@ -100,6 +102,8 @@ describe("ResearchPage", () => {
   it("keeps stage data visible while editing stages", () => {
     const handlers = props()
     render(<ResearchPage papers={[paper()]} {...handlers} />)
+    // The stage tree lives in the expandable detail row now.
+    fireEvent.click(screen.getByRole("button", { name: "Expand details" }))
     expect(screen.getByText("Intro")).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Toggle completion: Intro" }))
     // Toggling an already-done leaf flips it to undone via onUpdate(stages).
@@ -109,6 +113,18 @@ describe("ResearchPage", () => {
         { name: "Empirics", done: false, children: [] },
       ],
     })
+  })
+
+  it("reports stage progress as a bar in the stage column", () => {
+    render(<ResearchPage papers={[paper()]} {...props()} />)
+    const bar = screen.getByRole("progressbar")
+    expect(bar).toHaveAttribute("aria-valuenow", "50")
+    expect(screen.getByText("50%")).toBeInTheDocument()
+  })
+
+  it("disables the add-paper button while a create is in flight", () => {
+    render(<ResearchPage papers={[paper()]} {...props()} creating />)
+    expect(screen.getByRole("button", { name: /Add paper/ })).toBeDisabled()
   })
 })
 

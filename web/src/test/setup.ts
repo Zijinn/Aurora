@@ -36,3 +36,7 @@ HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
     toJSON: () => ({}),
   }
 }
+
+// jsdom has no scrolling implementation; the workbench calls scrollIntoView to
+// bring a calendar-focused submission row into view.
+HTMLElement.prototype.scrollIntoView = function scrollIntoView() {}

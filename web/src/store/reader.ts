@@ -8,6 +8,8 @@ import type { ReaderAnnotation } from "../lib/annotations"
 export type ShortcutAction =
   "palette" | "search" | "next" | "previous" | "toggleStar" | "toggleRead"
 export type ThemeMode = "system" | "light" | "dark"
+export type AccentTheme =
+  "academic-blue" | "graphite" | "forest" | "wine" | "indigo" | "warm-paper"
 export type SSEState = "live" | "reconnecting"
 export type AppView = "reader" | "workbench"
 
@@ -52,6 +54,7 @@ interface ReaderStore {
   mobileReaderOpen: boolean
   locale: Locale
   theme: ThemeMode
+  accentTheme: AccentTheme
   paneLayout: PaneLayout
   aiPanelWidth: number
   openFolders: Record<string, boolean>
@@ -73,6 +76,7 @@ interface ReaderStore {
   closeMobileReader: () => void
   setLocale: (locale: Locale) => void
   setTheme: (theme: ThemeMode) => void
+  setAccentTheme: (accentTheme: AccentTheme) => void
   setPaneLayout: (paneLayout: PaneLayout) => void
   setAIPanelWidth: (width: number) => void
   toggleFolder: (folderID: string) => void
@@ -101,6 +105,7 @@ export const useReaderStore = create<ReaderStore>()(
       mobileReaderOpen: false,
       locale: "zh-CN",
       theme: "system",
+      accentTheme: "academic-blue",
       paneLayout: defaultPaneLayout,
       aiPanelWidth: 380,
       openFolders: {},
@@ -134,6 +139,7 @@ export const useReaderStore = create<ReaderStore>()(
         })),
       setLocale: (locale) => set({ locale }),
       setTheme: (theme) => set({ theme }),
+      setAccentTheme: (accentTheme) => set({ accentTheme }),
       setPaneLayout: (paneLayout) => set({ paneLayout }),
       setAIPanelWidth: (aiPanelWidth) => set({ aiPanelWidth }),
       toggleFolder: (folderID) =>
@@ -168,6 +174,7 @@ export const useReaderStore = create<ReaderStore>()(
         shortcuts: state.shortcuts,
         locale: state.locale,
         theme: state.theme,
+        accentTheme: state.accentTheme,
         paneLayout: state.paneLayout,
         aiPanelWidth: state.aiPanelWidth,
         openFolders: state.openFolders,

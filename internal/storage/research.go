@@ -99,6 +99,7 @@ func validateResearchPaper(paper domain.ResearchPaper) error {
 		{"manuscript_id", paper.ManuscriptID, researchTextLimit},
 		{"target_level", paper.TargetLevel, researchTextLimit},
 		{"editor", paper.Editor, researchTextLimit},
+		{"deadline", paper.Deadline, researchTextLimit},
 		{"abstract", paper.Abstract, researchLongTextLimit},
 		{"journal", paper.Journal, researchTextLimit},
 		{"language", paper.Language, researchTextLimit},
@@ -128,7 +129,7 @@ func validateResearchPatch(patch domain.ResearchPaperPatch) error {
 	if patch.SubmissionCount != nil && *patch.SubmissionCount < 0 {
 		return &ResearchValidationError{Reason: "submission_count must not be negative"}
 	}
-	fields := make([]researchField, 0, 22)
+	fields := make([]researchField, 0, 23)
 	add := func(name string, value *string, limit int) {
 		if value != nil {
 			fields = append(fields, researchField{name, *value, limit})
@@ -147,6 +148,7 @@ func validateResearchPatch(patch domain.ResearchPaperPatch) error {
 	add("manuscript_id", patch.ManuscriptID, researchTextLimit)
 	add("target_level", patch.TargetLevel, researchTextLimit)
 	add("editor", patch.Editor, researchTextLimit)
+	add("deadline", patch.Deadline, researchTextLimit)
 	add("abstract", patch.Abstract, researchLongTextLimit)
 	add("journal", patch.Journal, researchTextLimit)
 	add("language", patch.Language, researchTextLimit)
@@ -191,8 +193,8 @@ func IsResearchKind(kind string) bool {
 const researchColumns = `id, kind, position, title, authors_json, keywords_json, file_path,
 	next_action, notes, research_area, status, priority, target_journal, stages_json,
 	current_journal, submission_date, manuscript_id, submission_count, target_level, editor,
-	history_json, abstract, journal, language, year, volume, issue, pages, doi, citations,
-	citation_source, citation_updated_at, last_updated, created_at, updated_at`
+	deadline, history_json, abstract, journal, language, year, volume, issue, pages, doi,
+	citations, citation_source, citation_updated_at, last_updated, created_at, updated_at`
 
 func scanResearchPaper(scanner interface {
 	Scan(dest ...any) error
@@ -208,7 +210,7 @@ func scanResearchPaper(scanner interface {
 		&paper.FilePath, &paper.NextAction, &paper.Notes, &paper.ResearchArea, &paper.Status,
 		&paper.Priority, &paper.TargetJournal, &stagesJSON, &paper.CurrentJournal,
 		&paper.SubmissionDate, &paper.ManuscriptID, &paper.SubmissionCount, &paper.TargetLevel,
-		&paper.Editor, &historyJSON, &paper.Abstract, &paper.Journal, &paper.Language,
+		&paper.Editor, &paper.Deadline, &historyJSON, &paper.Abstract, &paper.Journal, &paper.Language,
 		&paper.Year, &paper.Volume, &paper.Issue, &paper.Pages, &paper.DOI, &citations,
 		&paper.CitationSource, &paper.CitationUpdatedAt, &paper.LastUpdated, &createdAt, &updatedAt,
 	); err != nil {
@@ -306,15 +308,15 @@ func CreateResearchPaper(ctx context.Context, db *sql.DB, profileID string, pape
 		id, profile_id, kind, position, title, authors_json, keywords_json, file_path,
 		next_action, notes, research_area, status, priority, target_journal, stages_json,
 		current_journal, submission_date, manuscript_id, submission_count, target_level, editor,
-		history_json, abstract, journal, language, year, volume, issue, pages, doi, citations,
-		citation_source, citation_updated_at, last_updated, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		deadline, history_json, abstract, journal, language, year, volume, issue, pages, doi,
+		citations, citation_source, citation_updated_at, last_updated, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		paper.ID, profileID, paper.Kind, paper.Position, paper.Title, encodeStringSlice(paper.Authors),
 		encodeStringSlice(paper.Keywords), paper.FilePath, paper.NextAction, paper.Notes,
 		paper.ResearchArea, paper.Status, paper.Priority, paper.TargetJournal, encodeStages(paper.Stages),
 		paper.CurrentJournal, paper.SubmissionDate, paper.ManuscriptID, paper.SubmissionCount,
-		paper.TargetLevel, paper.Editor, encodeHistory(paper.History), paper.Abstract, paper.Journal,
-		paper.Language, paper.Year, paper.Volume, paper.Issue, paper.Pages, paper.DOI,
+		paper.TargetLevel, paper.Editor, paper.Deadline, encodeHistory(paper.History), paper.Abstract,
+		paper.Journal, paper.Language, paper.Year, paper.Volume, paper.Issue, paper.Pages, paper.DOI,
 		nullableIntValue(paper.Citations), paper.CitationSource, paper.CitationUpdatedAt,
 		paper.LastUpdated, formatTime(now), formatTime(now)); err != nil {
 		return domain.ResearchPaper{}, fmt.Errorf("create research paper: %w", err)
@@ -387,6 +389,9 @@ func UpdateResearchPaper(ctx context.Context, db *sql.DB, profileID, id string, 
 	}
 	if patch.Editor != nil {
 		add("editor", *patch.Editor)
+	}
+	if patch.Deadline != nil {
+		add("deadline", *patch.Deadline)
 	}
 	if patch.History != nil {
 		add("history_json", encodeHistory(*patch.History))

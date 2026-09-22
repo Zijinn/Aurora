@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"io/fs"
 	"path/filepath"
 	"testing"
 	"time"
@@ -34,7 +35,11 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if document.Format != BackupFormat || document.SchemaVersion != 14 || len(document.Tables) == 0 {
+	migrations, err := fs.ReadDir(migrationFiles, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.Format != BackupFormat || document.SchemaVersion != len(migrations) || len(document.Tables) == 0 {
 		t.Fatalf("unexpected backup metadata: %+v", document)
 	}
 	if err := DeleteSubscription(ctx, db, domain.DefaultProfileID, created.ID); err != nil {

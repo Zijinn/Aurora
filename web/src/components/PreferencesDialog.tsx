@@ -41,6 +41,7 @@ import { displayShortcut, keyboardChord } from "../lib/shortcuts"
 import { ConfirmDialog } from "./ConfirmDialog"
 import {
   defaultShortcuts,
+  type AccentTheme,
   type ShortcutAction,
   type ThemeMode,
   useReaderStore,
@@ -139,6 +140,8 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
   const setViewMode = useReaderStore((state) => state.setViewMode)
   const setLocale = useReaderStore((state) => state.setLocale)
   const setTheme = useReaderStore((state) => state.setTheme)
+  const accentTheme = useReaderStore((state) => state.accentTheme)
+  const setAccentTheme = useReaderStore((state) => state.setAccentTheme)
   const shortcuts = useReaderStore((state) => state.shortcuts)
   const setShortcut = useReaderStore((state) => state.setShortcut)
   const resetShortcuts = useReaderStore((state) => state.resetShortcuts)
@@ -319,6 +322,25 @@ export function PreferencesDialog(props: PreferencesDialogProps) {
                           <option value="system">{t("themeSystem")}</option>
                           <option value="light">{t("themeLight")}</option>
                           <option value="dark">{t("themeDark")}</option>
+                        </select>
+                      </section>
+                      <section className="preference-section preference-section--row">
+                        <div>
+                          <h2>{t("accentTheme")}</h2>
+                          <p>{t("accentThemeDescription")}</p>
+                        </div>
+                        <select
+                          className="select-input preference-language"
+                          aria-label={t("accentTheme")}
+                          value={accentTheme}
+                          onChange={(event) => setAccentTheme(event.target.value as AccentTheme)}
+                        >
+                          <option value="academic-blue">{t("themeAcademicBlue")}</option>
+                          <option value="graphite">{t("themeGraphite")}</option>
+                          <option value="forest">{t("themeForest")}</option>
+                          <option value="wine">{t("themeWine")}</option>
+                          <option value="indigo">{t("themeIndigo")}</option>
+                          <option value="warm-paper">{t("themeWarmPaper")}</option>
                         </select>
                       </section>
                       <section className="preference-section">

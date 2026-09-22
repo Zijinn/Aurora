@@ -1,5 +1,12 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useMemo, useState } from "react"
+import {
+  Books,
+  CalendarBlank,
+  ChartPieSlice,
+  NotePencil,
+  PaperPlaneTilt,
+} from "@phosphor-icons/react"
+import { useCallback, useMemo, useState } from "react"
 
 import {
   createResearchPaper,
@@ -15,20 +22,23 @@ import {
 import type { ResearchKind, ResearchPaperPatch } from "../../api/types"
 import { useTranslation } from "../../lib/i18n"
 import { useOnlineState } from "../../lib/online"
+import { isEnglishPaper, normalizeDoi } from "../../lib/research"
 import { toast } from "../../store/toast"
 import { ConfirmDialog } from "../ConfirmDialog"
+import { CalendarPage } from "./CalendarPage"
 import { Dashboard } from "./Dashboard"
 import { PublishedPage } from "./PublishedPage"
 import { ResearchPage } from "./ResearchPage"
 import { SubmittedPage } from "./SubmittedPage"
 
-type WorkbenchTab = "dashboard" | "research" | "submitted" | "published"
+type WorkbenchTab = "dashboard" | "research" | "submitted" | "published" | "calendar"
 
-const TABS: Array<{ id: WorkbenchTab; labelKey: string; icon: string }> = [
-  { id: "dashboard", labelKey: "researchOverview", icon: "⌂" },
-  { id: "research", labelKey: "workingPapers", icon: "📝" },
-  { id: "submitted", labelKey: "submissions", icon: "📤" },
-  { id: "published", labelKey: "publications", icon: "📚" },
+const TABS: Array<{ id: WorkbenchTab; labelKey: string; Icon: typeof Books }> = [
+  { id: "dashboard", labelKey: "researchOverview", Icon: ChartPieSlice },
+  { id: "research", labelKey: "workingPapers", Icon: NotePencil },
+  { id: "submitted", labelKey: "submissions", Icon: PaperPlaneTilt },
+  { id: "published", labelKey: "publications", Icon: Books },
+  { id: "calendar", labelKey: "calendar", Icon: CalendarBlank },
 ]
 
 export function Workbench() {
@@ -36,7 +46,11 @@ export function Workbench() {
   const queryClient = useQueryClient()
   const online = useOnlineState()
   const [tab, setTab] = useState<WorkbenchTab>("dashboard")
+  const [focusPaperID, setFocusPaperID] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<{ message: string; action: () => void } | null>(null)
+  const [batchPending, setBatchPending] = useState(false)
+  // Stable so the submissions page's jump effect does not re-run every render.
+  const clearFocus = useCallback(() => setFocusPaperID(null), [])
 
   const kinds: ResearchKind[] = ["research", "submitted", "published"]
   const results = useQueries({
@@ -147,6 +161,39 @@ export function Workbench() {
     if (!requireOnline()) return
     citationMutation.mutate(id)
   }
+  const creating = createMutation.isPending
+  const fetchAllCitations = async () => {
+    if (!requireOnline()) return
+    if (!crossrefEmail) {
+      toast(t("citationNoEmail"))
+      return
+    }
+    const eligible = published.filter((p) => isEnglishPaper(p) && normalizeDoi(p.doi))
+    if (eligible.length === 0) {
+      toast(t("citationsBatchNoneEligible"))
+      return
+    }
+    setBatchPending(true)
+    let ok = 0
+    let failed = 0
+    // Sequential on purpose: Crossref is rate-limited and the polite pool
+    // expects modest concurrency.
+    for (const paper of eligible) {
+      try {
+        await fetchResearchCitation(paper.id)
+        ok += 1
+      } catch {
+        failed += 1
+      }
+    }
+    setBatchPending(false)
+    void invalidate("published")
+    const message =
+      failed > 0
+        ? `${ok} ${t("citationsBatchUpdated")} · ${failed} ${t("citationsBatchFailed")}`
+        : `${ok} ${t("citationsBatchUpdated")}`
+    toast(message)
+  }
   const saveEmail = (email: string) => {
     if (!requireOnline()) return
     emailMutation.mutate(email)
@@ -157,30 +204,33 @@ export function Workbench() {
     research: t("workingPapersSubtitle"),
     submitted: t("submissionsSubtitle"),
     published: t("publicationsSubtitle"),
+    calendar: t("calendarSubtitle"),
   }
   const title: Record<WorkbenchTab, string> = {
     dashboard: t("researchOverview"),
     research: t("workingPapers"),
     submitted: t("submissions"),
     published: t("publications"),
+    calendar: t("calendar"),
   }
 
   return (
     <div className="wb-shell">
-      <nav className="wb-nav" aria-label={t("workbench")}>
-        {TABS.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            className={`wb-nav-item ${tab === entry.id ? "wb-nav-item--active" : ""}`}
-            onClick={() => setTab(entry.id)}
-          >
-            <span aria-hidden="true">{entry.icon}</span>
-            <span>{t(entry.labelKey)}</span>
-          </button>
-        ))}
-      </nav>
       <div className="wb-main">
+        <nav className="wb-nav" aria-label={t("workbench")}>
+          {TABS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className={`wb-nav-item ${tab === entry.id ? "wb-nav-item--active" : ""}`}
+              aria-current={tab === entry.id ? "page" : undefined}
+              onClick={() => setTab(entry.id)}
+            >
+              <entry.Icon size={15} weight={tab === entry.id ? "fill" : "regular"} />
+              <span>{t(entry.labelKey)}</span>
+            </button>
+          ))}
+        </nav>
         {!online && (
           <div className="offline-banner" role="status">
             {t("workbenchOfflineHint")}
@@ -226,6 +276,7 @@ export function Workbench() {
                 <ResearchPage
                   papers={research}
                   offline={!online}
+                  creating={creating}
                   onCreate={() => create("research")}
                   onUpdate={update}
                   onDelete={remove}
@@ -237,6 +288,9 @@ export function Workbench() {
                 <SubmittedPage
                   papers={submitted}
                   offline={!online}
+                  creating={creating}
+                  focusPaperID={focusPaperID}
+                  onFocusConsumed={clearFocus}
                   onCreate={() => create("submitted")}
                   onUpdate={update}
                   onDelete={remove}
@@ -248,6 +302,7 @@ export function Workbench() {
                 <PublishedPage
                   papers={published}
                   offline={!online}
+                  creating={creating}
                   crossrefEmail={crossrefEmail}
                   citationPendingID={
                     citationMutation.isPending ? (citationMutation.variables ?? null) : null
@@ -257,7 +312,18 @@ export function Workbench() {
                   onDelete={remove}
                   onReorder={(ids) => reorder("published", ids)}
                   onFetchCitation={fetchCitation}
+                  onFetchAllCitations={() => void fetchAllCitations()}
+                  batchCitationPending={batchPending}
                   onCrossrefEmailChange={saveEmail}
+                />
+              )}
+              {tab === "calendar" && (
+                <CalendarPage
+                  papers={submitted}
+                  onSelectPaper={(id) => {
+                    setFocusPaperID(id)
+                    setTab("submitted")
+                  }}
                 />
               )}
             </>

@@ -43,6 +43,7 @@ function paper(overrides: Partial<ResearchPaper> = {}): ResearchPaper {
     submission_count: 0,
     target_level: "",
     editor: "",
+    deadline: "",
     history: [],
     abstract: "",
     journal: "",
@@ -228,6 +229,33 @@ describe("Workbench paper move", () => {
     expect(papersByKind.submitted[0]!.stages).toEqual([
       { name: "Empirics", done: false, children: [] },
     ])
+  })
+})
+
+describe("Workbench navigation", () => {
+  it("keeps the tab bar on top of the content, not in a side rail", async () => {
+    renderWorkbench()
+    const nav = await screen.findByRole("navigation", { name: "Research Workspace" })
+    expect(nav.querySelectorAll(".wb-nav-item")).toHaveLength(5)
+    expect(document.querySelector(".wb-main")?.firstElementChild).toBe(nav)
+  })
+
+  it("jumps from a calendar deadline to the expanded submission row", async () => {
+    papersByKind.submitted = [
+      paper({
+        id: "s-1",
+        kind: "submitted",
+        title: "Submitted One",
+        deadline: new Date().toISOString().slice(0, 10),
+      }),
+    ]
+    renderWorkbench()
+    goToTab(/Deadline calendar/)
+    fireEvent.click(await screen.findByRole("button", { name: /Submitted One/ }))
+    // The click switches to the submissions table and opens that row.
+    expect(await screen.findByRole("button", { name: "Collapse details" })).toBeInTheDocument()
+    expect(screen.getByText("Submitted One")).toBeInTheDocument()
+    expect(document.querySelector('tr[data-paper-id="s-1"]')).not.toBeNull()
   })
 })
 

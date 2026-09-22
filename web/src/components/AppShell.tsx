@@ -148,6 +148,7 @@ export function AppShell() {
   const closeMobileReader = useReaderStore((state) => state.closeMobileReader)
   const shortcuts = useReaderStore((state) => state.shortcuts)
   const theme = useReaderStore((state) => state.theme)
+  const accentTheme = useReaderStore((state) => state.accentTheme)
   const setTheme = useReaderStore((state) => state.setTheme)
   const paneLayout = useReaderStore((state) => state.paneLayout)
   const setPaneLayout = useReaderStore((state) => state.setPaneLayout)
@@ -214,6 +215,10 @@ export function AppShell() {
       document.documentElement.style.colorScheme = theme
     }
   }, [theme])
+
+  useEffect(() => {
+    document.documentElement.dataset.accent = accentTheme
+  }, [accentTheme])
 
   useEffect(() => {
     const update = () => setViewportWidth(window.innerWidth)

@@ -19,16 +19,17 @@ applyPersistedTheme()
 // attribute once mounted; "system" is resolved here via matchMedia and the
 // effect restores the media-query-driven behavior on mount.
 function applyPersistedTheme() {
-  let theme: unknown
+  let persisted: { theme?: unknown; accentTheme?: unknown } | null
   try {
-    theme = (
+    persisted = (
       JSON.parse(localStorage.getItem("cairn-reader-preferences") ?? "null") as {
-        state?: { theme?: unknown }
+        state?: { theme?: unknown; accentTheme?: unknown }
       } | null
-    )?.state?.theme
+    )?.state ?? null
   } catch {
-    theme = undefined
+    persisted = null
   }
+  const theme = persisted?.theme
   const resolved =
     theme === "light" || theme === "dark"
       ? theme
@@ -37,6 +38,20 @@ function applyPersistedTheme() {
         : "light"
   document.documentElement.dataset.theme = resolved
   document.documentElement.style.colorScheme = resolved
+  const accentThemes = [
+    "academic-blue",
+    "graphite",
+    "forest",
+    "wine",
+    "indigo",
+    "warm-paper",
+  ] as const
+  const accentTheme = persisted?.accentTheme
+  document.documentElement.dataset.accent = accentThemes.includes(
+    accentTheme as (typeof accentThemes)[number],
+  )
+    ? (accentTheme as string)
+    : "academic-blue"
 }
 
 const queryClient = new QueryClient({

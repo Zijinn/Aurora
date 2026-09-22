@@ -1403,6 +1403,7 @@ paths:
                 submission_count: { type: integer, minimum: 0 }
                 target_level: { type: string, maxLength: 500 }
                 editor: { type: string, maxLength: 500 }
+                deadline: { type: string, maxLength: 500 }
                 history:
                   type: array
                   items:

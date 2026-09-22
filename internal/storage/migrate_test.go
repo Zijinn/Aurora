@@ -22,12 +22,16 @@ func TestMigrationsAreIdempotent(t *testing.T) {
 		t.Fatalf("second migration run failed: %v", err)
 	}
 
+	entries, err := fs.ReadDir(migrationFiles, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
 	var count int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 14 {
-		t.Fatalf("expected 14 migrations, got %d", count)
+	if count != len(entries) {
+		t.Fatalf("expected %d migrations, got %d", len(entries), count)
 	}
 	for _, table := range []string{"profiles", "feeds", "subscriptions", "entries", "entry_states", "jobs"} {
 		var exists int
@@ -48,7 +52,7 @@ func TestEachPriorMigrationUpgradesToLatest(t *testing.T) {
 		t.Fatal(err)
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-	for prior := 0; prior < 14; prior++ {
+	for prior := 0; prior < len(entries); prior++ {
 		t.Run("from_"+strconv.Itoa(prior), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "cairn.db")
 			db, err := sql.Open("sqlite", path)
@@ -86,8 +90,8 @@ func TestEachPriorMigrationUpgradesToLatest(t *testing.T) {
 			if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 				t.Fatal(err)
 			}
-			if count != 14 {
-				t.Fatalf("expected 14 migrations after upgrade, got %d", count)
+			if count != len(entries) {
+				t.Fatalf("expected %d migrations after upgrade, got %d", len(entries), count)
 			}
 			for _, table := range []string{"sync_accounts", "ai_profiles", "ai_usage", "zotero_exports"} {
 				var exists int

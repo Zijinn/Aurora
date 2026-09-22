@@ -31,6 +31,7 @@ function paper(overrides: Partial<ResearchPaper> = {}): ResearchPaper {
     submission_count: 1,
     target_level: "",
     editor: "",
+    deadline: "",
     history: [{ journal: "Review of Finance", date: "2026-01-15", status: "rejected" }],
     abstract: "",
     journal: "",
@@ -60,9 +61,17 @@ function props() {
   }
 }
 
+// Submission history lives in the expandable detail row.
+function expandRow() {
+  fireEvent.click(screen.getByRole("button", { name: "Expand details" }))
+}
+
 describe("SubmittedPage", () => {
   it("renders history rows with translated status badges and i18n titles", () => {
     render(<SubmittedPage papers={[paper()]} {...props()} />)
+    expect(screen.getByText("S001")).toBeInTheDocument()
+    expect(screen.getByText("Submitted Paper")).toBeInTheDocument()
+    expandRow()
     expect(screen.getByText("Review of Finance")).toBeInTheDocument()
     // Badge (plus the status <option>s) all render the translated label.
     const badges = document.querySelectorAll(".wb-badge--red")
@@ -78,6 +87,7 @@ describe("SubmittedPage", () => {
     const promptSpy = vi.spyOn(window, "prompt").mockImplementation(() => null)
     const handlers = props()
     render(<SubmittedPage papers={[paper()]} {...handlers} />)
+    expandRow()
     fireEvent.click(screen.getByRole("button", { name: "Add record: Submitted Paper" }))
     const journal = screen.getByLabelText("Enter the journal name:")
     fireEvent.change(journal, { target: { value: "Review of Economic Studies" } })
@@ -99,6 +109,7 @@ describe("SubmittedPage", () => {
   it("ignores a record without a journal name", () => {
     const handlers = props()
     render(<SubmittedPage papers={[paper()]} {...handlers} />)
+    expandRow()
     fireEvent.click(screen.getByRole("button", { name: "Add record: Submitted Paper" }))
     fireEvent.keyDown(screen.getByLabelText("Enter the journal name:"), { key: "Enter" })
     expect(handlers.onUpdate).not.toHaveBeenCalled()
@@ -107,8 +118,40 @@ describe("SubmittedPage", () => {
   it("deletes a history record via onUpdate with the row removed", () => {
     const handlers = props()
     render(<SubmittedPage papers={[paper()]} {...handlers} />)
+    expandRow()
     fireEvent.click(screen.getByRole("button", { name: "Delete record: Review of Finance" }))
     expect(handlers.onUpdate).toHaveBeenCalledWith("s-1", { history: [] })
+  })
+
+  it("normalizes a deadline entry and flags how urgent it is", () => {
+    const handlers = props()
+    const soon = new Date()
+    soon.setDate(soon.getDate() + 3)
+    const soonISO = soon.toISOString().slice(0, 10)
+    render(<SubmittedPage papers={[paper({ deadline: soonISO })]} {...handlers} />)
+    expect(document.querySelector(".wb-deadline--soon")).not.toBeNull()
+    expect(screen.getByText(soonISO)).toBeInTheDocument()
+
+    fireEvent.doubleClick(screen.getByText(soonISO))
+    const input = screen.getByDisplayValue(soonISO)
+    fireEvent.change(input, { target: { value: "2026/12/31" } })
+    fireEvent.keyDown(input, { key: "Enter" })
+    expect(handlers.onUpdate).toHaveBeenCalledWith("s-1", { deadline: "2026-12-31" })
+  })
+
+  it("opens and highlights the row the calendar jumped to", () => {
+    render(
+      <SubmittedPage
+        papers={[paper()]}
+        focusPaperID="s-1"
+        onFocusConsumed={vi.fn()}
+        {...props()}
+      />,
+    )
+    // The detail row is already open, so the toggle reads "Collapse details".
+    expect(screen.getByRole("button", { name: "Collapse details" })).toBeInTheDocument()
+    expect(screen.getByText("Review of Finance")).toBeInTheDocument()
+    expect(document.querySelector("tr.wb-row--flash")).not.toBeNull()
   })
 
   it("moves to published through the parent callback", () => {

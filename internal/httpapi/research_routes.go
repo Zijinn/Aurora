@@ -79,6 +79,7 @@ func (s *Server) updateResearchPaper(w http.ResponseWriter, r *http.Request) {
 		SubmissionCount *int                       `json:"submission_count"`
 		TargetLevel     *string                    `json:"target_level"`
 		Editor          *string                    `json:"editor"`
+		Deadline        *string                    `json:"deadline"`
 		History         *[]domain.SubmissionRecord `json:"history"`
 		Abstract        *string                    `json:"abstract"`
 		Journal         *string                    `json:"journal"`
@@ -102,7 +103,8 @@ func (s *Server) updateResearchPaper(w http.ResponseWriter, r *http.Request) {
 		TargetJournal: request.TargetJournal, Stages: request.Stages,
 		CurrentJournal: request.CurrentJournal, SubmissionDate: request.SubmissionDate,
 		ManuscriptID: request.ManuscriptID, SubmissionCount: request.SubmissionCount,
-		TargetLevel: request.TargetLevel, Editor: request.Editor, History: request.History,
+		TargetLevel: request.TargetLevel, Editor: request.Editor, Deadline: request.Deadline,
+		History:  request.History,
 		Abstract: request.Abstract, Journal: request.Journal, Language: request.Language,
 		Year: request.Year, Volume: request.Volume, Issue: request.Issue, Pages: request.Pages,
 		DOI: request.DOI, CitationSource: request.CitationSource,
