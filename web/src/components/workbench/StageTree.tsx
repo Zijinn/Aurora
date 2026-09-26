@@ -64,6 +64,8 @@ export function StageTree(props: {
   const dragPath = useRef<number[] | null>(null)
   const [addingPath, setAddingPath] = useState<string | null>(null)
   const [confirmPath, setConfirmPath] = useState<number[] | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ key: string; before: boolean } | null>(null)
+  const [dragParentKey, setDragParentKey] = useState<string | null>(null)
 
   const requestAdd = (path: number[]) => {
     if (path.length >= MAX_STAGE_LEVEL) {
@@ -82,24 +84,56 @@ export function StageTree(props: {
   }
 
   const renderNode = (node: ResearchStage, path: number[], level: number) => (
-    <div className="wb-stage-node" key={path.join("-")}>
+    <div className={`wb-stage-node wb-stage-level-${Math.min(level, MAX_STAGE_LEVEL)}`} key={path.join("-")}>
       <div
-        className={`wb-stage-row ${node.done ? "wb-stage-row--done" : ""}`}
+        className={[
+          "wb-stage-row",
+          node.done ? "wb-stage-row--done" : "",
+          dropTarget &&
+          dropTarget.key === pathKey(path) &&
+          dragParentKey !== null &&
+          dragParentKey === path.slice(0, -1).join("/")
+            ? dropTarget.before
+              ? "wb-stage-row--drop-before"
+              : "wb-stage-row--drop-after"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         draggable
         onDragStart={(e) => {
           dragPath.current = path
+          setDragParentKey(path.slice(0, -1).join("/"))
           e.stopPropagation()
           e.dataTransfer.effectAllowed = "move"
           e.dataTransfer.setData("text/wb-stage", "1")
+        }}
+        onDragEnd={() => {
+          dragPath.current = null
+          setDragParentKey(null)
+          setDropTarget(null)
         }}
         onDragOver={(e) => {
           if (!dragPath.current) return
           e.preventDefault()
           e.stopPropagation()
+          const rect = e.currentTarget.getBoundingClientRect()
+          const before = e.clientY < rect.top + rect.height / 2
+          const key = pathKey(path)
+          setDropTarget((prev) =>
+            prev && prev.key === key && prev.before === before ? prev : { key, before },
+          )
+        }}
+        onDragLeave={(e) => {
+          e.stopPropagation()
+          const key = pathKey(path)
+          setDropTarget((prev) => (prev && prev.key === key ? null : prev))
         }}
         onDrop={(e) => {
           const from = dragPath.current
           dragPath.current = null
+          setDropTarget(null)
+          setDragParentKey(null)
           if (!from) return
           e.preventDefault()
           e.stopPropagation()

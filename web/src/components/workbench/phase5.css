@@ -1,0 +1,90 @@
+/* Phase 5：阶段拖拽指示 + 移动端表格粘性列 + 触屏目标 */
+
+/* 阶段行放置指示（仅同级） */
+.wb-stage-row--drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.wb-stage-row--drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* 窄屏表格：首列与操作列粘性悬浮，内容从下方滑过 */
+@media (max-width: 760px) {
+  .wb-table {
+    min-width: 720px;
+  }
+  .wb-table thead th.wb-col-grip,
+  .wb-table tbody td.wb-col-grip {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--surface-raised);
+    box-shadow: 1px 0 0 var(--border);
+  }
+  .wb-table thead th.wb-col-grip {
+    background: color-mix(in srgb, var(--surface-muted) 55%, var(--surface));
+  }
+  .wb-table thead th.wb-col-actions,
+  .wb-table tbody td.wb-col-actions {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: var(--surface-raised);
+    box-shadow: -1px 0 0 var(--border);
+  }
+  .wb-table thead th.wb-col-actions {
+    background: color-mix(in srgb, var(--surface-muted) 55%, var(--surface));
+  }
+  .wb-table tbody .wb-row:hover td.wb-col-grip,
+  .wb-table tbody .wb-row:hover td.wb-col-actions {
+    background: color-mix(in srgb, var(--surface-muted) 45%, var(--surface-raised));
+  }
+  /* 工具栏：搜索独占一行 */
+  .wb-search {
+    flex: 1 1 100%;
+  }
+  .wb-toolbar {
+    gap: 8px;
+  }
+  /* 日历事件只留编号 */
+  .wb-cal-event-title {
+    display: none;
+  }
+}
+
+/* 粗指针：44px 触屏目标 */
+@media (pointer: coarse) {
+  .wb-table tbody td {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+  .wb-menu-btn {
+    min-height: 40px;
+  }
+  .wb-filter-menu .wb-menu-btn {
+    min-height: 42px;
+  }
+  .wb-icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .wb-expand {
+    width: 30px;
+    height: 30px;
+  }
+  .wb-stage-toggle {
+    width: 24px;
+    height: 24px;
+  }
+  .wb-stage-tool {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-stage-row--drop-before,
+  .wb-stage-row--drop-after {
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+}

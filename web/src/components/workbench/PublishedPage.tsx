@@ -13,7 +13,7 @@ import {
 } from "../../lib/research"
 import { downloadPublicationsExport } from "../../lib/researchExport"
 import { toast } from "../../store/toast"
-import { ChipEditor, DragHandle, ExpandToggle, InlineText, Row } from "./shared"
+import { ChipEditor, DragHandle, EmptyState, ExpandToggle, InlineText, MenuSelect, Row } from "./shared"
 import { displayID, matchesPaperQuery, reorderList } from "./utils"
 
 const SORT_OPTIONS: Array<{ value: ReferenceSort; key: string }> = [
@@ -37,6 +37,7 @@ export function PublishedPage(props: {
   onReorder: (orderedIDs: string[]) => void
   onFetchCitation: (id: string) => void
   onFetchAllCitations: () => void
+  batchCitationProgress?: { done: number; total: number } | null
   onCrossrefEmailChange: (email: string) => void
 }) {
   const { t } = useTranslation()
@@ -268,6 +269,11 @@ export function PublishedPage(props: {
     )
   }
 
+  const sortOptions = SORT_OPTIONS.map((option) => ({
+    value: option.value,
+    label: t(option.key),
+  }))
+
   const renderReferenceColumn = (
     title: string,
     language: "zh" | "en",
@@ -287,17 +293,13 @@ export function PublishedPage(props: {
               {list.length} · {t("sequentialCoding")}
             </p>
           </div>
-          <select
-            className="wb-select"
+          <MenuSelect
             value={sortMode}
-            onChange={(e) => setSort(e.target.value as ReferenceSort)}
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {t(option.key)}
-              </option>
-            ))}
-          </select>
+            ariaLabel={title}
+            className="wb-filter-menu wb-menu--sm"
+            onChange={(value) => setSort(value as ReferenceSort)}
+            options={sortOptions}
+          />
         </div>
         <ol className="wb-reference-list">
           {list.length ? (
@@ -328,6 +330,11 @@ export function PublishedPage(props: {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        {search.trim() && (
+          <span className="wb-result-count">
+            {filtered.length}/{props.papers.length} {t("filterCountSuffix")}
+          </span>
+        )}
         <div className="wb-view-switch">
           <button
             type="button"
@@ -360,7 +367,11 @@ export function PublishedPage(props: {
           title={props.offline ? t("workbenchOfflineHint") : undefined}
           onClick={props.onFetchAllCitations}
         >
-          {props.batchCitationPending ? t("fetchingAllCitations") : t("fetchAllCitations")}
+          {props.batchCitationPending
+            ? props.batchCitationProgress
+              ? `${t("fetchingAllCitations")} ${props.batchCitationProgress.done}/${props.batchCitationProgress.total}`
+              : t("fetchingAllCitations")
+            : t("fetchAllCitations")}
         </button>
         <button
           type="button"
@@ -416,7 +427,17 @@ export function PublishedPage(props: {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="wb-empty">
-                    {t("noMatchingPapers")}
+                    {search.trim() ? (
+                      <EmptyState title={t("noMatchingPapers")} hint={t("emptySearchHint")} />
+                    ) : (
+                      <EmptyState
+                        title={t("emptyZeroPublished")}
+                        hint={t("emptyZeroPublishedHint")}
+                        actionLabel={t("addPaper")}
+                        onAction={props.onCreate}
+                        actionDisabled={props.offline || props.creating}
+                      />
+                    )}
                   </td>
                 </tr>
               ) : (

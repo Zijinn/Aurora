@@ -4,11 +4,15 @@ import type { ResearchPaper, ResearchPaperPatch } from "../../api/types"
 import { useTranslation } from "../../lib/i18n"
 import { toast } from "../../store/toast"
 import { countStageLeaves, computeProgress } from "../../lib/research"
-import { ChipEditor, DragHandle, ExpandToggle, InlineText, Row } from "./shared"
-import { displayID, matchesPaperQuery, reorderList } from "./utils"
+import { ChipEditor, DragHandle, EmptyState, ExpandToggle, InlineText, MenuSelect, Row } from "./shared"
+import { displayID, matchesPaperQuery, priorityDotClass, reorderList } from "./utils"
 import { StageTree } from "./StageTree"
 
-const PRIORITIES = ["High", "Medium", "Average"]
+const PRIORITIES = [
+  { value: "High", key: "priorityHigh" },
+  { value: "Medium", key: "priorityMedium" },
+  { value: "Average", key: "priorityAverage" },
+]
 
 export function ResearchPage(props: {
   papers: ResearchPaper[]
@@ -24,6 +28,16 @@ export function ResearchPage(props: {
   const [search, setSearch] = useState("")
   const [priority, setPriority] = useState("")
   const [expandedID, setExpandedID] = useState<string | null>(null)
+
+  const priorityOptions = useMemo(
+    () =>
+      PRIORITIES.map((option) => ({
+        value: option.value,
+        label: t(option.key),
+        dotClass: priorityDotClass(option.value),
+      })),
+    [t],
+  )
 
   const filtered = useMemo(() => {
     const query = search.toLowerCase().trim()
@@ -52,18 +66,18 @@ export function ResearchPage(props: {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select
-          className="wb-select"
+        <MenuSelect
           value={priority}
-          onChange={(e) => setPriority(e.target.value)}
-        >
-          <option value="">{t("allPriorities")}</option>
-          {PRIORITIES.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+          ariaLabel={t("colPriority")}
+          className="wb-filter-menu"
+          onChange={setPriority}
+          options={[{ value: "", label: t("allPriorities") }, ...priorityOptions]}
+        />
+        {(search.trim() || priority) && (
+          <span className="wb-result-count">
+            {filtered.length}/{props.papers.length} {t("filterCountSuffix")}
+          </span>
+        )}
         <button
           type="button"
           className="wb-btn wb-btn--primary"
@@ -92,7 +106,17 @@ export function ResearchPage(props: {
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} className="wb-empty">
-                  {t("noMatchingPapers")}
+                  {search.trim() || priority ? (
+                    <EmptyState title={t("noMatchingPapers")} hint={t("emptySearchHint")} />
+                  ) : (
+                    <EmptyState
+                      title={t("emptyZeroResearch")}
+                      hint={t("emptyZeroResearchHint")}
+                      actionLabel={t("addPaper")}
+                      onAction={props.onCreate}
+                      actionDisabled={props.offline || props.creating}
+                    />
+                  )}
                 </td>
               </tr>
             ) : (
@@ -143,17 +167,13 @@ export function ResearchPage(props: {
                         </div>
                       </td>
                       <td className="wb-col-priority">
-                        <select
-                          className={`wb-select wb-priority wb-priority--${paper.priority || "Medium"}`}
+                        <MenuSelect
                           value={paper.priority || "Medium"}
-                          onChange={(e) => props.onUpdate(paper.id, { priority: e.target.value })}
-                        >
-                          {PRIORITIES.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                          ariaLabel={t("colPriority")}
+                          className="wb-priority-pill"
+                          onChange={(value) => props.onUpdate(paper.id, { priority: value })}
+                          options={priorityOptions}
+                        />
                       </td>
                       <td>
                         <InlineText

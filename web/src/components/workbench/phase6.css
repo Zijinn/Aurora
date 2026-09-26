@@ -1,0 +1,10 @@
+/* Phase 6：筛选计数 */
+
+.wb-result-count {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  padding: 2px 4px;
+}

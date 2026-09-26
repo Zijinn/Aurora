@@ -1,0 +1,99 @@
+/* Phase 3C：在投页详情 Apple 精修（历史时间线 + 元信息分组） */
+
+.wb-history {
+  position: relative;
+}
+.wb-timeline {
+  position: relative;
+  gap: 0;
+}
+.wb-timeline-item {
+  position: relative;
+  padding: 9px 0 9px 20px;
+}
+.wb-timeline-item::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 15px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.wb-timeline-item::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 28px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--border);
+}
+.wb-timeline-item:last-child::after {
+  display: none;
+}
+.wb-timeline-date {
+  width: 88px;
+  font-variant-numeric: tabular-nums;
+}
+.wb-timeline-content {
+  gap: 8px;
+}
+.wb-timeline-content strong {
+  font-size: 13px;
+}
+
+/* 新增记录表单：分组输入 */
+.wb-history-add {
+  padding: 10px 12px;
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: 0 1px 2px rgb(20 22 26 / 0.04);
+}
+.wb-history-add .wb-inline-input {
+  border-radius: 8px;
+}
+
+/* 右侧元信息：设置式行 */
+.wb-detail-side .wb-card-line,
+.wb-detail-side .wb-path-row {
+  padding: 8px 10px;
+  border-radius: 9px;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+.wb-detail-side .wb-card-line:hover,
+.wb-detail-side .wb-path-row:hover {
+  background: color-mix(in srgb, var(--surface-muted) 50%, transparent);
+}
+.wb-detail-side .wb-muted {
+  font-size: 12px;
+  font-weight: 600;
+}
+.wb-detail-side strong {
+  font-size: 13px;
+}
+.wb-path-row .wb-btn {
+  border-radius: 999px;
+  flex: none;
+}
+
+/* 截止 urgency 胶囊 */
+.wb-deadline-hint {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--surface-muted) 80%, transparent);
+}
+.wb-deadline--soon {
+  background: rgb(217 119 6 / 0.14);
+}
+.wb-deadline--today,
+.wb-deadline--overdue {
+  background: rgb(220 38 38 / 0.12);
+}

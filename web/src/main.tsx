@@ -2,6 +2,12 @@
 // sat after the system faces in --font-ui, so it never rendered a glyph.
 import "@fontsource-variable/source-serif-4"
 import "./styles.css"
+import "./components/workbench/phase3-research.css"
+import "./components/workbench/phase3-published.css"
+import "./components/workbench/phase3-submitted.css"
+import "./components/workbench/phase4.css"
+import "./components/workbench/phase5.css"
+import "./components/workbench/phase6.css"
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { StrictMode } from "react"

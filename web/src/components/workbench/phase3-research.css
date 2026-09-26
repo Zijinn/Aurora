@@ -1,0 +1,138 @@
+/* Phase 3A：在研页阶段树 Apple 精修（Reminders 级复选 + 层级引导线） */
+
+.wb-stage-tree {
+  gap: 2px;
+}
+.wb-stage-node {
+  border-radius: 8px;
+}
+.wb-stage-row {
+  min-height: 34px;
+  padding: 6px 8px 6px 6px;
+  gap: 8px;
+  border-radius: 9px;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+.wb-stage-row:hover {
+  background: color-mix(in srgb, var(--surface-muted) 60%, transparent);
+}
+.wb-stage-row:hover .wb-stage-handle {
+  opacity: 0.7;
+}
+.wb-stage-handle {
+  opacity: 0;
+  width: 16px;
+  text-align: center;
+  border-radius: 4px;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.wb-stage-row:hover .wb-stage-handle,
+.wb-stage-row:focus-within .wb-stage-handle {
+  opacity: 0.7;
+}
+.wb-stage-toggle {
+  width: 21px;
+  height: 21px;
+  flex: none;
+  border-width: 1.5px;
+  font-size: 12px;
+  font-weight: 700;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    transform 100ms ease-out;
+}
+.wb-stage-toggle:hover {
+  border-color: var(--accent);
+}
+.wb-stage-toggle:active {
+  transform: scale(0.85);
+}
+.wb-stage-row--done .wb-stage-toggle {
+  animation: wb-check-pop var(--dur-base) var(--ease);
+}
+@keyframes wb-check-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  55% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.wb-stage-name {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.wb-stage-state {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-muted) 80%, transparent);
+  color: var(--text-tertiary);
+}
+.wb-stage-row--done .wb-stage-state {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-strong);
+}
+.wb-stage-tools {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.wb-stage-row:hover .wb-stage-tools,
+.wb-stage-row:focus-within .wb-stage-tools {
+  opacity: 1;
+}
+.wb-stage-tool {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.wb-stage-tool:active {
+  transform: scale(0.9);
+}
+.wb-stage-children {
+  margin-left: 19px;
+  border-left: 1.5px solid var(--border);
+  padding-left: 8px;
+  border-radius: 0;
+}
+.wb-stage-level-3 .wb-stage-children {
+  border-left-style: dotted;
+}
+.wb-stage-add-btn {
+  border-radius: 9px;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    transform 100ms ease-out;
+}
+.wb-stage-add-btn:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.wb-stage-add-btn:active {
+  transform: scale(0.98);
+}
+
+/* 在研表阶段格：进度更紧凑 */
+.wb-stage-cell .wb-progress-track {
+  height: 8px;
+}
+.wb-progress-text {
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-stage-row--done .wb-stage-toggle {
+    animation: none;
+  }
+  .wb-stage-toggle:active,
+  .wb-stage-tool:active,
+  .wb-stage-add-btn:active {
+    transform: none;
+  }
+}

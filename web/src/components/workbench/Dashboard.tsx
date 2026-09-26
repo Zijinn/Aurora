@@ -1,15 +1,19 @@
 import { useMemo } from "react"
 
+import { Books, ChartPieSlice, NotePencil, PaperPlaneTilt } from "@phosphor-icons/react"
+
 import type { ResearchPaper } from "../../api/types"
 import { useTranslation } from "../../lib/i18n"
 import { computeProgress } from "../../lib/research"
+import { EmptyState } from "./shared"
+import { relativeTime } from "./utils"
 
 export function Dashboard(props: {
   research: ResearchPaper[]
   submitted: ResearchPaper[]
   published: ResearchPaper[]
 }) {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const { research, submitted, published } = props
 
   const avg = useMemo(() => {
@@ -35,10 +39,34 @@ export function Dashboard(props: {
   return (
     <div className="wb-dashboard">
       <div className="wb-stats-grid">
-        <StatCard label={t("workingPapers")} value={research.length} foot={t("researchCount")} />
-        <StatCard label={t("submissions")} value={submitted.length} foot={t("submittedCount")} />
-        <StatCard label={t("publications")} value={published.length} foot={t("publishedCount")} />
-        <StatCard label={t("averageProgress")} value={`${avg}%`} foot={t("basedOnWorkingPapers")} />
+        <StatCard
+          label={t("workingPapers")}
+          value={research.length}
+          foot={t("researchCount")}
+          Icon={NotePencil}
+          tint="wb-tint--blue"
+        />
+        <StatCard
+          label={t("submissions")}
+          value={submitted.length}
+          foot={t("submittedCount")}
+          Icon={PaperPlaneTilt}
+          tint="wb-tint--orange"
+        />
+        <StatCard
+          label={t("publications")}
+          value={published.length}
+          foot={t("publishedCount")}
+          Icon={Books}
+          tint="wb-tint--green"
+        />
+        <StatCard
+          label={t("averageProgress")}
+          value={`${avg}%`}
+          foot={t("basedOnWorkingPapers")}
+          Icon={ChartPieSlice}
+          tint="wb-tint--violet"
+        />
       </div>
       <div className="wb-dashboard-grid">
         <div className="wb-panel">
@@ -78,8 +106,10 @@ export function Dashboard(props: {
           </div>
           <div className="wb-timeline">
             {recent.map(({ paper, kind }) => (
-              <div key={paper.id} className="wb-timeline-item">
-                <div className="wb-timeline-date">{paper.last_updated || "—"}</div>
+              <div key={paper.id} className="wb-timeline-item wb-timeline-item--dot">
+                <div className="wb-timeline-date" title={paper.last_updated || undefined}>
+                  {relativeTime(paper.last_updated, locale)}
+                </div>
                 <div className="wb-timeline-content">
                   <strong>{paper.title || "—"}</strong>
                   <span className="wb-muted">
@@ -99,12 +129,17 @@ export function Dashboard(props: {
         </div>
       </div>
       {priorityProjects.length === 0 ? (
-        <div className="wb-empty">{t("noPriorityProjects")}</div>
+        <div className="wb-empty">
+          <EmptyState title={t("noPriorityProjects")} />
+        </div>
       ) : (
         <div className="wb-cards-grid">
           {priorityProjects.map((paper) => (
             <article key={paper.id} className="wb-card wb-card--compact">
-              <div className="wb-card-eyebrow">{t("eyebrowResearchProject")}</div>
+              <div className="wb-card-toprow">
+                <span className="wb-card-eyebrow">{t("eyebrowResearchProject")}</span>
+                <b className="wb-card-pct">{computeProgress(paper.stages)}%</b>
+              </div>
               <div className="wb-card-title">{paper.title || "—"}</div>
               <div className="wb-card-line">
                 <span className="wb-muted">{t("targetJournal")}</span>
@@ -124,10 +159,21 @@ export function Dashboard(props: {
   )
 }
 
-function StatCard(props: { label: string; value: number | string; foot: string }) {
+function StatCard(props: {
+  label: string
+  value: number | string
+  foot: string
+  Icon: typeof Books
+  tint: string
+}) {
   return (
     <div className="wb-stat-card">
-      <div className="wb-stat-label">{props.label}</div>
+      <div className="wb-stat-top">
+        <span className={`wb-stat-icon ${props.tint}`} aria-hidden="true">
+          <props.Icon size={16} weight="fill" />
+        </span>
+        <div className="wb-stat-label">{props.label}</div>
+      </div>
       <div className="wb-stat-number">{props.value}</div>
       <div className="wb-stat-foot">{props.foot}</div>
     </div>

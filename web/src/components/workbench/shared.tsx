@@ -73,7 +73,7 @@ export function InlineText(props: {
         }
       }}
     >
-      {props.value ? props.value : <span className="wb-muted">{props.placeholder}</span>}
+      {props.value ? props.value : <span className="wb-ph">{props.placeholder}</span>}
     </span>
   )
 }
@@ -297,3 +297,178 @@ export function ExpandToggle(props: { expanded: boolean; onToggle: () => void; l
     </button>
   )
 }
+
+export interface MenuOption {
+  value: string
+  label: string
+  dotClass?: string
+}
+
+// 自定义下拉：替代原生 <select>，解决系统下拉与表格药丸样式割裂的问题。
+// 按钮显示圆点 + 文案 + 箭头，弹层为圆角菜单，选中项带对勾。
+// 键盘：按钮上 ↓ 打开；菜单内 ↑↓/Home/End 移动、Enter 确认、Esc 关闭。
+export function MenuSelect(props: {
+  value: string
+  options: MenuOption[]
+  onChange: (value: string) => void
+  ariaLabel: string
+  className?: string
+  menuClassName?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const current = props.options.find((o) => o.value === props.value)
+  const currentIndex = props.options.findIndex((o) => o.value === props.value)
+
+  const openMenu = (index: number) => {
+    setActiveIndex(index >= 0 ? index : Math.max(currentIndex, 0))
+    setOpen(true)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("pointerdown", onPointerDown)
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown)
+    }
+  }, [open ])
+
+  useEffect(() => {
+    if (open && activeIndex >= 0) optionRefs.current[activeIndex]?.focus()
+  }, [open, activeIndex])
+
+  const commitIndex = (index: number) => {
+    const option = props.options[index]
+    setOpen(false)
+    setActiveIndex(-1)
+    buttonRef.current?.focus()
+    if (option && option.value !== props.value) props.onChange(option.value)
+  }
+
+  const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    const last = props.options.length - 1
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setActiveIndex((i) => (i >= last ? 0 : i + 1))
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setActiveIndex((i) => (i <= 0 ? last : i - 1))
+    } else if (e.key === "Home") {
+      e.preventDefault()
+      setActiveIndex(0)
+    } else if (e.key === "End") {
+      e.preventDefault()
+      setActiveIndex(last)
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      if (activeIndex >= 0) commitIndex(activeIndex)
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      setOpen(false)
+      setActiveIndex(-1)
+      buttonRef.current?.focus()
+    } else if (e.key === "Tab") {
+      setOpen(false)
+      setActiveIndex(-1)
+    }
+  }
+
+  return (
+    <div ref={rootRef} className={`wb-menu ${props.className ?? ""}`}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="wb-menu-btn"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={props.ariaLabel}
+        title={props.ariaLabel}
+        onClick={() => (open ? setOpen(false) : openMenu(-1))}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && !open) {
+            e.preventDefault()
+            openMenu(-1)
+          }
+        }}
+      >
+        {current?.dotClass && <i className={`wb-dot ${current.dotClass}`} aria-hidden="true" />}
+        <span className="wb-menu-label">{current?.label ?? props.value}</span>
+        <span className={`wb-menu-chevron ${open ? "wb-menu-chevron--open" : ""}`} aria-hidden="true">
+          ▾
+        </span>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          aria-label={props.ariaLabel}
+          className={`wb-menu-pop ${props.menuClassName ?? ""}`}
+          onKeyDown={onMenuKeyDown}
+        >
+          {props.options.map((option, index) => {
+            const selected = option.value === props.value
+            return (
+              <button
+                key={option.value || "__all__"}
+                ref={(node) => {
+                  optionRefs.current[index] = node
+                }}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                tabIndex={-1}
+                className={`wb-menu-item ${selected ? "wb-menu-item--active" : ""} ${index === activeIndex ? "wb-menu-item--focus" : ""}`}
+                onClick={() => commitIndex(index)}
+                onMouseEnter={() => setActiveIndex(index)}
+              >
+                {option.dotClass && (
+                  <i className={`wb-dot ${option.dotClass}`} aria-hidden="true" />
+                )}
+                <span className="wb-menu-item-label">{option.label}</span>
+                {selected && (
+                  <span className="wb-menu-check" aria-hidden="true">
+                    ✓
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 空状态：插画圆点 + 标题 + 提示 + 可选 CTA，区分“搜不到”与“零数据”。
+export function EmptyState(props: {
+  title: string
+  hint?: string
+  actionLabel?: string
+  onAction?: () => void
+  actionDisabled?: boolean
+}) {
+  return (
+    <div className="wb-empty-state">
+      <span className="wb-empty-orb" aria-hidden="true" />
+      <div className="wb-empty-title">{props.title}</div>
+      {props.hint && <div className="wb-empty-hint">{props.hint}</div>}
+      {props.actionLabel && props.onAction && (
+        <button
+          type="button"
+          className="wb-btn wb-btn--primary wb-empty-action"
+          disabled={props.actionDisabled}
+          onClick={props.onAction}
+        >
+          {props.actionLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/* 状态 / 优先级映射已移至 ./utils，避免组件文件导出非组件函数。 */

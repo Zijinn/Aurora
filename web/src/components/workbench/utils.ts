@@ -76,3 +76,73 @@ export function daysUntil(date: Date, now: Date = new Date()): number {
     new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
   return Math.round((startOf(date) - startOf(now)) / 86_400_000)
 }
+
+// 状态 / 优先级圆点与药丸映射：与 shared.tsx 的 MenuSelect 配合使用，
+/// 避免把非组件函数放在组件文件里触发 react-refresh 告警。
+export function statusDotClass(status: string): string {
+  switch (status) {
+    case "accepted":
+      return "wb-dot--green"
+    case "rejected":
+      return "wb-dot--red"
+    case "minor_revision":
+      return "wb-dot--teal"
+    case "major_revision":
+      return "wb-dot--orange"
+    case "under_review":
+      return "wb-dot--amber"
+    case "with_editor":
+      return "wb-dot--violet"
+    default:
+      return "wb-dot--blue"
+  }
+}
+
+export function statusBadgeClass(status: string): string {
+  switch (status) {
+    case "accepted":
+      return "wb-badge--green"
+    case "rejected":
+      return "wb-badge--red"
+    case "minor_revision":
+      return "wb-badge--teal"
+    case "major_revision":
+      return "wb-badge--orange"
+    case "under_review":
+      return "wb-badge--amber"
+    case "with_editor":
+      return "wb-badge--violet"
+    default:
+      return "wb-badge--blue"
+  }
+}
+
+export function priorityDotClass(priority: string): string {
+  if (priority === "High") return "wb-dot--red"
+  if (priority === "Medium") return "wb-dot--amber"
+  return "wb-dot--gray"
+}
+
+// 相对时间：总览最近动态用；解析失败回退原文。
+export function relativeTime(raw: string, locale: string, now: Date = new Date()): string {
+  const date = new Date((raw ?? "").trim())
+  if (Number.isNaN(date.getTime())) return raw || "—"
+  const diffMs = now.getTime() - date.getTime()
+  if (diffMs < 0) return (raw || "").slice(0, 10) || raw
+  const zh = locale === "zh-CN"
+  const minute = 60_000
+  const hour = 3_600_000
+  const day = 86_400_000
+  if (diffMs < hour) {
+    const minutes = Math.floor(diffMs / minute)
+    if (minutes <= 0) return zh ? "刚刚" : "just now"
+    return zh ? `${minutes} 分钟前` : `${minutes}m ago`
+  }
+  if (diffMs < day) {
+    const hours = Math.floor(diffMs / hour)
+    return zh ? `${hours} 小时前` : `${hours}h ago`
+  }
+  const days = Math.floor(diffMs / day)
+  if (days < 30) return zh ? `${days} 天前` : `${days}d ago`
+  return (raw || "").slice(0, 10) || raw
+}

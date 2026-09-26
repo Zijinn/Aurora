@@ -4,7 +4,7 @@ import type { ResearchPaper, ResearchPaperPatch, SubmissionRecord } from "../../
 import { useTranslation } from "../../lib/i18n"
 import { SUBMISSION_STATUS_OPTIONS } from "../../lib/research"
 import { toast } from "../../store/toast"
-import { ChipEditor, DragHandle, ExpandToggle, InlineText, Row } from "./shared"
+import { ChipEditor, DragHandle, EmptyState, ExpandToggle, InlineText, MenuSelect, Row } from "./shared"
 import {
   daysUntil,
   displayID,
@@ -12,14 +12,9 @@ import {
   normalizeDeadlineInput,
   parseDeadline,
   reorderList,
+  statusBadgeClass,
+  statusDotClass,
 } from "./utils"
-
-function statusBadgeClass(status: string): string {
-  if (status === "accepted" || status === "minor_revision") return "wb-badge--green"
-  if (status === "rejected") return "wb-badge--red"
-  if (status === "under_review" || status === "with_editor") return "wb-badge--orange"
-  return "wb-badge--blue"
-}
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -68,6 +63,16 @@ export function SubmittedPage(props: {
       ?.scrollIntoView({ block: "center", behavior: "smooth" })
     onFocusConsumed?.()
   }, [mountedFocus, onFocusConsumed])
+
+  const statusOptions = useMemo(
+    () =>
+      SUBMISSION_STATUS_OPTIONS.map((option) => ({
+        value: option.value,
+        label: t(option.key),
+        dotClass: statusDotClass(option.value),
+      })),
+    [t],
+  )
 
   const filtered = useMemo(() => {
     const query = search.toLowerCase().trim()
@@ -124,14 +129,18 @@ export function SubmittedPage(props: {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select className="wb-select" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">{t("allStatuses")}</option>
-          {SUBMISSION_STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {t(option.key)}
-            </option>
-          ))}
-        </select>
+        <MenuSelect
+          value={status}
+          ariaLabel={t("colStatus")}
+          className="wb-filter-menu"
+          onChange={setStatus}
+          options={[{ value: "", label: t("allStatuses") }, ...statusOptions]}
+        />
+        {(search.trim() || status) && (
+          <span className="wb-result-count">
+            {filtered.length}/{props.papers.length} {t("filterCountSuffix")}
+          </span>
+        )}
         <button
           type="button"
           className="wb-btn wb-btn--primary"
@@ -160,7 +169,17 @@ export function SubmittedPage(props: {
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} className="wb-empty">
-                  {t("noMatchingPapers")}
+                  {search.trim() || status ? (
+                    <EmptyState title={t("noMatchingPapers")} hint={t("emptySearchHint")} />
+                  ) : (
+                    <EmptyState
+                      title={t("emptyZeroSubmitted")}
+                      hint={t("emptyZeroSubmittedHint")}
+                      actionLabel={t("addSubmission")}
+                      onAction={props.onCreate}
+                      actionDisabled={props.offline || props.creating}
+                    />
+                  )}
                 </td>
               </tr>
             ) : (
@@ -204,17 +223,13 @@ export function SubmittedPage(props: {
                         />
                       </td>
                       <td className="wb-col-status">
-                        <select
-                          className={`wb-select wb-status ${statusBadgeClass(paper.status)}`}
+                        <MenuSelect
                           value={paper.status || "submitted"}
-                          onChange={(e) => props.onUpdate(paper.id, { status: e.target.value })}
-                        >
-                          {SUBMISSION_STATUS_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {t(option.key)}
-                            </option>
-                          ))}
-                        </select>
+                          ariaLabel={t("colStatus")}
+                          className={`wb-status-pill ${statusBadgeClass(paper.status || "submitted")}`}
+                          onChange={(value) => props.onUpdate(paper.id, { status: value })}
+                          options={statusOptions}
+                        />
                       </td>
                       <td>
                         <InlineText
@@ -374,30 +389,15 @@ export function SubmittedPage(props: {
                                             }
                                           />
                                         </strong>
-                                        <select
-                                          className="wb-select wb-hist-status"
+                                        <MenuSelect
                                           value={record.status}
-                                          onChange={(e) =>
-                                            updateHistory(paper, historyIndex, {
-                                              status: e.target.value,
-                                            })
+                                          ariaLabel={t("colStatus")}
+                                          className={`wb-status-pill wb-status-pill--sm ${statusBadgeClass(record.status)}`}
+                                          onChange={(value) =>
+                                            updateHistory(paper, historyIndex, { status: value })
                                           }
-                                        >
-                                          {SUBMISSION_STATUS_OPTIONS.map((option) => (
-                                            <option key={option.value} value={option.value}>
-                                              {t(option.key)}
-                                            </option>
-                                          ))}
-                                        </select>
-                                        <span
-                                          className={`wb-badge ${statusBadgeClass(record.status)}`}
-                                        >
-                                          {t(
-                                            SUBMISSION_STATUS_OPTIONS.find(
-                                              (o) => o.value === record.status,
-                                            )?.key ?? "statusSubmitted",
-                                          )}
-                                        </span>
+                                          options={statusOptions}
+                                        />
                                         <button
                                           type="button"
                                           className="wb-stage-tool"
